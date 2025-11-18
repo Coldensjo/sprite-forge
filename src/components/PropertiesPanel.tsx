@@ -101,7 +101,7 @@ export const PropertiesPanel = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-4 flex-1">
             <div className="bg-gradient-to-br from-secondary/40 to-secondary/20 rounded-md p-3 border border-border/40">
               <div className="flex items-center gap-1.5 pb-2 mb-4 border-b border-border/30">
                 <div className="w-0.5 h-3 bg-primary rounded-full" />
@@ -215,7 +215,6 @@ export const PropertiesPanel = () => {
                 </div>
               </div>
             </div>
-          </div>
           </div>
         </div>
 
