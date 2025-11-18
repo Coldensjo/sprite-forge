@@ -36,10 +36,10 @@ export const SpriteList = () => {
   const [selectedId, setSelectedId] = useState<number>(0);
 
   return (
-    <div className="w-64 bg-panel border-l border-panel-border flex flex-col">
-      <div className="h-10 px-3 flex items-center border-b border-panel-border">
-        <h2 className="text-sm font-semibold text-foreground">Sprites</h2>
-        <span className="ml-auto text-xs text-muted-foreground">{mockSprites.length}</span>
+    <div className="w-64 bg-card rounded-lg shadow-island flex flex-col overflow-hidden">
+      <div className="h-10 px-3 flex items-center border-b border-border/50 bg-secondary/50">
+        <h2 className="text-xs font-semibold text-foreground uppercase tracking-wide">Sprites</h2>
+        <span className="ml-auto text-xs text-muted-foreground font-mono">{mockSprites.length}</span>
       </div>
       
       <ScrollArea className="flex-1">
@@ -49,19 +49,19 @@ export const SpriteList = () => {
               key={sprite.id}
               onClick={() => setSelectedId(sprite.id)}
               className={cn(
-                "w-full flex items-center gap-3 px-2 py-1.5 rounded transition-colors",
+                "w-full flex items-center gap-3 px-2 py-2 rounded-md transition-all",
                 "hover:bg-item-hover",
-                selectedId === sprite.id && "bg-primary/20 border border-primary"
+                selectedId === sprite.id && "bg-primary/15 ring-1 ring-primary/50"
               )}
             >
               <div 
-                className="w-8 h-8 rounded border border-border flex items-center justify-center flex-shrink-0 text-lg"
+                className="w-9 h-9 rounded-md border border-border/50 flex items-center justify-center flex-shrink-0 text-base shadow-sm"
                 style={{ backgroundColor: sprite.color }}
               >
                 {sprite.icon}
               </div>
               <div className="flex-1 text-left">
-                <div className="text-xs text-muted-foreground">Sprite {sprite.id}</div>
+                <div className="text-xs text-muted-foreground font-mono">Sprite {sprite.id}</div>
               </div>
             </button>
           ))}
