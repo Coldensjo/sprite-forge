@@ -212,9 +212,12 @@ export const PropertiesPanel = () => {
               </div>
             </div>
             <div className="bg-gradient-to-br from-secondary/40 to-secondary/20 rounded-md p-3 border border-border/40">
-              <div className="flex items-center gap-1.5 pb-2 mb-3 border-b border-border/30">
-                <div className="w-0.5 h-3 bg-primary rounded-full" />
-                <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Offset</h3>
+              <div className="flex items-center justify-between pb-2 mb-3 border-b border-border/30">
+                <div className="flex items-center gap-1.5">
+                  <div className="w-0.5 h-3 bg-primary rounded-full" />
+                  <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Offset</h3>
+                </div>
+                <Switch id="offset-enabled" />
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1">
