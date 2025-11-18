@@ -22,7 +22,7 @@ export const PropertiesPanel = () => {
         </TabsList>
 
         <TabsContent value="appearance" className="flex-1 overflow-hidden">
-          <ResizablePanelGroup direction="horizontal" className="h-full">
+          <ResizablePanelGroup direction="horizontal">
             <ResizablePanel defaultSize={30} minSize={20} maxSize={50}>
               <div className="h-full flex flex-col items-center justify-between p-4">
                 <div className="relative w-full">
