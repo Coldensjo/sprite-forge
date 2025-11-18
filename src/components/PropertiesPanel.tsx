@@ -53,15 +53,15 @@ export const PropertiesPanel = () => {
                     
                     <div className="grid grid-cols-4 gap-1.5 mb-2">
                       <div className="space-y-1">
-                        <Label htmlFor="width" className="text-xs font-medium text-muted-foreground/90">W</Label>
+                        <Label htmlFor="width" className="text-xs font-medium text-muted-foreground/90">Width</Label>
                         <Input id="width" type="number" min="1" max="128" defaultValue="1" className="h-8 text-xs font-mono text-right bg-background/50 border-border/50 hover:border-primary/50 transition-colors" />
                       </div>
                       <div className="space-y-1">
-                        <Label htmlFor="height" className="text-xs font-medium text-muted-foreground/90">H</Label>
+                        <Label htmlFor="height" className="text-xs font-medium text-muted-foreground/90">Height</Label>
                         <Input id="height" type="number" min="1" max="128" defaultValue="1" className="h-8 text-xs font-mono text-right bg-background/50 border-border/50 hover:border-primary/50 transition-colors" />
                       </div>
                       <div className="space-y-1">
-                        <Label htmlFor="crop-size" className="text-xs font-medium text-muted-foreground/90">Crop</Label>
+                        <Label htmlFor="crop-size" className="text-xs font-medium text-muted-foreground/90">Crop Size</Label>
                         <Input id="crop-size" type="number" min="1" max="128" defaultValue="32" className="h-8 text-xs font-mono text-right bg-background/50 border-border/50 hover:border-primary/50 transition-colors" />
                       </div>
                       <div className="space-y-1">
@@ -72,15 +72,15 @@ export const PropertiesPanel = () => {
 
                     <div className="grid grid-cols-3 gap-1.5">
                       <div className="space-y-1">
-                        <Label htmlFor="pattern-x" className="text-xs font-medium text-muted-foreground/90">Pat X</Label>
+                        <Label htmlFor="pattern-x" className="text-xs font-medium text-muted-foreground/90">Pattern X</Label>
                         <Input id="pattern-x" type="number" min="1" max="128" defaultValue="4" className="h-8 text-xs font-mono text-center bg-background/50 border-border/50 hover:border-primary/50 transition-colors" />
                       </div>
                       <div className="space-y-1">
-                        <Label htmlFor="pattern-y" className="text-xs font-medium text-muted-foreground/90">Pat Y</Label>
+                        <Label htmlFor="pattern-y" className="text-xs font-medium text-muted-foreground/90">Pattern Y</Label>
                         <Input id="pattern-y" type="number" min="1" max="128" defaultValue="4" className="h-8 text-xs font-mono text-center bg-background/50 border-border/50 hover:border-primary/50 transition-colors" />
                       </div>
                       <div className="space-y-1">
-                        <Label htmlFor="pattern-z" className="text-xs font-medium text-muted-foreground/90">Pat Z</Label>
+                        <Label htmlFor="pattern-z" className="text-xs font-medium text-muted-foreground/90">Pattern Z</Label>
                         <Input id="pattern-z" type="number" min="1" max="128" defaultValue="1" className="h-8 text-xs font-mono text-center bg-background/50 border-border/50 hover:border-primary/50 transition-colors" />
                       </div>
                     </div>
@@ -98,11 +98,11 @@ export const PropertiesPanel = () => {
                         <Input id="animations" type="number" min="1" max="128" defaultValue="1" className="h-8 text-xs font-mono text-right bg-background/50 border-border/50 hover:border-primary/50 transition-colors" />
                       </div>
                       <div className="space-y-1">
-                        <Label htmlFor="offset-x" className="text-xs font-medium text-muted-foreground/90">Off X</Label>
+                        <Label htmlFor="offset-x" className="text-xs font-medium text-muted-foreground/90">Offset X</Label>
                         <Input id="offset-x" type="number" min="-128" max="128" defaultValue="0" className="h-8 text-xs font-mono text-right bg-background/50 border-border/50 hover:border-primary/50 transition-colors" />
                       </div>
                       <div className="space-y-1">
-                        <Label htmlFor="offset-y" className="text-xs font-medium text-muted-foreground/90">Off Y</Label>
+                        <Label htmlFor="offset-y" className="text-xs font-medium text-muted-foreground/90">Offset Y</Label>
                         <Input id="offset-y" type="number" min="-128" max="128" defaultValue="0" className="h-8 text-xs font-mono text-right bg-background/50 border-border/50 hover:border-primary/50 transition-colors" />
                       </div>
                     </div>
