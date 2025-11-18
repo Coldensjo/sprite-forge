@@ -107,115 +107,111 @@ export const PropertiesPanel = () => {
                 <div className="w-0.5 h-3 bg-primary rounded-full" />
                 <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Dimensions & Pattern</h3>
               </div>
-              <div className="grid grid-cols-4 gap-2 mb-3">
-                <div className="space-y-1">
-                  <Label htmlFor="width" className="text-xs font-medium text-muted-foreground/90">
-                    Width
-                  </Label>
-                  <Input
-                    id="width"
-                    type="number"
-                    min="1"
-                    max="128"
-                    defaultValue="1"
-                    className="h-8 text-xs font-mono text-right bg-background/50"
-                  />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <Label htmlFor="width" className="text-xs font-medium text-muted-foreground/90">
+                      Width
+                    </Label>
+                    <Input
+                      id="width"
+                      type="number"
+                      min="1"
+                      max="128"
+                      defaultValue="1"
+                      className="h-8 text-xs font-mono text-right bg-background/50"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="height" className="text-xs font-medium text-muted-foreground/90">
+                      Height
+                    </Label>
+                    <Input
+                      id="height"
+                      type="number"
+                      min="1"
+                      max="128"
+                      defaultValue="1"
+                      className="h-8 text-xs font-mono text-right bg-background/50"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="crop-size" className="text-xs font-medium text-muted-foreground/90">
+                      Crop Size
+                    </Label>
+                    <Input
+                      id="crop-size"
+                      type="number"
+                      min="1"
+                      max="128"
+                      defaultValue="32"
+                      className="h-8 text-xs font-mono text-right bg-background/50"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="layers" className="text-xs font-medium text-muted-foreground/90">
+                      Layers
+                    </Label>
+                    <Input
+                      id="layers"
+                      type="number"
+                      min="1"
+                      max="128"
+                      defaultValue="1"
+                      className="h-8 text-xs font-mono text-right bg-background/50"
+                    />
+                  </div>
                 </div>
-                <div className="space-y-1">
-                  <Label htmlFor="height" className="text-xs font-medium text-muted-foreground/90">
-                    Height
-                  </Label>
-                  <Input
-                    id="height"
-                    type="number"
-                    min="1"
-                    max="128"
-                    defaultValue="1"
-                    className="h-8 text-xs font-mono text-right bg-background/50"
-                  />
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <Label htmlFor="pattern-x" className="text-xs font-medium text-muted-foreground/90">
+                      Pattern X
+                    </Label>
+                    <Input
+                      id="pattern-x"
+                      type="number"
+                      defaultValue="4"
+                      className="h-8 text-xs font-mono text-center bg-background/50"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="pattern-y" className="text-xs font-medium text-muted-foreground/90">
+                      Pattern Y
+                    </Label>
+                    <Input
+                      id="pattern-y"
+                      type="number"
+                      defaultValue="4"
+                      className="h-8 text-xs font-mono text-center bg-background/50"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="pattern-z" className="text-xs font-medium text-muted-foreground/90">
+                      Pattern Z
+                    </Label>
+                    <Input
+                      id="pattern-z"
+                      type="number"
+                      defaultValue="1"
+                      className="h-8 text-xs font-mono text-center bg-background/50"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="frames" className="text-xs font-medium text-muted-foreground/90">
+                      Frames
+                    </Label>
+                    <Input
+                      id="frames"
+                      type="number"
+                      defaultValue="1"
+                      className="h-8 text-xs font-mono text-right bg-background/50"
+                    />
+                  </div>
                 </div>
-                <div className="space-y-1">
-                  <Label htmlFor="crop-size" className="text-xs font-medium text-muted-foreground/90">
-                    Crop Size
-                  </Label>
-                  <Input
-                    id="crop-size"
-                    type="number"
-                    min="1"
-                    max="128"
-                    defaultValue="32"
-                    className="h-8 text-xs font-mono text-right bg-background/50"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="layers" className="text-xs font-medium text-muted-foreground/90">
-                    Layers
-                  </Label>
-                  <Input
-                    id="layers"
-                    type="number"
-                    min="1"
-                    max="128"
-                    defaultValue="1"
-                    className="h-8 text-xs font-mono text-right bg-background/50"
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-3 gap-2">
-                <div className="space-y-1">
-                  <Label htmlFor="pattern-x" className="text-xs font-medium text-muted-foreground/90">
-                    Pattern X
-                  </Label>
-                  <Input
-                    id="pattern-x"
-                    type="number"
-                    defaultValue="4"
-                    className="h-8 text-xs font-mono text-center bg-background/50"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="pattern-y" className="text-xs font-medium text-muted-foreground/90">
-                    Pattern Y
-                  </Label>
-                  <Input
-                    id="pattern-y"
-                    type="number"
-                    defaultValue="4"
-                    className="h-8 text-xs font-mono text-center bg-background/50"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="pattern-z" className="text-xs font-medium text-muted-foreground/90">
-                    Pattern Z
-                  </Label>
-                  <Input
-                    id="pattern-z"
-                    type="number"
-                    defaultValue="1"
-                    className="h-8 text-xs font-mono text-center bg-background/50"
-                  />
-                </div>
-              </div>
-            </div>
-            <div className="bg-gradient-to-br from-secondary/40 to-secondary/20 rounded-md p-3 border border-border/40">
-              <div className="flex items-center gap-1.5 pb-2 mb-3 border-b border-border/30">
-                <div className="w-0.5 h-3 bg-primary rounded-full" />
-                <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Animation</h3>
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="animations" className="text-xs font-medium text-muted-foreground/90">
-                  Frames
-                </Label>
-                <Input
-                  id="animations"
-                  type="number"
-                  defaultValue="1"
-                  className="h-8 text-xs font-mono text-right bg-background/50"
-                />
               </div>
             </div>
             <div className="bg-gradient-to-br from-secondary/40 to-secondary/20 rounded-md p-3 border border-border/40">
-              <div className="flex items-center justify-between pb-2 mb-3 border-b border-border/30">
+              <div className="flex items-center justify-between pb-2 mb-4 border-b border-border/30">
                 <div className="flex items-center gap-1.5">
                   <div className="w-0.5 h-3 bg-primary rounded-full" />
                   <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Offset</h3>
