@@ -9,7 +9,7 @@ import { Button } from "./ui/button";
 import { SkipBack, ChevronLeft, Play, ChevronRight, SkipForward, GripVertical } from "lucide-react";
 
 export const PropertiesPanel = () => {
-  const [leftWidth, setLeftWidth] = useState(300);
+  const [leftWidth, setLeftWidth] = useState(200);
   const [isResizing, setIsResizing] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
