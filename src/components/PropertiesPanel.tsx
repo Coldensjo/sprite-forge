@@ -101,118 +101,121 @@ export const PropertiesPanel = () => {
             </div>
           </div>
 
-          <div className="bg-gradient-to-br from-secondary/40 to-secondary/20 rounded-md p-3 border border-border/40 flex-1">
-            <div className="flex items-center gap-1.5 pb-2 mb-4 border-b border-border/30">
-              <div className="w-0.5 h-3 bg-primary rounded-full" />
-              <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Dimensions</h3>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="bg-gradient-to-br from-secondary/40 to-secondary/20 rounded-md p-3 border border-border/40">
+              <div className="flex items-center gap-1.5 pb-2 mb-4 border-b border-border/30">
+                <div className="w-0.5 h-3 bg-primary rounded-full" />
+                <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Dimensions</h3>
+              </div>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <Label htmlFor="width" className="text-xs whitespace-nowrap text-foreground">
+                    Width
+                  </Label>
+                  <Input
+                    id="width"
+                    type="number"
+                    min="1"
+                    max="128"
+                    defaultValue="1"
+                    className="h-8 w-16 text-xs font-mono text-right bg-background/50"
+                  />
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <Label htmlFor="height" className="text-xs whitespace-nowrap text-foreground">
+                    Height
+                  </Label>
+                  <Input
+                    id="height"
+                    type="number"
+                    min="1"
+                    max="128"
+                    defaultValue="1"
+                    className="h-8 w-16 text-xs font-mono text-right bg-background/50"
+                  />
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <Label htmlFor="crop-size" className="text-xs whitespace-nowrap text-foreground">
+                    Crop Size
+                  </Label>
+                  <Input
+                    id="crop-size"
+                    type="number"
+                    min="1"
+                    max="128"
+                    defaultValue="32"
+                    className="h-8 w-16 text-xs font-mono text-right bg-background/50"
+                  />
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <Label htmlFor="layers" className="text-xs whitespace-nowrap text-foreground">
+                    Layers
+                  </Label>
+                  <Input
+                    id="layers"
+                    type="number"
+                    min="1"
+                    max="128"
+                    defaultValue="1"
+                    className="h-8 w-16 text-xs font-mono text-right bg-background/50"
+                  />
+                </div>
+              </div>
             </div>
-            <div className="space-y-3">
-              <div className="flex items-center justify-between gap-2">
-                <Label htmlFor="width" className="text-xs whitespace-nowrap text-foreground">
-                  Width
-                </Label>
-                <Input
-                  id="width"
-                  type="number"
-                  min="1"
-                  max="128"
-                  defaultValue="1"
-                  className="h-8 w-16 text-xs font-mono text-right bg-background/50"
-                />
+
+            <div className="bg-gradient-to-br from-secondary/40 to-secondary/20 rounded-md p-3 border border-border/40">
+              <div className="flex items-center gap-1.5 pb-2 mb-4 border-b border-border/30">
+                <div className="w-0.5 h-3 bg-primary rounded-full" />
+                <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Pattern & Frames</h3>
               </div>
-              <div className="flex items-center justify-between gap-2">
-                <Label htmlFor="height" className="text-xs whitespace-nowrap text-foreground">
-                  Height
-                </Label>
-                <Input
-                  id="height"
-                  type="number"
-                  min="1"
-                  max="128"
-                  defaultValue="1"
-                  className="h-8 w-16 text-xs font-mono text-right bg-background/50"
-                />
-              </div>
-              <div className="flex items-center justify-between gap-2">
-                <Label htmlFor="crop-size" className="text-xs whitespace-nowrap text-foreground">
-                  Crop Size
-                </Label>
-                <Input
-                  id="crop-size"
-                  type="number"
-                  min="1"
-                  max="128"
-                  defaultValue="32"
-                  className="h-8 w-16 text-xs font-mono text-right bg-background/50"
-                />
-              </div>
-              <div className="flex items-center justify-between gap-2">
-                <Label htmlFor="layers" className="text-xs whitespace-nowrap text-foreground">
-                  Layers
-                </Label>
-                <Input
-                  id="layers"
-                  type="number"
-                  min="1"
-                  max="128"
-                  defaultValue="1"
-                  className="h-8 w-16 text-xs font-mono text-right bg-background/50"
-                />
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <Label htmlFor="pattern-x" className="text-xs whitespace-nowrap text-foreground">
+                    Pattern X
+                  </Label>
+                  <Input
+                    id="pattern-x"
+                    type="number"
+                    defaultValue="4"
+                    className="h-8 w-16 text-xs font-mono text-center bg-background/50"
+                  />
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <Label htmlFor="pattern-y" className="text-xs whitespace-nowrap text-foreground">
+                    Pattern Y
+                  </Label>
+                  <Input
+                    id="pattern-y"
+                    type="number"
+                    defaultValue="4"
+                    className="h-8 w-16 text-xs font-mono text-center bg-background/50"
+                  />
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <Label htmlFor="pattern-z" className="text-xs whitespace-nowrap text-foreground">
+                    Pattern Z
+                  </Label>
+                  <Input
+                    id="pattern-z"
+                    type="number"
+                    defaultValue="1"
+                    className="h-8 w-16 text-xs font-mono text-center bg-background/50"
+                  />
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <Label htmlFor="frames" className="text-xs whitespace-nowrap text-foreground">
+                    Frames
+                  </Label>
+                  <Input
+                    id="frames"
+                    type="number"
+                    defaultValue="1"
+                    className="h-8 w-16 text-xs font-mono text-right bg-background/50"
+                  />
+                </div>
               </div>
             </div>
           </div>
-
-          <div className="bg-gradient-to-br from-secondary/40 to-secondary/20 rounded-md p-3 border border-border/40 flex-1">
-            <div className="flex items-center gap-1.5 pb-2 mb-4 border-b border-border/30">
-              <div className="w-0.5 h-3 bg-primary rounded-full" />
-              <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Pattern & Frames</h3>
-            </div>
-            <div className="space-y-3">
-              <div className="flex items-center justify-between gap-2">
-                <Label htmlFor="pattern-x" className="text-xs whitespace-nowrap text-foreground">
-                  Pattern X
-                </Label>
-                <Input
-                  id="pattern-x"
-                  type="number"
-                  defaultValue="4"
-                  className="h-8 w-16 text-xs font-mono text-center bg-background/50"
-                />
-              </div>
-              <div className="flex items-center justify-between gap-2">
-                <Label htmlFor="pattern-y" className="text-xs whitespace-nowrap text-foreground">
-                  Pattern Y
-                </Label>
-                <Input
-                  id="pattern-y"
-                  type="number"
-                  defaultValue="4"
-                  className="h-8 w-16 text-xs font-mono text-center bg-background/50"
-                />
-              </div>
-              <div className="flex items-center justify-between gap-2">
-                <Label htmlFor="pattern-z" className="text-xs whitespace-nowrap text-foreground">
-                  Pattern Z
-                </Label>
-                <Input
-                  id="pattern-z"
-                  type="number"
-                  defaultValue="1"
-                  className="h-8 w-16 text-xs font-mono text-center bg-background/50"
-                />
-              </div>
-              <div className="flex items-center justify-between gap-2">
-                <Label htmlFor="frames" className="text-xs whitespace-nowrap text-foreground">
-                  Frames
-                </Label>
-                <Input
-                  id="frames"
-                  type="number"
-                  defaultValue="1"
-                  className="h-8 w-16 text-xs font-mono text-right bg-background/50"
-                />
-              </div>
-            </div>
           </div>
         </div>
 
