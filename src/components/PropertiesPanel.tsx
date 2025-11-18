@@ -12,6 +12,7 @@ export const PropertiesPanel = () => {
   const [leftWidth, setLeftWidth] = useState(200);
   const [isResizing, setIsResizing] = useState(false);
   const [offsetEnabled, setOffsetEnabled] = useState(false);
+  const [lightEnabled, setLightEnabled] = useState(true);
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -267,18 +268,30 @@ export const PropertiesPanel = () => {
                   </Label>
                   <Switch id="floor" />
                 </div>
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="light" className="text-xs">
-                    Has Light
-                  </Label>
-                  <Switch id="light" defaultChecked />
+              </div>
+            </div>
+
+            <div className="bg-gradient-to-br from-secondary/40 to-secondary/20 rounded-md p-3 border border-border/40">
+              <div className="flex items-center justify-between pb-2 mb-3 border-b border-border/30">
+                <div className="flex items-center gap-1.5">
+                  <div className="w-0.5 h-3 bg-primary rounded-full" />
+                  <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Light Settings</h3>
                 </div>
+                <Switch id="light-enabled" checked={lightEnabled} onCheckedChange={setLightEnabled} />
+              </div>
+              <div className="space-y-3">
                 <div className="space-y-2">
                   <Label htmlFor="light-color" className="text-xs">
                     Light Color
                   </Label>
                   <div className="flex gap-2">
-                    <Input id="light-color" type="number" defaultValue="156" className="h-8" />
+                    <Input 
+                      id="light-color" 
+                      type="number" 
+                      defaultValue="156" 
+                      disabled={!lightEnabled}
+                      className="h-8" 
+                    />
                     <div className="w-8 h-8 rounded border border-border bg-orange-500" />
                   </div>
                 </div>
@@ -287,7 +300,13 @@ export const PropertiesPanel = () => {
                     Light Intensity
                   </Label>
                   <div className="flex gap-3 items-center">
-                    <Slider defaultValue={[3]} max={5} step={1} className="flex-1" />
+                    <Slider 
+                      defaultValue={[3]} 
+                      max={5} 
+                      step={1} 
+                      disabled={!lightEnabled}
+                      className="flex-1" 
+                    />
                     <span className="text-xs text-muted-foreground w-8">3</span>
                   </div>
                 </div>
