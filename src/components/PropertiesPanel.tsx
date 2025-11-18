@@ -18,8 +18,7 @@ export const PropertiesPanel = () => {
 
       <Tabs defaultValue="appearance" className="flex-1 flex flex-col">
         <TabsList className="mx-4 mt-2 w-auto">
-          <TabsTrigger value="appearance">Appearance</TabsTrigger>
-          <TabsTrigger value="properties">Properties</TabsTrigger>
+          <TabsTrigger value="appearance">Properties</TabsTrigger>
         </TabsList>
 
         <TabsContent value="appearance" className="flex-1 overflow-hidden">
@@ -132,143 +131,143 @@ export const PropertiesPanel = () => {
                       </div>
                     </div>
                   </div>
+
+                  <Separator className="my-4" />
+
+                  <div className="space-y-4 p-2">
+                    <h3 className="text-xs font-semibold text-foreground uppercase tracking-wide">Floor Settings</h3>
+                    
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="floor" className="text-xs">Is Floor</Label>
+                      <Switch id="floor" />
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="light" className="text-xs">Has Light</Label>
+                      <Switch id="light" defaultChecked />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="light-color" className="text-xs">Light Color</Label>
+                      <div className="flex gap-2">
+                        <Input id="light-color" type="number" defaultValue="156" className="h-8" />
+                        <div className="w-8 h-8 rounded border border-border bg-orange-500" />
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="light-intensity" className="text-xs">Light Intensity</Label>
+                      <div className="flex gap-3 items-center">
+                        <Slider defaultValue={[3]} max={5} step={1} className="flex-1" />
+                        <span className="text-xs text-muted-foreground w-8">3</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  <div className="space-y-4 p-2">
+                    <h3 className="text-xs font-semibold text-foreground uppercase tracking-wide">Object Settings</h3>
+                    
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="appears-minimap" className="text-xs">Appears on Minimap</Label>
+                      <Switch id="appears-minimap" />
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="has-displacement" className="text-xs">Has Displacement</Label>
+                      <Switch id="has-displacement" />
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="has-elevation" className="text-xs">Has Elevation</Label>
+                      <Switch id="has-elevation" />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="elevation" className="text-xs">Elevation</Label>
+                      <Input id="elevation" type="number" defaultValue="0" className="h-8" />
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  <div className="space-y-4 p-2">
+                    <h3 className="text-xs font-semibold text-foreground uppercase tracking-wide">Flags</h3>
+                    
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs">Can Be Grabbed</Label>
+                      <Switch defaultChecked />
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs">Stackable</Label>
+                      <Switch />
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs">Blocks Path</Label>
+                      <Switch />
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs">Full Ground</Label>
+                      <Switch defaultChecked />
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs">Ignore Look</Label>
+                      <Switch />
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  <div className="space-y-4 p-2">
+                    <h3 className="text-xs font-semibold text-foreground uppercase tracking-wide">Reading/Writing</h3>
+                    
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs">Can Read</Label>
+                      <Switch />
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs">Can Write Once</Label>
+                      <Switch />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="max-chars" className="text-xs">Max Characters</Label>
+                      <Input id="max-chars" type="number" defaultValue="0" className="h-8" />
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  <div className="space-y-4 p-2">
+                    <h3 className="text-xs font-semibold text-foreground uppercase tracking-wide">Type</h3>
+                    
+                    <div className="space-y-2">
+                      <Label htmlFor="type" className="text-xs">Item Type</Label>
+                      <Select defaultValue="ground">
+                        <SelectTrigger className="h-8">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="ground">Ground</SelectItem>
+                          <SelectItem value="container">Container</SelectItem>
+                          <SelectItem value="weapon">Weapon</SelectItem>
+                          <SelectItem value="armor">Armor</SelectItem>
+                          <SelectItem value="effect">Effect</SelectItem>
+                          <SelectItem value="projectile">Projectile</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
                 </div>
               </div>
             </ResizablePanel>
           </ResizablePanelGroup>
-        </TabsContent>
-
-        <TabsContent value="properties" className="flex-1 p-4 space-y-4 overflow-auto">
-          <div className="space-y-4">
-            <h3 className="text-xs font-semibold text-foreground uppercase tracking-wide">Floor Settings</h3>
-            
-            <div className="flex items-center justify-between">
-              <Label htmlFor="floor" className="text-xs">Is Floor</Label>
-              <Switch id="floor" />
-            </div>
-
-            <div className="flex items-center justify-between">
-              <Label htmlFor="light" className="text-xs">Has Light</Label>
-              <Switch id="light" defaultChecked />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="light-color" className="text-xs">Light Color</Label>
-              <div className="flex gap-2">
-                <Input id="light-color" type="number" defaultValue="156" className="h-8" />
-                <div className="w-8 h-8 rounded border border-border bg-orange-500" />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="light-intensity" className="text-xs">Light Intensity</Label>
-              <div className="flex gap-3 items-center">
-                <Slider defaultValue={[3]} max={5} step={1} className="flex-1" />
-                <span className="text-xs text-muted-foreground w-8">3</span>
-              </div>
-            </div>
-          </div>
-
-          <Separator />
-
-          <div className="space-y-4">
-            <h3 className="text-xs font-semibold text-foreground uppercase tracking-wide">Object Settings</h3>
-            
-            <div className="flex items-center justify-between">
-              <Label htmlFor="appears-minimap" className="text-xs">Appears on Minimap</Label>
-              <Switch id="appears-minimap" />
-            </div>
-
-            <div className="flex items-center justify-between">
-              <Label htmlFor="has-displacement" className="text-xs">Has Displacement</Label>
-              <Switch id="has-displacement" />
-            </div>
-
-            <div className="flex items-center justify-between">
-              <Label htmlFor="has-elevation" className="text-xs">Has Elevation</Label>
-              <Switch id="has-elevation" />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="elevation" className="text-xs">Elevation</Label>
-              <Input id="elevation" type="number" defaultValue="0" className="h-8" />
-            </div>
-          </div>
-
-          <Separator />
-
-          <div className="space-y-4">
-            <h3 className="text-xs font-semibold text-foreground uppercase tracking-wide">Flags</h3>
-            
-            <div className="flex items-center justify-between">
-              <Label className="text-xs">Can Be Grabbed</Label>
-              <Switch defaultChecked />
-            </div>
-
-            <div className="flex items-center justify-between">
-              <Label className="text-xs">Stackable</Label>
-              <Switch />
-            </div>
-
-            <div className="flex items-center justify-between">
-              <Label className="text-xs">Blocks Path</Label>
-              <Switch />
-            </div>
-
-            <div className="flex items-center justify-between">
-              <Label className="text-xs">Full Ground</Label>
-              <Switch defaultChecked />
-            </div>
-
-            <div className="flex items-center justify-between">
-              <Label className="text-xs">Ignore Look</Label>
-              <Switch />
-            </div>
-          </div>
-
-          <Separator />
-
-          <div className="space-y-4">
-            <h3 className="text-xs font-semibold text-foreground uppercase tracking-wide">Reading/Writing</h3>
-            
-            <div className="flex items-center justify-between">
-              <Label className="text-xs">Can Read</Label>
-              <Switch />
-            </div>
-
-            <div className="flex items-center justify-between">
-              <Label className="text-xs">Can Write Once</Label>
-              <Switch />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="max-chars" className="text-xs">Max Characters</Label>
-              <Input id="max-chars" type="number" defaultValue="0" className="h-8" />
-            </div>
-          </div>
-
-          <Separator />
-
-          <div className="space-y-4">
-            <h3 className="text-xs font-semibold text-foreground uppercase tracking-wide">Type</h3>
-            
-            <div className="space-y-2">
-              <Label htmlFor="type" className="text-xs">Item Type</Label>
-              <Select defaultValue="ground">
-                <SelectTrigger className="h-8">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ground">Ground</SelectItem>
-                  <SelectItem value="container">Container</SelectItem>
-                  <SelectItem value="weapon">Weapon</SelectItem>
-                  <SelectItem value="armor">Armor</SelectItem>
-                  <SelectItem value="effect">Effect</SelectItem>
-                  <SelectItem value="projectile">Projectile</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
         </TabsContent>
       </Tabs>
     </div>
