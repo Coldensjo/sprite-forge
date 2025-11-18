@@ -272,16 +272,16 @@ export const PropertiesPanel = () => {
             </div>
 
             <div className="bg-gradient-to-br from-secondary/40 to-secondary/20 rounded-md p-3 border border-border/40">
-              <div className="flex items-center justify-between pb-2 mb-3 border-b border-border/30">
+              <div className="flex items-center justify-between pb-2 mb-4 border-b border-border/30">
                 <div className="flex items-center gap-1.5">
                   <div className="w-0.5 h-3 bg-primary rounded-full" />
                   <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Light Settings</h3>
                 </div>
                 <Switch id="light-enabled" checked={lightEnabled} onCheckedChange={setLightEnabled} />
               </div>
-              <div className="space-y-3.5">
+              <div className="space-y-4">
                 <div className="flex items-center justify-between gap-4">
-                  <Label htmlFor="light-color" className="text-xs font-medium text-muted-foreground/90 whitespace-nowrap">
+                  <Label htmlFor="light-color" className="text-xs whitespace-nowrap">
                     Light Color
                   </Label>
                   <div className="flex gap-2 items-center">
@@ -296,7 +296,7 @@ export const PropertiesPanel = () => {
                   </div>
                 </div>
                 <div className="flex items-center justify-between gap-4">
-                  <Label htmlFor="light-intensity" className="text-xs font-medium text-muted-foreground/90 whitespace-nowrap">
+                  <Label htmlFor="light-intensity" className="text-xs whitespace-nowrap">
                     Intensity
                   </Label>
                   <div className="flex gap-3 items-center flex-1 max-w-[180px]">
