@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Slider } from "./ui/slider";
 import { Separator } from "./ui/separator";
 import { Button } from "./ui/button";
-import { SkipBack, ChevronLeft, Play, ChevronRight, SkipForward } from "lucide-react";
+import { SkipBack, ChevronLeft, Play, ChevronRight, SkipForward, GripVertical } from "lucide-react";
 
 export const PropertiesPanel = () => {
   const [leftWidth, setLeftWidth] = useState(300);
@@ -89,9 +89,14 @@ export const PropertiesPanel = () => {
           </div>
 
           <div
-            className="w-1 bg-border/50 hover:bg-primary/50 cursor-col-resize transition-colors flex-shrink-0"
+            className="relative flex items-center justify-center w-4 flex-shrink-0 cursor-col-resize group"
             onMouseDown={() => setIsResizing(true)}
-          />
+          >
+            <div className="absolute inset-y-0 left-1/2 w-px bg-border/50 group-hover:bg-primary/30 transition-colors" />
+            <div className="relative z-10 flex h-10 w-3 items-center justify-center rounded-md border border-border/50 bg-secondary/80 group-hover:bg-secondary group-hover:border-primary/50 transition-all shadow-sm">
+              <GripVertical className="h-3 w-3 text-muted-foreground group-hover:text-primary transition-colors" />
+            </div>
+          </div>
 
           <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4 min-w-0">
             <div className="bg-gradient-to-br from-secondary/40 to-secondary/20 rounded-md p-3 border border-border/40">
