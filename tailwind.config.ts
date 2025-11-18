@@ -13,6 +13,10 @@ export default {
       },
     },
     extend: {
+      fontFamily: {
+        sans: ['Inter', 'system-ui', 'sans-serif'],
+        mono: ['JetBrains Mono', 'Consolas', 'Monaco', 'monospace'],
+      },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
@@ -64,6 +68,10 @@ export default {
         "item-hover": "hsl(var(--item-hover))",
         "item-selected": "hsl(var(--item-selected))",
         "toolbar-bg": "hsl(var(--toolbar-bg))",
+      },
+      boxShadow: {
+        'island': 'var(--island-shadow)',
+        'island-lg': 'var(--island-shadow-lg)',
       },
       borderRadius: {
         lg: "var(--radius)",

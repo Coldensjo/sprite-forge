@@ -36,10 +36,10 @@ export const ItemList = () => {
   const [selectedId, setSelectedId] = useState<number>(100);
 
   return (
-    <div className="w-64 bg-panel border-r border-panel-border flex flex-col">
-      <div className="h-10 px-3 flex items-center border-b border-panel-border">
-        <h2 className="text-sm font-semibold text-foreground">Items</h2>
-        <span className="ml-auto text-xs text-muted-foreground">{mockItems.length}</span>
+    <div className="w-64 bg-card rounded-lg shadow-island flex flex-col overflow-hidden">
+      <div className="h-10 px-3 flex items-center border-b border-border/50 bg-secondary/50">
+        <h2 className="text-xs font-semibold text-foreground uppercase tracking-wide">Items</h2>
+        <span className="ml-auto text-xs text-muted-foreground font-mono">{mockItems.length}</span>
       </div>
       
       <ScrollArea className="flex-1">
@@ -49,22 +49,22 @@ export const ItemList = () => {
               key={item.id}
               onClick={() => setSelectedId(item.id)}
               className={cn(
-                "w-full flex items-center gap-3 px-2 py-1.5 rounded transition-colors",
+                "w-full flex items-center gap-3 px-2 py-2 rounded-md transition-all",
                 "hover:bg-item-hover",
-                selectedId === item.id && "bg-primary/20 border border-primary"
+                selectedId === item.id && "bg-primary/15 ring-1 ring-primary/50"
               )}
             >
               <div 
-                className="w-8 h-8 rounded flex items-center justify-center flex-shrink-0"
+                className="w-9 h-9 rounded-md flex items-center justify-center flex-shrink-0 shadow-sm"
                 style={{ backgroundColor: item.color }}
               >
-                <span className="text-[10px] font-bold text-white drop-shadow">
+                <span className="text-[9px] font-mono font-bold text-white/90 drop-shadow">
                   {item.id}
                 </span>
               </div>
               <div className="flex-1 text-left min-w-0">
-                <div className="text-xs text-foreground truncate">{item.name}</div>
-                <div className="text-[10px] text-muted-foreground">ID: {item.id}</div>
+                <div className="text-xs text-foreground truncate font-medium">{item.name}</div>
+                <div className="text-[10px] text-muted-foreground font-mono">ID: {item.id}</div>
               </div>
             </button>
           ))}

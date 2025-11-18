@@ -8,9 +8,9 @@ import { Separator } from "./ui/separator";
 
 export const PropertiesPanel = () => {
   return (
-    <div className="flex-1 bg-background flex flex-col">
-      <div className="h-10 px-4 flex items-center border-b border-border">
-        <h2 className="text-sm font-semibold text-foreground">Item Properties</h2>
+    <div className="flex-1 bg-card rounded-lg shadow-island-lg flex flex-col overflow-hidden">
+      <div className="h-10 px-4 flex items-center border-b border-border/50 bg-secondary/50">
+        <h2 className="text-xs font-semibold text-foreground uppercase tracking-wide">Item Properties</h2>
       </div>
 
       <Tabs defaultValue="appearance" className="flex-1 flex flex-col">
@@ -22,15 +22,15 @@ export const PropertiesPanel = () => {
         <TabsContent value="appearance" className="flex-1 p-4 space-y-6">
           <div className="flex justify-center items-center py-8">
             <div className="relative">
-              <div className="w-64 h-64 bg-card border-2 border-border rounded-lg flex items-center justify-center">
-                <div className="w-32 h-32 bg-gradient-to-br from-orange-500 to-red-600 rounded-lg shadow-2xl" 
+              <div className="w-64 h-64 bg-secondary/30 border border-border/50 rounded-xl flex items-center justify-center backdrop-blur-sm">
+                <div className="w-32 h-32 bg-gradient-to-br from-orange-500 to-red-600 rounded-lg shadow-island-lg" 
                      style={{ 
-                       boxShadow: "0 0 40px rgba(251, 146, 60, 0.5)",
+                       boxShadow: "0 0 40px rgba(251, 146, 60, 0.4)",
                        transform: "rotate(-5deg)"
                      }} 
                 />
               </div>
-              <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 bg-secondary px-3 py-1 rounded text-xs text-muted-foreground">
+              <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 bg-secondary/90 backdrop-blur-sm px-3 py-1 rounded-md text-xs text-muted-foreground font-mono border border-border/50">
                 32x32 pixels
               </div>
             </div>
@@ -39,7 +39,7 @@ export const PropertiesPanel = () => {
           <Separator />
 
           <div className="space-y-4">
-            <h3 className="text-sm font-medium text-foreground">Sprite Settings</h3>
+            <h3 className="text-xs font-semibold text-foreground uppercase tracking-wide">Sprite Settings</h3>
             
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
@@ -76,7 +76,7 @@ export const PropertiesPanel = () => {
 
         <TabsContent value="properties" className="flex-1 p-4 space-y-4 overflow-auto">
           <div className="space-y-4">
-            <h3 className="text-sm font-medium text-foreground">Floor Settings</h3>
+            <h3 className="text-xs font-semibold text-foreground uppercase tracking-wide">Floor Settings</h3>
             
             <div className="flex items-center justify-between">
               <Label htmlFor="floor" className="text-xs">Is Floor</Label>
@@ -108,7 +108,7 @@ export const PropertiesPanel = () => {
           <Separator />
 
           <div className="space-y-4">
-            <h3 className="text-sm font-medium text-foreground">Object Settings</h3>
+            <h3 className="text-xs font-semibold text-foreground uppercase tracking-wide">Object Settings</h3>
             
             <div className="flex items-center justify-between">
               <Label htmlFor="appears-minimap" className="text-xs">Appears on Minimap</Label>
@@ -134,7 +134,7 @@ export const PropertiesPanel = () => {
           <Separator />
 
           <div className="space-y-4">
-            <h3 className="text-sm font-medium text-foreground">Flags</h3>
+            <h3 className="text-xs font-semibold text-foreground uppercase tracking-wide">Flags</h3>
             
             <div className="flex items-center justify-between">
               <Label className="text-xs">Can Be Grabbed</Label>
@@ -165,7 +165,7 @@ export const PropertiesPanel = () => {
           <Separator />
 
           <div className="space-y-4">
-            <h3 className="text-sm font-medium text-foreground">Reading/Writing</h3>
+            <h3 className="text-xs font-semibold text-foreground uppercase tracking-wide">Reading/Writing</h3>
             
             <div className="flex items-center justify-between">
               <Label className="text-xs">Can Read</Label>
@@ -186,7 +186,7 @@ export const PropertiesPanel = () => {
           <Separator />
 
           <div className="space-y-4">
-            <h3 className="text-sm font-medium text-foreground">Type</h3>
+            <h3 className="text-xs font-semibold text-foreground uppercase tracking-wide">Type</h3>
             
             <div className="space-y-2">
               <Label htmlFor="type" className="text-xs">Item Type</Label>
