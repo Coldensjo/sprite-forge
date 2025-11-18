@@ -5,6 +5,7 @@ import { Switch } from "./ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Slider } from "./ui/slider";
 import { Separator } from "./ui/separator";
+import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "./ui/resizable";
 
 export const PropertiesPanel = () => {
   return (
@@ -19,59 +20,98 @@ export const PropertiesPanel = () => {
           <TabsTrigger value="properties">Properties</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="appearance" className="flex-1 p-4 space-y-6">
-          <div className="flex justify-center items-center py-8">
-            <div className="relative">
-              <div className="w-64 h-64 bg-secondary/30 border border-border/50 rounded-xl flex items-center justify-center backdrop-blur-sm">
-                <div className="w-32 h-32 bg-gradient-to-br from-orange-500 to-red-600 rounded-lg shadow-island-lg" 
-                     style={{ 
-                       boxShadow: "0 0 40px rgba(251, 146, 60, 0.4)",
-                       transform: "rotate(-5deg)"
-                     }} 
-                />
+        <TabsContent value="appearance" className="flex-1 overflow-hidden">
+          <ResizablePanelGroup direction="horizontal" className="h-full">
+            <ResizablePanel defaultSize={40} minSize={25} maxSize={60}>
+              <div className="h-full flex flex-col items-center justify-center p-6">
+                <div className="relative w-full max-w-md">
+                  <div className="w-full aspect-square bg-secondary/30 border border-border/50 rounded-xl flex items-center justify-center backdrop-blur-sm">
+                    <div className="w-3/4 h-3/4 bg-gradient-to-br from-orange-500 to-red-600 rounded-lg shadow-island-lg" 
+                         style={{ 
+                           boxShadow: "0 0 40px rgba(251, 146, 60, 0.4)",
+                           transform: "rotate(-5deg)"
+                         }} 
+                    />
+                  </div>
+                  <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 bg-secondary/90 backdrop-blur-sm px-3 py-1 rounded-md text-xs text-muted-foreground font-mono border border-border/50">
+                    32x32 pixels
+                  </div>
+                </div>
               </div>
-              <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 bg-secondary/90 backdrop-blur-sm px-3 py-1 rounded-md text-xs text-muted-foreground font-mono border border-border/50">
-                32x32 pixels
+            </ResizablePanel>
+
+            <ResizableHandle withHandle />
+
+            <ResizablePanel defaultSize={60} minSize={40}>
+              <div className="h-full overflow-auto p-4">
+                <div className="space-y-4">
+                  <h3 className="text-xs font-semibold text-foreground uppercase tracking-wide">Sprite Settings</h3>
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="width" className="text-xs">Width</Label>
+                      <Input id="width" type="number" defaultValue="1" className="h-8" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="height" className="text-xs">Height</Label>
+                      <Input id="height" type="number" defaultValue="1" className="h-8" />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="crop-size" className="text-xs">Crop Size</Label>
+                    <Input id="crop-size" type="number" defaultValue="32" className="h-8" />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="layers" className="text-xs">Layers</Label>
+                    <Input id="layers" type="number" defaultValue="1" className="h-8" />
+                  </div>
+
+                  <Separator />
+
+                  <h3 className="text-xs font-semibold text-foreground uppercase tracking-wide">Pattern</h3>
+
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="pattern-x" className="text-xs">Pattern X</Label>
+                      <Input id="pattern-x" type="number" defaultValue="4" className="h-8" />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="pattern-y" className="text-xs">Pattern Y</Label>
+                      <Input id="pattern-y" type="number" defaultValue="4" className="h-8" />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="pattern-z" className="text-xs">Pattern Z</Label>
+                      <Input id="pattern-z" type="number" defaultValue="1" className="h-8" />
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  <h3 className="text-xs font-semibold text-foreground uppercase tracking-wide">Animation</h3>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="animations" className="text-xs">Animations</Label>
+                    <Input id="animations" type="number" defaultValue="1" className="h-8" />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="offset-x" className="text-xs">Offset X</Label>
+                      <Input id="offset-x" type="number" defaultValue="0" className="h-8" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="offset-y" className="text-xs">Offset Y</Label>
+                      <Input id="offset-y" type="number" defaultValue="0" className="h-8" />
+                    </div>
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
-
-          <Separator />
-
-          <div className="space-y-4">
-            <h3 className="text-xs font-semibold text-foreground uppercase tracking-wide">Sprite Settings</h3>
-            
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="width" className="text-xs">Width</Label>
-                <Input id="width" type="number" defaultValue="1" className="h-8" />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="height" className="text-xs">Height</Label>
-                <Input id="height" type="number" defaultValue="1" className="h-8" />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="layers" className="text-xs">Layers</Label>
-              <Input id="layers" type="number" defaultValue="1" className="h-8" />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="pattern-x" className="text-xs">Pattern X</Label>
-              <Input id="pattern-x" type="number" defaultValue="4" className="h-8" />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="pattern-y" className="text-xs">Pattern Y</Label>
-              <Input id="pattern-y" type="number" defaultValue="4" className="h-8" />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="animations" className="text-xs">Animations</Label>
-              <Input id="animations" type="number" defaultValue="1" className="h-8" />
-            </div>
-          </div>
+            </ResizablePanel>
+          </ResizablePanelGroup>
         </TabsContent>
 
         <TabsContent value="properties" className="flex-1 p-4 space-y-4 overflow-auto">
