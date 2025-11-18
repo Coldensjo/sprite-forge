@@ -68,7 +68,8 @@ export const PropertiesPanel = () => {
 
             <ResizablePanel defaultSize={70} minSize={50}>
               <div className="h-full overflow-auto p-2">
-                <div className="space-y-2">
+                {/* Sprite Configuration */}
+                <div className="space-y-2 mb-4">
                   <div className="bg-gradient-to-br from-secondary/40 to-secondary/20 rounded-md p-2 border border-border/40">
                     <div className="flex items-center gap-1.5 pb-1 mb-2 border-b border-border/30">
                       <div className="w-0.5 h-3 bg-primary rounded-full" />
@@ -131,10 +132,13 @@ export const PropertiesPanel = () => {
                       </div>
                     </div>
                   </div>
+                </div>
 
-                  <Separator className="my-4" />
+                <Separator className="my-3" />
 
-                  <div className="space-y-4 p-2">
+                {/* Item Properties - Full Width */}
+                <div className="space-y-3">
+                  <div className="space-y-3 px-2">
                     <h3 className="text-xs font-semibold text-foreground uppercase tracking-wide">Floor Settings</h3>
                     
                     <div className="flex items-center justify-between">
@@ -166,7 +170,7 @@ export const PropertiesPanel = () => {
 
                   <Separator />
 
-                  <div className="space-y-4 p-2">
+                  <div className="space-y-3 px-2">
                     <h3 className="text-xs font-semibold text-foreground uppercase tracking-wide">Object Settings</h3>
                     
                     <div className="flex items-center justify-between">
@@ -192,7 +196,7 @@ export const PropertiesPanel = () => {
 
                   <Separator />
 
-                  <div className="space-y-4 p-2">
+                  <div className="space-y-3 px-2">
                     <h3 className="text-xs font-semibold text-foreground uppercase tracking-wide">Flags</h3>
                     
                     <div className="flex items-center justify-between">
@@ -223,7 +227,7 @@ export const PropertiesPanel = () => {
 
                   <Separator />
 
-                  <div className="space-y-4 p-2">
+                  <div className="space-y-3 px-2">
                     <h3 className="text-xs font-semibold text-foreground uppercase tracking-wide">Reading/Writing</h3>
                     
                     <div className="flex items-center justify-between">
@@ -244,7 +248,7 @@ export const PropertiesPanel = () => {
 
                   <Separator />
 
-                  <div className="space-y-4 p-2">
+                  <div className="space-y-3 px-2 pb-2">
                     <h3 className="text-xs font-semibold text-foreground uppercase tracking-wide">Type</h3>
                     
                     <div className="space-y-2">
