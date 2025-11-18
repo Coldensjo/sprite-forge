@@ -103,14 +103,14 @@ export const PropertiesPanel = () => {
 
           <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4 min-w-0">
             <div className="bg-gradient-to-br from-secondary/40 to-secondary/20 rounded-md p-3 border border-border/40">
-              <div className="flex items-center gap-1.5 pb-2 mb-3 border-b border-border/30">
+              <div className="flex items-center gap-1.5 pb-2 mb-4 border-b border-border/30">
                 <div className="w-0.5 h-3 bg-primary rounded-full" />
                 <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Dimensions & Pattern</h3>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-3">
-                  <div className="space-y-1">
-                    <Label htmlFor="width" className="text-xs font-medium text-muted-foreground/90">
+                  <div className="flex items-center justify-between gap-2">
+                    <Label htmlFor="width" className="text-xs whitespace-nowrap">
                       Width
                     </Label>
                     <Input
@@ -119,11 +119,11 @@ export const PropertiesPanel = () => {
                       min="1"
                       max="128"
                       defaultValue="1"
-                      className="h-8 text-xs font-mono text-right bg-background/50"
+                      className="h-8 w-16 text-xs font-mono text-right bg-background/50"
                     />
                   </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="height" className="text-xs font-medium text-muted-foreground/90">
+                  <div className="flex items-center justify-between gap-2">
+                    <Label htmlFor="height" className="text-xs whitespace-nowrap">
                       Height
                     </Label>
                     <Input
@@ -132,11 +132,11 @@ export const PropertiesPanel = () => {
                       min="1"
                       max="128"
                       defaultValue="1"
-                      className="h-8 text-xs font-mono text-right bg-background/50"
+                      className="h-8 w-16 text-xs font-mono text-right bg-background/50"
                     />
                   </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="crop-size" className="text-xs font-medium text-muted-foreground/90">
+                  <div className="flex items-center justify-between gap-2">
+                    <Label htmlFor="crop-size" className="text-xs whitespace-nowrap">
                       Crop Size
                     </Label>
                     <Input
@@ -145,11 +145,11 @@ export const PropertiesPanel = () => {
                       min="1"
                       max="128"
                       defaultValue="32"
-                      className="h-8 text-xs font-mono text-right bg-background/50"
+                      className="h-8 w-16 text-xs font-mono text-right bg-background/50"
                     />
                   </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="layers" className="text-xs font-medium text-muted-foreground/90">
+                  <div className="flex items-center justify-between gap-2">
+                    <Label htmlFor="layers" className="text-xs whitespace-nowrap">
                       Layers
                     </Label>
                     <Input
@@ -158,53 +158,53 @@ export const PropertiesPanel = () => {
                       min="1"
                       max="128"
                       defaultValue="1"
-                      className="h-8 text-xs font-mono text-right bg-background/50"
+                      className="h-8 w-16 text-xs font-mono text-right bg-background/50"
                     />
                   </div>
                 </div>
                 <div className="space-y-3">
-                  <div className="space-y-1">
-                    <Label htmlFor="pattern-x" className="text-xs font-medium text-muted-foreground/90">
+                  <div className="flex items-center justify-between gap-2">
+                    <Label htmlFor="pattern-x" className="text-xs whitespace-nowrap">
                       Pattern X
                     </Label>
                     <Input
                       id="pattern-x"
                       type="number"
                       defaultValue="4"
-                      className="h-8 text-xs font-mono text-center bg-background/50"
+                      className="h-8 w-16 text-xs font-mono text-center bg-background/50"
                     />
                   </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="pattern-y" className="text-xs font-medium text-muted-foreground/90">
+                  <div className="flex items-center justify-between gap-2">
+                    <Label htmlFor="pattern-y" className="text-xs whitespace-nowrap">
                       Pattern Y
                     </Label>
                     <Input
                       id="pattern-y"
                       type="number"
                       defaultValue="4"
-                      className="h-8 text-xs font-mono text-center bg-background/50"
+                      className="h-8 w-16 text-xs font-mono text-center bg-background/50"
                     />
                   </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="pattern-z" className="text-xs font-medium text-muted-foreground/90">
+                  <div className="flex items-center justify-between gap-2">
+                    <Label htmlFor="pattern-z" className="text-xs whitespace-nowrap">
                       Pattern Z
                     </Label>
                     <Input
                       id="pattern-z"
                       type="number"
                       defaultValue="1"
-                      className="h-8 text-xs font-mono text-center bg-background/50"
+                      className="h-8 w-16 text-xs font-mono text-center bg-background/50"
                     />
                   </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="frames" className="text-xs font-medium text-muted-foreground/90">
+                  <div className="flex items-center justify-between gap-2">
+                    <Label htmlFor="frames" className="text-xs whitespace-nowrap">
                       Frames
                     </Label>
                     <Input
                       id="frames"
                       type="number"
                       defaultValue="1"
-                      className="h-8 text-xs font-mono text-right bg-background/50"
+                      className="h-8 w-16 text-xs font-mono text-right bg-background/50"
                     />
                   </div>
                 </div>
