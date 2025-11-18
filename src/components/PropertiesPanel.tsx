@@ -21,8 +21,8 @@ export const PropertiesPanel = () => {
         </TabsList>
 
         <TabsContent value="properties" className="flex-1 overflow-auto p-4">
-          {/* Top Grid: Sprite + Two Columns */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
+          {/* Top Section: Sprite (left) + Two Columns (right) */}
+          <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-4 mb-4">
             {/* Left: Sprite Preview */}
             <div className="flex flex-col items-center justify-between space-y-4">
               <div className="relative w-full">
@@ -43,8 +43,8 @@ export const PropertiesPanel = () => {
               </div>
             </div>
 
-            {/* Right: Two Columns */}
-            <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Right: Two Columns Side by Side */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="bg-gradient-to-br from-secondary/40 to-secondary/20 rounded-md p-3 border border-border/40">
                 <div className="flex items-center gap-1.5 pb-2 mb-3 border-b border-border/30">
                   <div className="w-0.5 h-3 bg-primary rounded-full" />
