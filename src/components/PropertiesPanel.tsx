@@ -11,6 +11,7 @@ import { SkipBack, ChevronLeft, Play, ChevronRight, SkipForward, GripVertical } 
 export const PropertiesPanel = () => {
   const [leftWidth, setLeftWidth] = useState(200);
   const [isResizing, setIsResizing] = useState(false);
+  const [offsetEnabled, setOffsetEnabled] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -217,7 +218,7 @@ export const PropertiesPanel = () => {
                   <div className="w-0.5 h-3 bg-primary rounded-full" />
                   <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Offset</h3>
                 </div>
-                <Switch id="offset-enabled" />
+                <Switch id="offset-enabled" checked={offsetEnabled} onCheckedChange={setOffsetEnabled} />
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1">
@@ -228,6 +229,7 @@ export const PropertiesPanel = () => {
                     id="offset-x"
                     type="number"
                     defaultValue="0"
+                    disabled={!offsetEnabled}
                     className="h-8 text-xs font-mono text-right bg-background/50"
                   />
                 </div>
@@ -239,6 +241,7 @@ export const PropertiesPanel = () => {
                     id="offset-y"
                     type="number"
                     defaultValue="0"
+                    disabled={!offsetEnabled}
                     className="h-8 text-xs font-mono text-right bg-background/50"
                   />
                 </div>
