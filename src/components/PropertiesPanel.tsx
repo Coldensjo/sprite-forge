@@ -197,20 +197,26 @@ export const PropertiesPanel = () => {
             <div className="bg-gradient-to-br from-secondary/40 to-secondary/20 rounded-md p-3 border border-border/40">
               <div className="flex items-center gap-1.5 pb-2 mb-3 border-b border-border/30">
                 <div className="w-0.5 h-3 bg-primary rounded-full" />
-                <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Animation & Offset</h3>
+                <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Animation</h3>
               </div>
-              <div className="grid grid-cols-3 gap-2">
-                <div className="space-y-1">
-                  <Label htmlFor="animations" className="text-xs font-medium text-muted-foreground/90">
-                    Frames
-                  </Label>
-                  <Input
-                    id="animations"
-                    type="number"
-                    defaultValue="1"
-                    className="h-8 text-xs font-mono text-right bg-background/50"
-                  />
-                </div>
+              <div className="space-y-1">
+                <Label htmlFor="animations" className="text-xs font-medium text-muted-foreground/90">
+                  Frames
+                </Label>
+                <Input
+                  id="animations"
+                  type="number"
+                  defaultValue="1"
+                  className="h-8 text-xs font-mono text-right bg-background/50"
+                />
+              </div>
+            </div>
+            <div className="bg-gradient-to-br from-secondary/40 to-secondary/20 rounded-md p-3 border border-border/40">
+              <div className="flex items-center gap-1.5 pb-2 mb-3 border-b border-border/30">
+                <div className="w-0.5 h-3 bg-primary rounded-full" />
+                <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Offset</h3>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1">
                   <Label htmlFor="offset-x" className="text-xs font-medium text-muted-foreground/90">
                     Offset X
