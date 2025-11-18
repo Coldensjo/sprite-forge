@@ -6,6 +6,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Slider } from "./ui/slider";
 import { Separator } from "./ui/separator";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "./ui/resizable";
+import { Button } from "./ui/button";
+import { SkipBack, ChevronLeft, Play, ChevronRight, SkipForward } from "lucide-react";
 
 export const PropertiesPanel = () => {
   return (
@@ -23,7 +25,7 @@ export const PropertiesPanel = () => {
         <TabsContent value="appearance" className="flex-1 overflow-hidden">
           <ResizablePanelGroup direction="horizontal" className="h-full">
             <ResizablePanel defaultSize={30} minSize={20} maxSize={50}>
-              <div className="h-full flex flex-col items-center justify-center p-4">
+              <div className="h-full flex flex-col items-center justify-between p-4">
                 <div className="relative w-full">
                   <div className="w-full aspect-square bg-secondary/30 border border-border/50 rounded-lg flex items-center justify-center">
                     <div className="w-3/4 h-3/4 bg-gradient-to-br from-orange-500 to-red-600 rounded-lg" 
@@ -35,6 +37,29 @@ export const PropertiesPanel = () => {
                   </div>
                   <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-secondary/90 backdrop-blur-sm px-2 py-1 rounded text-xs text-muted-foreground font-mono border border-border/50">
                     32x32
+                  </div>
+                </div>
+
+                <div className="w-full flex flex-col items-center gap-2">
+                  <div className="flex items-center gap-1 bg-secondary/50 rounded-lg p-1 border border-border/50">
+                    <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-secondary">
+                      <SkipBack className="h-4 w-4" />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-secondary">
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-primary/20">
+                      <Play className="h-4 w-4" />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-secondary">
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-secondary">
+                      <SkipForward className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <div className="bg-secondary/50 backdrop-blur-sm px-3 py-1 rounded text-xs text-muted-foreground font-mono border border-border/50">
+                    Frame 1/8
                   </div>
                 </div>
               </div>
