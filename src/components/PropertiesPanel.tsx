@@ -210,41 +210,6 @@ export const PropertiesPanel = () => {
                 </div>
               </div>
             </div>
-            <div className="bg-gradient-to-br from-secondary/40 to-secondary/20 rounded-md p-3 border border-border/40">
-              <div className="flex items-center justify-between pb-2 mb-4 border-b border-border/30">
-                <div className="flex items-center gap-1.5">
-                  <div className="w-0.5 h-3 bg-primary rounded-full" />
-                  <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Offset</h3>
-                </div>
-                <Switch id="offset-enabled" checked={offsetEnabled} onCheckedChange={setOffsetEnabled} />
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-1">
-                  <Label htmlFor="offset-x" className="text-xs font-medium text-muted-foreground/90">
-                    Offset X
-                  </Label>
-                  <Input
-                    id="offset-x"
-                    type="number"
-                    defaultValue="0"
-                    disabled={!offsetEnabled}
-                    className="h-8 text-xs font-mono text-right bg-background/50"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="offset-y" className="text-xs font-medium text-muted-foreground/90">
-                    Offset Y
-                  </Label>
-                  <Input
-                    id="offset-y"
-                    type="number"
-                    defaultValue="0"
-                    disabled={!offsetEnabled}
-                    className="h-8 text-xs font-mono text-right bg-background/50"
-                  />
-                </div>
-              </div>
-            </div>
           </div>
         </div>
 
@@ -282,12 +247,12 @@ export const PropertiesPanel = () => {
                     Light Color
                   </Label>
                   <div className="flex gap-2 items-center">
-                    <Input 
-                      id="light-color" 
-                      type="number" 
-                      defaultValue="156" 
+                    <Input
+                      id="light-color"
+                      type="number"
+                      defaultValue="156"
                       disabled={!lightEnabled}
-                      className="h-8 w-20 text-xs font-mono text-right bg-background/50" 
+                      className="h-8 w-20 text-xs font-mono text-right bg-background/50"
                     />
                     <div className="w-8 h-8 rounded border border-border bg-orange-500 flex-shrink-0" />
                   </div>
@@ -297,13 +262,13 @@ export const PropertiesPanel = () => {
                     Intensity
                   </Label>
                   <div className="flex gap-2 items-center flex-1 max-w-[180px]">
-                    <Slider 
+                    <Slider
                       value={[lightIntensity]}
                       onValueChange={(value) => setLightIntensity(value[0])}
-                      max={5} 
-                      step={1} 
+                      max={5}
+                      step={1}
                       disabled={!lightEnabled}
-                      className="flex-1" 
+                      className="flex-1"
                     />
                     <Input
                       id="light-intensity"
@@ -428,6 +393,42 @@ export const PropertiesPanel = () => {
                     Max Characters
                   </Label>
                   <Input id="max-chars" type="number" defaultValue="0" className="h-8" />
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-gradient-to-br from-secondary/40 to-secondary/20 rounded-md p-3 border border-border/40">
+              <div className="flex items-center justify-between pb-2 mb-4 border-b border-border/30">
+                <div className="flex items-center gap-1.5">
+                  <div className="w-0.5 h-3 bg-primary rounded-full" />
+                  <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Offset</h3>
+                </div>
+                <Switch id="offset-enabled" checked={offsetEnabled} onCheckedChange={setOffsetEnabled} />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <Label htmlFor="offset-x" className="text-xs font-medium text-muted-foreground/90">
+                    Offset X
+                  </Label>
+                  <Input
+                    id="offset-x"
+                    type="number"
+                    defaultValue="0"
+                    disabled={!offsetEnabled}
+                    className="h-8 text-xs font-mono text-right bg-background/50"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="offset-y" className="text-xs font-medium text-muted-foreground/90">
+                    Offset Y
+                  </Label>
+                  <Input
+                    id="offset-y"
+                    type="number"
+                    defaultValue="0"
+                    disabled={!offsetEnabled}
+                    className="h-8 text-xs font-mono text-right bg-background/50"
+                  />
                 </div>
               </div>
             </div>
