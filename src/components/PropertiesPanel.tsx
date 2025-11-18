@@ -280,7 +280,7 @@ export const PropertiesPanel = () => {
                 <Switch id="light-enabled" checked={lightEnabled} onCheckedChange={setLightEnabled} />
               </div>
               <div className="space-y-3">
-                <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
                   <Label htmlFor="light-color" className="text-xs">
                     Light Color
                   </Label>
@@ -290,16 +290,16 @@ export const PropertiesPanel = () => {
                       type="number" 
                       defaultValue="156" 
                       disabled={!lightEnabled}
-                      className="h-8" 
+                      className="h-8 w-20" 
                     />
                     <div className="w-8 h-8 rounded border border-border bg-orange-500" />
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="light-intensity" className="text-xs">
+                <div className="flex items-center justify-between gap-2">
+                  <Label htmlFor="light-intensity" className="text-xs whitespace-nowrap">
                     Light Intensity
                   </Label>
-                  <div className="flex gap-3 items-center">
+                  <div className="flex gap-3 items-center flex-1 max-w-[180px]">
                     <Slider 
                       defaultValue={[3]} 
                       max={5} 
