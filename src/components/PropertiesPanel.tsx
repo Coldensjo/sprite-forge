@@ -279,25 +279,25 @@ export const PropertiesPanel = () => {
                 </div>
                 <Switch id="light-enabled" checked={lightEnabled} onCheckedChange={setLightEnabled} />
               </div>
-              <div className="space-y-3">
-                <div className="flex items-center justify-between gap-2">
-                  <Label htmlFor="light-color" className="text-xs">
+              <div className="space-y-3.5">
+                <div className="flex items-center justify-between gap-4">
+                  <Label htmlFor="light-color" className="text-xs font-medium text-muted-foreground/90 whitespace-nowrap">
                     Light Color
                   </Label>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 items-center">
                     <Input 
                       id="light-color" 
                       type="number" 
                       defaultValue="156" 
                       disabled={!lightEnabled}
-                      className="h-8 w-20" 
+                      className="h-8 w-20 text-xs font-mono text-right bg-background/50" 
                     />
-                    <div className="w-8 h-8 rounded border border-border bg-orange-500" />
+                    <div className="w-8 h-8 rounded border border-border bg-orange-500 flex-shrink-0" />
                   </div>
                 </div>
-                <div className="flex items-center justify-between gap-2">
-                  <Label htmlFor="light-intensity" className="text-xs whitespace-nowrap">
-                    Light Intensity
+                <div className="flex items-center justify-between gap-4">
+                  <Label htmlFor="light-intensity" className="text-xs font-medium text-muted-foreground/90 whitespace-nowrap">
+                    Intensity
                   </Label>
                   <div className="flex gap-3 items-center flex-1 max-w-[180px]">
                     <Slider 
@@ -307,7 +307,7 @@ export const PropertiesPanel = () => {
                       disabled={!lightEnabled}
                       className="flex-1" 
                     />
-                    <span className="text-xs text-muted-foreground w-8">3</span>
+                    <span className="text-xs text-muted-foreground font-mono w-6 text-right">3</span>
                   </div>
                 </div>
               </div>
