@@ -98,7 +98,7 @@ export const PropertiesPanel = () => {
             </div>
           </div>
 
-          <div className="flex-1 grid grid-cols-2 gap-4 min-w-0">
+          <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4 min-w-0">
             <div className="bg-gradient-to-br from-secondary/40 to-secondary/20 rounded-md p-3 border border-border/40">
               <div className="flex items-center gap-1.5 pb-2 mb-3 border-b border-border/30">
                 <div className="w-0.5 h-3 bg-primary rounded-full" />
