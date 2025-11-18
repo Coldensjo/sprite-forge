@@ -44,71 +44,80 @@ export const PropertiesPanel = () => {
 
             <ResizablePanel defaultSize={60} minSize={40}>
               <div className="h-full overflow-auto p-6">
-                <div className="space-y-6 max-w-md">
-                  <div className="bg-secondary/30 rounded-lg p-4 space-y-3">
-                    <h3 className="text-xs font-semibold text-foreground uppercase tracking-wide mb-4">Dimensions</h3>
+                <div className="space-y-5 max-w-md mx-auto">
+                  <div className="bg-gradient-to-br from-secondary/40 to-secondary/20 rounded-xl p-5 space-y-4 border border-border/40 shadow-sm hover:shadow-md transition-shadow">
+                    <div className="flex items-center gap-2 pb-2 border-b border-border/30">
+                      <div className="w-1 h-4 bg-primary rounded-full" />
+                      <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Dimensions</h3>
+                    </div>
                     
-                    <div className="grid grid-cols-2 gap-x-6 gap-y-3">
-                      <div className="flex items-center justify-between">
-                        <Label htmlFor="width" className="text-xs text-muted-foreground">Width</Label>
-                        <Input id="width" type="number" min="1" max="128" defaultValue="1" className="h-7 w-16 text-xs font-mono text-right" />
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="width" className="text-xs font-medium text-muted-foreground/90">Width</Label>
+                        <Input id="width" type="number" min="1" max="128" defaultValue="1" className="h-8 w-full text-xs font-mono text-right bg-background/50 border-border/50 hover:border-primary/50 transition-colors" />
                       </div>
-                      <div className="flex items-center justify-between">
-                        <Label htmlFor="height" className="text-xs text-muted-foreground">Height</Label>
-                        <Input id="height" type="number" min="1" max="128" defaultValue="1" className="h-7 w-16 text-xs font-mono text-right" />
+                      <div className="space-y-1.5">
+                        <Label htmlFor="height" className="text-xs font-medium text-muted-foreground/90">Height</Label>
+                        <Input id="height" type="number" min="1" max="128" defaultValue="1" className="h-8 w-full text-xs font-mono text-right bg-background/50 border-border/50 hover:border-primary/50 transition-colors" />
                       </div>
-                      <div className="flex items-center justify-between">
-                        <Label htmlFor="crop-size" className="text-xs text-muted-foreground">Crop Size</Label>
-                        <Input id="crop-size" type="number" min="1" max="128" defaultValue="32" className="h-7 w-16 text-xs font-mono text-right" />
+                      <div className="space-y-1.5">
+                        <Label htmlFor="crop-size" className="text-xs font-medium text-muted-foreground/90">Crop Size</Label>
+                        <Input id="crop-size" type="number" min="1" max="128" defaultValue="32" className="h-8 w-full text-xs font-mono text-right bg-background/50 border-border/50 hover:border-primary/50 transition-colors" />
                       </div>
-                      <div className="flex items-center justify-between">
-                        <Label htmlFor="layers" className="text-xs text-muted-foreground">Layers</Label>
-                        <Input id="layers" type="number" min="1" max="128" defaultValue="1" className="h-7 w-16 text-xs font-mono text-right" />
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="bg-secondary/30 rounded-lg p-4 space-y-3">
-                    <h3 className="text-xs font-semibold text-foreground uppercase tracking-wide mb-4">Pattern</h3>
-
-                    <div className="grid grid-cols-3 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="pattern-x" className="text-xs text-muted-foreground block text-center">X Axis</Label>
-                        <Input id="pattern-x" type="number" min="1" max="128" defaultValue="4" className="h-7 w-full text-xs font-mono text-center" />
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="pattern-y" className="text-xs text-muted-foreground block text-center">Y Axis</Label>
-                        <Input id="pattern-y" type="number" min="1" max="128" defaultValue="4" className="h-7 w-full text-xs font-mono text-center" />
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="pattern-z" className="text-xs text-muted-foreground block text-center">Z Axis</Label>
-                        <Input id="pattern-z" type="number" min="1" max="128" defaultValue="1" className="h-7 w-full text-xs font-mono text-center" />
+                      <div className="space-y-1.5">
+                        <Label htmlFor="layers" className="text-xs font-medium text-muted-foreground/90">Layers</Label>
+                        <Input id="layers" type="number" min="1" max="128" defaultValue="1" className="h-8 w-full text-xs font-mono text-right bg-background/50 border-border/50 hover:border-primary/50 transition-colors" />
                       </div>
                     </div>
                   </div>
 
-                  <div className="bg-secondary/30 rounded-lg p-4 space-y-4">
-                    <h3 className="text-xs font-semibold text-foreground uppercase tracking-wide">Animation</h3>
-
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="animations" className="text-xs text-muted-foreground">Frame Count</Label>
-                      <Input id="animations" type="number" min="1" max="128" defaultValue="1" className="h-7 w-20 text-xs font-mono text-right" />
+                  <div className="bg-gradient-to-br from-secondary/40 to-secondary/20 rounded-xl p-5 space-y-4 border border-border/40 shadow-sm hover:shadow-md transition-shadow">
+                    <div className="flex items-center gap-2 pb-2 border-b border-border/30">
+                      <div className="w-1 h-4 bg-primary rounded-full" />
+                      <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Pattern</h3>
                     </div>
 
-                    <Separator className="my-3" />
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="pattern-x" className="text-xs font-medium text-muted-foreground/90 block text-center">X Axis</Label>
+                        <Input id="pattern-x" type="number" min="1" max="128" defaultValue="4" className="h-8 w-full text-xs font-mono text-center bg-background/50 border-border/50 hover:border-primary/50 transition-colors" />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label htmlFor="pattern-y" className="text-xs font-medium text-muted-foreground/90 block text-center">Y Axis</Label>
+                        <Input id="pattern-y" type="number" min="1" max="128" defaultValue="4" className="h-8 w-full text-xs font-mono text-center bg-background/50 border-border/50 hover:border-primary/50 transition-colors" />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label htmlFor="pattern-z" className="text-xs font-medium text-muted-foreground/90 block text-center">Z Axis</Label>
+                        <Input id="pattern-z" type="number" min="1" max="128" defaultValue="1" className="h-8 w-full text-xs font-mono text-center bg-background/50 border-border/50 hover:border-primary/50 transition-colors" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-gradient-to-br from-secondary/40 to-secondary/20 rounded-xl p-5 space-y-4 border border-border/40 shadow-sm hover:shadow-md transition-shadow">
+                    <div className="flex items-center gap-2 pb-2 border-b border-border/30">
+                      <div className="w-1 h-4 bg-primary rounded-full" />
+                      <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Animation</h3>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label htmlFor="animations" className="text-xs font-medium text-muted-foreground/90">Frame Count</Label>
+                      <Input id="animations" type="number" min="1" max="128" defaultValue="1" className="h-8 w-full text-xs font-mono text-right bg-background/50 border-border/50 hover:border-primary/50 transition-colors" />
+                    </div>
+
+                    <Separator className="my-4 bg-border/50" />
 
                     <div className="space-y-3">
-                      <div className="text-[10px] text-muted-foreground uppercase tracking-wide">Position Offset</div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="flex items-center justify-between">
-                          <Label htmlFor="offset-x" className="text-xs text-muted-foreground">X</Label>
-                          <Input id="offset-x" type="number" min="-128" max="128" defaultValue="0" className="h-7 w-16 text-xs font-mono text-right" />
+                      <div className="text-[10px] font-semibold text-muted-foreground/80 uppercase tracking-wider">Position Offset</div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1.5">
+                          <Label htmlFor="offset-x" className="text-xs font-medium text-muted-foreground/90">X</Label>
+                          <Input id="offset-x" type="number" min="-128" max="128" defaultValue="0" className="h-8 w-full text-xs font-mono text-right bg-background/50 border-border/50 hover:border-primary/50 transition-colors" />
                         </div>
-                        <div className="flex items-center justify-between">
-                          <Label htmlFor="offset-y" className="text-xs text-muted-foreground">Y</Label>
-                          <Input id="offset-y" type="number" min="-128" max="128" defaultValue="0" className="h-7 w-16 text-xs font-mono text-right" />
+                        <div className="space-y-1.5">
+                          <Label htmlFor="offset-y" className="text-xs font-medium text-muted-foreground/90">Y</Label>
+                          <Input id="offset-y" type="number" min="-128" max="128" defaultValue="0" className="h-8 w-full text-xs font-mono text-right bg-background/50 border-border/50 hover:border-primary/50 transition-colors" />
                         </div>
                       </div>
                     </div>
