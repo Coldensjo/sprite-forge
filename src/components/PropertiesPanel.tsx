@@ -13,6 +13,7 @@ export const PropertiesPanel = () => {
   const [isResizing, setIsResizing] = useState(false);
   const [offsetEnabled, setOffsetEnabled] = useState(false);
   const [lightEnabled, setLightEnabled] = useState(true);
+  const [lightIntensity, setLightIntensity] = useState(3);
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -299,15 +300,25 @@ export const PropertiesPanel = () => {
                   <Label htmlFor="light-intensity" className="text-xs whitespace-nowrap">
                     Intensity
                   </Label>
-                  <div className="flex gap-3 items-center flex-1 max-w-[180px]">
+                  <div className="flex gap-2 items-center flex-1 max-w-[180px]">
                     <Slider 
-                      defaultValue={[3]} 
+                      value={[lightIntensity]}
+                      onValueChange={(value) => setLightIntensity(value[0])}
                       max={5} 
                       step={1} 
                       disabled={!lightEnabled}
                       className="flex-1" 
                     />
-                    <span className="text-xs text-muted-foreground font-mono w-6 text-right">3</span>
+                    <Input
+                      id="light-intensity"
+                      type="number"
+                      min="0"
+                      max="5"
+                      value={lightIntensity}
+                      onChange={(e) => setLightIntensity(Number(e.target.value))}
+                      disabled={!lightEnabled}
+                      className="h-8 w-12 text-xs font-mono text-right bg-background/50"
+                    />
                   </div>
                 </div>
               </div>
