@@ -44,68 +44,74 @@ export const PropertiesPanel = () => {
 
             <ResizablePanel defaultSize={60} minSize={40}>
               <div className="h-full overflow-auto p-4">
-                <div className="space-y-4">
-                  <h3 className="text-xs font-semibold text-foreground uppercase tracking-wide">Sprite Settings</h3>
-                  
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="width" className="text-xs">Width</Label>
-                      <Input id="width" type="number" defaultValue="1" className="h-8" />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="height" className="text-xs">Height</Label>
-                      <Input id="height" type="number" defaultValue="1" className="h-8" />
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="crop-size" className="text-xs">Crop Size</Label>
-                    <Input id="crop-size" type="number" defaultValue="32" className="h-8" />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="layers" className="text-xs">Layers</Label>
-                    <Input id="layers" type="number" defaultValue="1" className="h-8" />
-                  </div>
-
-                  <Separator />
-
-                  <h3 className="text-xs font-semibold text-foreground uppercase tracking-wide">Pattern</h3>
-
-                  <div className="grid grid-cols-3 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="pattern-x" className="text-xs">Pattern X</Label>
-                      <Input id="pattern-x" type="number" defaultValue="4" className="h-8" />
+                <div className="space-y-6">
+                  <div className="space-y-3">
+                    <h3 className="text-xs font-semibold text-foreground uppercase tracking-wide">Sprite Settings</h3>
+                    
+                    <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-2">
+                        <Label htmlFor="width" className="text-xs text-muted-foreground w-12">Width</Label>
+                        <Input id="width" type="number" min="1" max="128" defaultValue="1" className="h-7 w-16 text-xs font-mono" />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Label htmlFor="height" className="text-xs text-muted-foreground w-12">Height</Label>
+                        <Input id="height" type="number" min="1" max="128" defaultValue="1" className="h-7 w-16 text-xs font-mono" />
+                      </div>
                     </div>
 
-                    <div className="space-y-2">
-                      <Label htmlFor="pattern-y" className="text-xs">Pattern Y</Label>
-                      <Input id="pattern-y" type="number" defaultValue="4" className="h-8" />
+                    <div className="flex items-center gap-2">
+                      <Label htmlFor="crop-size" className="text-xs text-muted-foreground w-20">Crop Size</Label>
+                      <Input id="crop-size" type="number" min="1" max="128" defaultValue="32" className="h-7 w-16 text-xs font-mono" />
                     </div>
 
-                    <div className="space-y-2">
-                      <Label htmlFor="pattern-z" className="text-xs">Pattern Z</Label>
-                      <Input id="pattern-z" type="number" defaultValue="1" className="h-8" />
+                    <div className="flex items-center gap-2">
+                      <Label htmlFor="layers" className="text-xs text-muted-foreground w-20">Layers</Label>
+                      <Input id="layers" type="number" min="1" max="128" defaultValue="1" className="h-7 w-16 text-xs font-mono" />
                     </div>
                   </div>
 
                   <Separator />
 
-                  <h3 className="text-xs font-semibold text-foreground uppercase tracking-wide">Animation</h3>
+                  <div className="space-y-3">
+                    <h3 className="text-xs font-semibold text-foreground uppercase tracking-wide">Pattern</h3>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="animations" className="text-xs">Animations</Label>
-                    <Input id="animations" type="number" defaultValue="1" className="h-8" />
+                    <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-2">
+                        <Label htmlFor="pattern-x" className="text-xs text-muted-foreground w-8">X</Label>
+                        <Input id="pattern-x" type="number" min="1" max="128" defaultValue="4" className="h-7 w-16 text-xs font-mono" />
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <Label htmlFor="pattern-y" className="text-xs text-muted-foreground w-8">Y</Label>
+                        <Input id="pattern-y" type="number" min="1" max="128" defaultValue="4" className="h-7 w-16 text-xs font-mono" />
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <Label htmlFor="pattern-z" className="text-xs text-muted-foreground w-8">Z</Label>
+                        <Input id="pattern-z" type="number" min="1" max="128" defaultValue="1" className="h-7 w-16 text-xs font-mono" />
+                      </div>
+                    </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="offset-x" className="text-xs">Offset X</Label>
-                      <Input id="offset-x" type="number" defaultValue="0" className="h-8" />
+                  <Separator />
+
+                  <div className="space-y-3">
+                    <h3 className="text-xs font-semibold text-foreground uppercase tracking-wide">Animation</h3>
+
+                    <div className="flex items-center gap-2">
+                      <Label htmlFor="animations" className="text-xs text-muted-foreground w-20">Frames</Label>
+                      <Input id="animations" type="number" min="1" max="128" defaultValue="1" className="h-7 w-16 text-xs font-mono" />
                     </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="offset-y" className="text-xs">Offset Y</Label>
-                      <Input id="offset-y" type="number" defaultValue="0" className="h-8" />
+
+                    <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-2">
+                        <Label htmlFor="offset-x" className="text-xs text-muted-foreground w-16">Offset X</Label>
+                        <Input id="offset-x" type="number" min="-128" max="128" defaultValue="0" className="h-7 w-16 text-xs font-mono" />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Label htmlFor="offset-y" className="text-xs text-muted-foreground w-16">Offset Y</Label>
+                        <Input id="offset-y" type="number" min="-128" max="128" defaultValue="0" className="h-7 w-16 text-xs font-mono" />
+                      </div>
                     </div>
                   </div>
                 </div>
