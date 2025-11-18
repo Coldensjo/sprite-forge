@@ -104,9 +104,9 @@ export const PropertiesPanel = () => {
           <div className="bg-gradient-to-br from-secondary/40 to-secondary/20 rounded-md p-3 border border-border/40 flex-1">
             <div className="flex items-center gap-1.5 pb-2 mb-4 border-b border-border/30">
               <div className="w-0.5 h-3 bg-primary rounded-full" />
-              <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Dimensions & Pattern</h3>
+              <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Dimensions</h3>
             </div>
-            <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+            <div className="space-y-3">
               <div className="flex items-center justify-between gap-2">
                 <Label htmlFor="width" className="text-xs whitespace-nowrap text-foreground">
                   Width
@@ -118,17 +118,6 @@ export const PropertiesPanel = () => {
                   max="128"
                   defaultValue="1"
                   className="h-8 w-16 text-xs font-mono text-right bg-background/50"
-                />
-              </div>
-              <div className="flex items-center justify-between gap-2">
-                <Label htmlFor="pattern-x" className="text-xs whitespace-nowrap text-foreground">
-                  Pattern X
-                </Label>
-                <Input
-                  id="pattern-x"
-                  type="number"
-                  defaultValue="4"
-                  className="h-8 w-16 text-xs font-mono text-center bg-background/50"
                 />
               </div>
               <div className="flex items-center justify-between gap-2">
@@ -145,17 +134,6 @@ export const PropertiesPanel = () => {
                 />
               </div>
               <div className="flex items-center justify-between gap-2">
-                <Label htmlFor="pattern-y" className="text-xs whitespace-nowrap text-foreground">
-                  Pattern Y
-                </Label>
-                <Input
-                  id="pattern-y"
-                  type="number"
-                  defaultValue="4"
-                  className="h-8 w-16 text-xs font-mono text-center bg-background/50"
-                />
-              </div>
-              <div className="flex items-center justify-between gap-2">
                 <Label htmlFor="crop-size" className="text-xs whitespace-nowrap text-foreground">
                   Crop Size
                 </Label>
@@ -169,17 +147,6 @@ export const PropertiesPanel = () => {
                 />
               </div>
               <div className="flex items-center justify-between gap-2">
-                <Label htmlFor="pattern-z" className="text-xs whitespace-nowrap text-foreground">
-                  Pattern Z
-                </Label>
-                <Input
-                  id="pattern-z"
-                  type="number"
-                  defaultValue="1"
-                  className="h-8 w-16 text-xs font-mono text-center bg-background/50"
-                />
-              </div>
-              <div className="flex items-center justify-between gap-2">
                 <Label htmlFor="layers" className="text-xs whitespace-nowrap text-foreground">
                   Layers
                 </Label>
@@ -190,6 +157,48 @@ export const PropertiesPanel = () => {
                   max="128"
                   defaultValue="1"
                   className="h-8 w-16 text-xs font-mono text-right bg-background/50"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-gradient-to-br from-secondary/40 to-secondary/20 rounded-md p-3 border border-border/40 flex-1">
+            <div className="flex items-center gap-1.5 pb-2 mb-4 border-b border-border/30">
+              <div className="w-0.5 h-3 bg-primary rounded-full" />
+              <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Pattern & Frames</h3>
+            </div>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <Label htmlFor="pattern-x" className="text-xs whitespace-nowrap text-foreground">
+                  Pattern X
+                </Label>
+                <Input
+                  id="pattern-x"
+                  type="number"
+                  defaultValue="4"
+                  className="h-8 w-16 text-xs font-mono text-center bg-background/50"
+                />
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <Label htmlFor="pattern-y" className="text-xs whitespace-nowrap text-foreground">
+                  Pattern Y
+                </Label>
+                <Input
+                  id="pattern-y"
+                  type="number"
+                  defaultValue="4"
+                  className="h-8 w-16 text-xs font-mono text-center bg-background/50"
+                />
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <Label htmlFor="pattern-z" className="text-xs whitespace-nowrap text-foreground">
+                  Pattern Z
+                </Label>
+                <Input
+                  id="pattern-z"
+                  type="number"
+                  defaultValue="1"
+                  className="h-8 w-16 text-xs font-mono text-center bg-background/50"
                 />
               </div>
               <div className="flex items-center justify-between gap-2">
