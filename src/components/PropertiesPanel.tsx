@@ -33,7 +33,7 @@ export const PropertiesPanel = () => {
                          }} 
                     />
                   </div>
-                  <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-secondary/90 backdrop-blur-sm px-2 py-0.5 rounded text-[10px] text-muted-foreground font-mono border border-border/50">
+                  <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-secondary/90 backdrop-blur-sm px-2 py-1 rounded text-xs text-muted-foreground font-mono border border-border/50">
                     32x32
                   </div>
                 </div>
@@ -46,64 +46,64 @@ export const PropertiesPanel = () => {
               <div className="h-full overflow-auto p-2">
                 <div className="space-y-2">
                   <div className="bg-gradient-to-br from-secondary/40 to-secondary/20 rounded-md p-2 border border-border/40">
-                    <div className="flex items-center gap-1 pb-1 mb-2 border-b border-border/30">
-                      <div className="w-0.5 h-2.5 bg-primary rounded-full" />
-                      <h3 className="text-[9px] font-bold text-foreground uppercase tracking-wider">Dimensions & Pattern</h3>
+                    <div className="flex items-center gap-1.5 pb-1 mb-2 border-b border-border/30">
+                      <div className="w-0.5 h-3 bg-primary rounded-full" />
+                      <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Dimensions & Pattern</h3>
                     </div>
                     
                     <div className="grid grid-cols-4 gap-1.5 mb-2">
-                      <div className="space-y-0.5">
-                        <Label htmlFor="width" className="text-[9px] font-medium text-muted-foreground/90">W</Label>
-                        <Input id="width" type="number" min="1" max="128" defaultValue="1" className="h-6 text-[11px] font-mono text-right bg-background/50 border-border/50 hover:border-primary/50 transition-colors" />
+                      <div className="space-y-1">
+                        <Label htmlFor="width" className="text-xs font-medium text-muted-foreground/90">W</Label>
+                        <Input id="width" type="number" min="1" max="128" defaultValue="1" className="h-8 text-xs font-mono text-right bg-background/50 border-border/50 hover:border-primary/50 transition-colors" />
                       </div>
-                      <div className="space-y-0.5">
-                        <Label htmlFor="height" className="text-[9px] font-medium text-muted-foreground/90">H</Label>
-                        <Input id="height" type="number" min="1" max="128" defaultValue="1" className="h-6 text-[11px] font-mono text-right bg-background/50 border-border/50 hover:border-primary/50 transition-colors" />
+                      <div className="space-y-1">
+                        <Label htmlFor="height" className="text-xs font-medium text-muted-foreground/90">H</Label>
+                        <Input id="height" type="number" min="1" max="128" defaultValue="1" className="h-8 text-xs font-mono text-right bg-background/50 border-border/50 hover:border-primary/50 transition-colors" />
                       </div>
-                      <div className="space-y-0.5">
-                        <Label htmlFor="crop-size" className="text-[9px] font-medium text-muted-foreground/90">Crop</Label>
-                        <Input id="crop-size" type="number" min="1" max="128" defaultValue="32" className="h-6 text-[11px] font-mono text-right bg-background/50 border-border/50 hover:border-primary/50 transition-colors" />
+                      <div className="space-y-1">
+                        <Label htmlFor="crop-size" className="text-xs font-medium text-muted-foreground/90">Crop</Label>
+                        <Input id="crop-size" type="number" min="1" max="128" defaultValue="32" className="h-8 text-xs font-mono text-right bg-background/50 border-border/50 hover:border-primary/50 transition-colors" />
                       </div>
-                      <div className="space-y-0.5">
-                        <Label htmlFor="layers" className="text-[9px] font-medium text-muted-foreground/90">Layers</Label>
-                        <Input id="layers" type="number" min="1" max="128" defaultValue="1" className="h-6 text-[11px] font-mono text-right bg-background/50 border-border/50 hover:border-primary/50 transition-colors" />
+                      <div className="space-y-1">
+                        <Label htmlFor="layers" className="text-xs font-medium text-muted-foreground/90">Layers</Label>
+                        <Input id="layers" type="number" min="1" max="128" defaultValue="1" className="h-8 text-xs font-mono text-right bg-background/50 border-border/50 hover:border-primary/50 transition-colors" />
                       </div>
                     </div>
 
                     <div className="grid grid-cols-3 gap-1.5">
-                      <div className="space-y-0.5">
-                        <Label htmlFor="pattern-x" className="text-[9px] font-medium text-muted-foreground/90">Pat X</Label>
-                        <Input id="pattern-x" type="number" min="1" max="128" defaultValue="4" className="h-6 text-[11px] font-mono text-center bg-background/50 border-border/50 hover:border-primary/50 transition-colors" />
+                      <div className="space-y-1">
+                        <Label htmlFor="pattern-x" className="text-xs font-medium text-muted-foreground/90">Pat X</Label>
+                        <Input id="pattern-x" type="number" min="1" max="128" defaultValue="4" className="h-8 text-xs font-mono text-center bg-background/50 border-border/50 hover:border-primary/50 transition-colors" />
                       </div>
-                      <div className="space-y-0.5">
-                        <Label htmlFor="pattern-y" className="text-[9px] font-medium text-muted-foreground/90">Pat Y</Label>
-                        <Input id="pattern-y" type="number" min="1" max="128" defaultValue="4" className="h-6 text-[11px] font-mono text-center bg-background/50 border-border/50 hover:border-primary/50 transition-colors" />
+                      <div className="space-y-1">
+                        <Label htmlFor="pattern-y" className="text-xs font-medium text-muted-foreground/90">Pat Y</Label>
+                        <Input id="pattern-y" type="number" min="1" max="128" defaultValue="4" className="h-8 text-xs font-mono text-center bg-background/50 border-border/50 hover:border-primary/50 transition-colors" />
                       </div>
-                      <div className="space-y-0.5">
-                        <Label htmlFor="pattern-z" className="text-[9px] font-medium text-muted-foreground/90">Pat Z</Label>
-                        <Input id="pattern-z" type="number" min="1" max="128" defaultValue="1" className="h-6 text-[11px] font-mono text-center bg-background/50 border-border/50 hover:border-primary/50 transition-colors" />
+                      <div className="space-y-1">
+                        <Label htmlFor="pattern-z" className="text-xs font-medium text-muted-foreground/90">Pat Z</Label>
+                        <Input id="pattern-z" type="number" min="1" max="128" defaultValue="1" className="h-8 text-xs font-mono text-center bg-background/50 border-border/50 hover:border-primary/50 transition-colors" />
                       </div>
                     </div>
                   </div>
 
                   <div className="bg-gradient-to-br from-secondary/40 to-secondary/20 rounded-md p-2 border border-border/40">
-                    <div className="flex items-center gap-1 pb-1 mb-2 border-b border-border/30">
-                      <div className="w-0.5 h-2.5 bg-primary rounded-full" />
-                      <h3 className="text-[9px] font-bold text-foreground uppercase tracking-wider">Animation & Offset</h3>
+                    <div className="flex items-center gap-1.5 pb-1 mb-2 border-b border-border/30">
+                      <div className="w-0.5 h-3 bg-primary rounded-full" />
+                      <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Animation & Offset</h3>
                     </div>
 
                     <div className="grid grid-cols-3 gap-1.5">
-                      <div className="space-y-0.5">
-                        <Label htmlFor="animations" className="text-[9px] font-medium text-muted-foreground/90">Frames</Label>
-                        <Input id="animations" type="number" min="1" max="128" defaultValue="1" className="h-6 text-[11px] font-mono text-right bg-background/50 border-border/50 hover:border-primary/50 transition-colors" />
+                      <div className="space-y-1">
+                        <Label htmlFor="animations" className="text-xs font-medium text-muted-foreground/90">Frames</Label>
+                        <Input id="animations" type="number" min="1" max="128" defaultValue="1" className="h-8 text-xs font-mono text-right bg-background/50 border-border/50 hover:border-primary/50 transition-colors" />
                       </div>
-                      <div className="space-y-0.5">
-                        <Label htmlFor="offset-x" className="text-[9px] font-medium text-muted-foreground/90">Off X</Label>
-                        <Input id="offset-x" type="number" min="-128" max="128" defaultValue="0" className="h-6 text-[11px] font-mono text-right bg-background/50 border-border/50 hover:border-primary/50 transition-colors" />
+                      <div className="space-y-1">
+                        <Label htmlFor="offset-x" className="text-xs font-medium text-muted-foreground/90">Off X</Label>
+                        <Input id="offset-x" type="number" min="-128" max="128" defaultValue="0" className="h-8 text-xs font-mono text-right bg-background/50 border-border/50 hover:border-primary/50 transition-colors" />
                       </div>
-                      <div className="space-y-0.5">
-                        <Label htmlFor="offset-y" className="text-[9px] font-medium text-muted-foreground/90">Off Y</Label>
-                        <Input id="offset-y" type="number" min="-128" max="128" defaultValue="0" className="h-6 text-[11px] font-mono text-right bg-background/50 border-border/50 hover:border-primary/50 transition-colors" />
+                      <div className="space-y-1">
+                        <Label htmlFor="offset-y" className="text-xs font-medium text-muted-foreground/90">Off Y</Label>
+                        <Input id="offset-y" type="number" min="-128" max="128" defaultValue="0" className="h-8 text-xs font-mono text-right bg-background/50 border-border/50 hover:border-primary/50 transition-colors" />
                       </div>
                     </div>
                   </div>
