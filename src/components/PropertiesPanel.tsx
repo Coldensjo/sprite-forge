@@ -106,52 +106,13 @@ export const PropertiesPanel = () => {
               <div className="w-0.5 h-3 bg-primary rounded-full" />
               <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Dimensions & Pattern</h3>
             </div>
-            <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-x-4 gap-y-3">
               <div className="flex items-center justify-between gap-2">
                 <Label htmlFor="width" className="text-xs whitespace-nowrap text-foreground">
                   Width
                 </Label>
                 <Input
                   id="width"
-                  type="number"
-                  min="1"
-                  max="128"
-                  defaultValue="1"
-                  className="h-8 w-16 text-xs font-mono text-right bg-background/50"
-                />
-              </div>
-              <div className="flex items-center justify-between gap-2">
-                <Label htmlFor="height" className="text-xs whitespace-nowrap text-foreground">
-                  Height
-                </Label>
-                <Input
-                  id="height"
-                  type="number"
-                  min="1"
-                  max="128"
-                  defaultValue="1"
-                  className="h-8 w-16 text-xs font-mono text-right bg-background/50"
-                />
-              </div>
-              <div className="flex items-center justify-between gap-2">
-                <Label htmlFor="crop-size" className="text-xs whitespace-nowrap text-foreground">
-                  Crop Size
-                </Label>
-                <Input
-                  id="crop-size"
-                  type="number"
-                  min="1"
-                  max="128"
-                  defaultValue="32"
-                  className="h-8 w-16 text-xs font-mono text-right bg-background/50"
-                />
-              </div>
-              <div className="flex items-center justify-between gap-2">
-                <Label htmlFor="layers" className="text-xs whitespace-nowrap text-foreground">
-                  Layers
-                </Label>
-                <Input
-                  id="layers"
                   type="number"
                   min="1"
                   max="128"
@@ -171,6 +132,19 @@ export const PropertiesPanel = () => {
                 />
               </div>
               <div className="flex items-center justify-between gap-2">
+                <Label htmlFor="height" className="text-xs whitespace-nowrap text-foreground">
+                  Height
+                </Label>
+                <Input
+                  id="height"
+                  type="number"
+                  min="1"
+                  max="128"
+                  defaultValue="1"
+                  className="h-8 w-16 text-xs font-mono text-right bg-background/50"
+                />
+              </div>
+              <div className="flex items-center justify-between gap-2">
                 <Label htmlFor="pattern-y" className="text-xs whitespace-nowrap text-foreground">
                   Pattern Y
                 </Label>
@@ -182,6 +156,19 @@ export const PropertiesPanel = () => {
                 />
               </div>
               <div className="flex items-center justify-between gap-2">
+                <Label htmlFor="crop-size" className="text-xs whitespace-nowrap text-foreground">
+                  Crop Size
+                </Label>
+                <Input
+                  id="crop-size"
+                  type="number"
+                  min="1"
+                  max="128"
+                  defaultValue="32"
+                  className="h-8 w-16 text-xs font-mono text-right bg-background/50"
+                />
+              </div>
+              <div className="flex items-center justify-between gap-2">
                 <Label htmlFor="pattern-z" className="text-xs whitespace-nowrap text-foreground">
                   Pattern Z
                 </Label>
@@ -190,6 +177,19 @@ export const PropertiesPanel = () => {
                   type="number"
                   defaultValue="1"
                   className="h-8 w-16 text-xs font-mono text-center bg-background/50"
+                />
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <Label htmlFor="layers" className="text-xs whitespace-nowrap text-foreground">
+                  Layers
+                </Label>
+                <Input
+                  id="layers"
+                  type="number"
+                  min="1"
+                  max="128"
+                  defaultValue="1"
+                  className="h-8 w-16 text-xs font-mono text-right bg-background/50"
                 />
               </div>
               <div className="flex items-center justify-between gap-2">
