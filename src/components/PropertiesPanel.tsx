@@ -241,7 +241,7 @@ export const PropertiesPanel = () => {
         <Separator />
 
         {/* properties panel */}
-        <div className="flex gap-6 mt-4">
+        <div className="flex gap-4 mt-4">
           <div className="flex-1 space-y-4 min-w-0">
             <div className="bg-gradient-to-br from-secondary/40 to-secondary/20 rounded-md p-3 border border-border/40">
               <div className="flex items-center gap-1.5 pb-2 mb-3 border-b border-border/30">
