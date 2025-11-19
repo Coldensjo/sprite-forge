@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState } from "react";
 import { Label } from "./ui/label";
 import { Input } from "./ui/input";
 import { Switch } from "./ui/switch";
@@ -6,44 +6,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Slider } from "./ui/slider";
 import { Separator } from "./ui/separator";
 import { Button } from "./ui/button";
-import { SkipBack, ChevronLeft, Play, ChevronRight, SkipForward, GripVertical } from "lucide-react";
+import { ScrollArea } from "./ui/scroll-area";
+import { SkipBack, ChevronLeft, Play, ChevronRight, SkipForward, ChevronUp, ChevronDown } from "lucide-react";
 
 export const PropertiesPanel = () => {
-  const [leftWidth, setLeftWidth] = useState(200);
-  const [isResizing, setIsResizing] = useState(false);
   const [offsetEnabled, setOffsetEnabled] = useState(false);
   const [lightEnabled, setLightEnabled] = useState(true);
   const [lightIntensity, setLightIntensity] = useState(3);
-  const containerRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!isResizing || !containerRef.current) return;
-      const containerRect = containerRef.current.getBoundingClientRect();
-      const newWidth = e.clientX - containerRect.left;
-      const minWidth = 200;
-      const maxWidth = containerRect.width - 200;
-      setLeftWidth(Math.max(minWidth, Math.min(maxWidth, newWidth)));
-    };
-
-    const handleMouseUp = () => {
-      setIsResizing(false);
-    };
-
-    if (isResizing) {
-      document.addEventListener("mousemove", handleMouseMove);
-      document.addEventListener("mouseup", handleMouseUp);
-      document.body.style.cursor = "col-resize";
-      document.body.style.userSelect = "none";
-    }
-
-    return () => {
-      document.removeEventListener("mousemove", handleMouseMove);
-      document.removeEventListener("mouseup", handleMouseUp);
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
-    };
-  }, [isResizing]);
 
   return (
     <div className="flex-1 bg-card rounded-lg shadow-island-lg flex flex-col overflow-hidden">
@@ -51,11 +21,26 @@ export const PropertiesPanel = () => {
         <h2 className="text-xs font-semibold text-foreground uppercase tracking-wide">Item Properties</h2>
       </div>
 
-      <div className="flex-1 overflow-auto p-4" ref={containerRef}>
+      <ScrollArea className="flex-1">
+        <div className="p-4">
         <div className="flex gap-4 mb-4">
-          <div className="flex-shrink-0" style={{ width: `${leftWidth}px` }}>
+          <div className="flex-shrink-0 w-[360px]">
             <div className="flex flex-col items-center justify-between space-y-4">
               <div className="relative w-full">
+                <div className="absolute top-2 left-1/2 -translate-x-1/2 z-10 flex items-center gap-1 bg-secondary/90 backdrop-blur-sm rounded-md p-1 border border-border/50 shadow-lg">
+                  <Button variant="ghost" size="icon" className="h-7 w-7 hover:bg-secondary/50">
+                    <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" />
+                  </Button>
+                  <Button variant="ghost" size="icon" className="h-7 w-7 hover:bg-secondary/50">
+                    <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+                  </Button>
+                  <Button variant="ghost" size="icon" className="h-7 w-7 bg-secondary border border-border hover:bg-secondary/80">
+                    <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                  </Button>
+                  <Button variant="ghost" size="icon" className="h-7 w-7 hover:bg-secondary/50">
+                    <ChevronLeft className="h-3.5 w-3.5 text-muted-foreground" />
+                  </Button>
+                </div>
                 <div className="w-full aspect-square bg-secondary/30 border border-border/50 rounded-lg flex items-center justify-center">
                   <div
                     className="w-3/4 h-3/4 bg-gradient-to-br from-orange-500 to-red-600 rounded-lg"
@@ -91,23 +76,13 @@ export const PropertiesPanel = () => {
             </div>
           </div>
 
-          <div
-            className="relative flex items-center justify-center w-4 flex-shrink-0 cursor-col-resize group"
-            onMouseDown={() => setIsResizing(true)}
-          >
-            <div className="absolute inset-y-0 left-1/2 w-px bg-border/50 group-hover:bg-primary/30 transition-colors" />
-            <div className="relative z-10 flex h-10 w-3 items-center justify-center rounded-md border border-border/50 bg-secondary/80 group-hover:bg-secondary group-hover:border-primary/50 transition-all shadow-sm">
-              <GripVertical className="h-3 w-3 text-muted-foreground group-hover:text-primary transition-colors" />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4 flex-1">
+          <div className="flex flex-col gap-4 flex-1">
             <div className="bg-gradient-to-br from-secondary/40 to-secondary/20 rounded-md p-3 border border-border/40">
               <div className="flex items-center gap-1.5 pb-2 mb-4 border-b border-border/30">
                 <div className="w-0.5 h-3 bg-primary rounded-full" />
                 <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Dimensions</h3>
               </div>
-              <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
                 <div className="flex items-center justify-between gap-2">
                   <Label htmlFor="width" className="text-xs whitespace-nowrap text-foreground">
                     Width
@@ -168,7 +143,7 @@ export const PropertiesPanel = () => {
                 <div className="w-0.5 h-3 bg-primary rounded-full" />
                 <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Pattern & Frames</h3>
               </div>
-              <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
                 <div className="flex items-center justify-between gap-2">
                   <Label htmlFor="pattern-x" className="text-xs whitespace-nowrap text-foreground">
                     Pattern X
@@ -215,6 +190,43 @@ export const PropertiesPanel = () => {
                 </div>
               </div>
             </div>
+
+            <div className="bg-gradient-to-br from-secondary/40 to-secondary/20 rounded-md p-3 border border-border/40">
+              <div className="flex items-center justify-between pb-2 mb-4 border-b border-border/30">
+                <div className="flex items-center gap-1.5">
+                  <div className="w-0.5 h-3 bg-primary rounded-full" />
+                  <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Offset</h3>
+                </div>
+                <Switch id="offset-enabled" checked={offsetEnabled} onCheckedChange={setOffsetEnabled} />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <Label htmlFor="offset-x" className="text-xs font-medium text-muted-foreground/90">
+                    Offset X
+                  </Label>
+                  <Input
+                    id="offset-x"
+                    type="number"
+                    defaultValue="0"
+                    disabled={!offsetEnabled}
+                    className="h-8 text-xs font-mono text-right bg-background/50"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="offset-y" className="text-xs font-medium text-muted-foreground/90">
+                    Offset Y
+                  </Label>
+                  <Input
+                    id="offset-y"
+                    type="number"
+                    defaultValue="0"
+                    disabled={!offsetEnabled}
+                    className="h-8 text-xs font-mono text-right bg-background/50"
+                  />
+                </div>
+              </div>
+            </div>
+
           </div>
         </div>
 
@@ -319,30 +331,6 @@ export const PropertiesPanel = () => {
               </div>
             </div>
 
-            <div className="bg-gradient-to-br from-secondary/40 to-secondary/20 rounded-md p-3 border border-border/40">
-              <div className="flex items-center gap-1.5 pb-2 mb-3 border-b border-border/30">
-                <div className="w-0.5 h-3 bg-primary rounded-full" />
-                <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Type</h3>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="type" className="text-xs">
-                  Item Type
-                </Label>
-                <Select defaultValue="ground">
-                  <SelectTrigger className="h-8">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="ground">Ground</SelectItem>
-                    <SelectItem value="container">Container</SelectItem>
-                    <SelectItem value="weapon">Weapon</SelectItem>
-                    <SelectItem value="armor">Armor</SelectItem>
-                    <SelectItem value="effect">Effect</SelectItem>
-                    <SelectItem value="projectile">Projectile</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
           </div>
 
           <div className="flex-1 space-y-4 min-w-0">
@@ -352,6 +340,24 @@ export const PropertiesPanel = () => {
                 <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Object Settings</h3>
               </div>
               <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="type" className="text-xs">
+                    Item Type
+                  </Label>
+                  <Select defaultValue="ground">
+                    <SelectTrigger className="h-8 w-32">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ground">Ground</SelectItem>
+                      <SelectItem value="container">Container</SelectItem>
+                      <SelectItem value="weapon">Weapon</SelectItem>
+                      <SelectItem value="armor">Armor</SelectItem>
+                      <SelectItem value="effect">Effect</SelectItem>
+                      <SelectItem value="projectile">Projectile</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
                 <div className="flex items-center justify-between">
                   <Label htmlFor="appears-minimap" className="text-xs">
                     Appears on Minimap
@@ -370,11 +376,11 @@ export const PropertiesPanel = () => {
                   </Label>
                   <Switch id="has-elevation" />
                 </div>
-                <div className="space-y-2">
+                <div className="flex items-center justify-between">
                   <Label htmlFor="elevation" className="text-xs">
                     Elevation
                   </Label>
-                  <Input id="elevation" type="number" defaultValue="0" className="h-8" />
+                  <Input id="elevation" type="number" defaultValue="0" className="h-8 w-20 text-xs font-mono text-right bg-background/50" />
                 </div>
               </div>
             </div>
@@ -402,44 +408,10 @@ export const PropertiesPanel = () => {
               </div>
             </div>
 
-            <div className="bg-gradient-to-br from-secondary/40 to-secondary/20 rounded-md p-3 border border-border/40">
-              <div className="flex items-center justify-between pb-2 mb-4 border-b border-border/30">
-                <div className="flex items-center gap-1.5">
-                  <div className="w-0.5 h-3 bg-primary rounded-full" />
-                  <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Offset</h3>
-                </div>
-                <Switch id="offset-enabled" checked={offsetEnabled} onCheckedChange={setOffsetEnabled} />
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-1">
-                  <Label htmlFor="offset-x" className="text-xs font-medium text-muted-foreground/90">
-                    Offset X
-                  </Label>
-                  <Input
-                    id="offset-x"
-                    type="number"
-                    defaultValue="0"
-                    disabled={!offsetEnabled}
-                    className="h-8 text-xs font-mono text-right bg-background/50"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="offset-y" className="text-xs font-medium text-muted-foreground/90">
-                    Offset Y
-                  </Label>
-                  <Input
-                    id="offset-y"
-                    type="number"
-                    defaultValue="0"
-                    disabled={!offsetEnabled}
-                    className="h-8 text-xs font-mono text-right bg-background/50"
-                  />
-                </div>
-              </div>
-            </div>
           </div>
         </div>
-      </div>
+        </div>
+      </ScrollArea>
     </div>
   );
 };

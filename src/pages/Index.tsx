@@ -8,7 +8,7 @@ const Index = () => {
     <div className="h-screen flex flex-col bg-background">
       <Toolbar />
       
-      <div className="flex-1 flex overflow-hidden p-3 gap-3">
+      <div className="flex-1 flex overflow-hidden p-2 gap-2">
         <ItemList />
         <PropertiesPanel />
         <SpriteList />
