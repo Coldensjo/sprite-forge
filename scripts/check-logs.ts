@@ -15,44 +15,43 @@ console.log(`   Backend: ${RUST_LOG_TAURI} (or ${RUST_LOG_ROOT})`);
 console.log(`   Frontend: Browser localStorage (key: sprite-forge-debug)\n`);
 
 // Check Rust backend logs (check both locations)
-const RUST_LOG = fs.existsSync(RUST_LOG_TAURI) ? RUST_LOG_TAURI :
-                 fs.existsSync(RUST_LOG_ROOT) ? RUST_LOG_ROOT : null;
+const RUST_LOG = fs.existsSync(RUST_LOG_TAURI) ? RUST_LOG_TAURI : fs.existsSync(RUST_LOG_ROOT) ? RUST_LOG_ROOT : null;
 
 if (RUST_LOG) {
-  const content = fs.readFileSync(RUST_LOG, 'utf-8');
-  const lines = content.split('\n').filter(l => l.trim());
+	const content = fs.readFileSync(RUST_LOG, 'utf-8');
+	const lines = content.split('\n').filter((l) => l.trim());
 
-  if (lines.length === 0) {
-    console.log('⚠️  Backend log file exists but is empty');
-    console.log('   Run the app to generate logs\n');
-  } else {
-    const first = JSON.parse(lines[0]);
-    const last = JSON.parse(lines[lines.length - 1]);
-    const duration = (last.t - first.t) / 1000;
+	if (lines.length === 0) {
+		console.log('⚠️  Backend log file exists but is empty');
+		console.log('   Run the app to generate logs\n');
+	} else {
+		const first = JSON.parse(lines[0]);
+		const last = JSON.parse(lines[lines.length - 1]);
+		const duration = (last.t - first.t) / 1000;
 
-    console.log('✓ Backend logs found');
-    console.log(`  File: ${RUST_LOG}`);
-    console.log(`  Entries: ${lines.length}`);
-    console.log(`  Duration: ${duration.toFixed(2)}s`);
-    console.log(`  Last event: ${last.e} at ${new Date(last.t).toLocaleTimeString()}\n`);
+		console.log('✓ Backend logs found');
+		console.log(`  File: ${RUST_LOG}`);
+		console.log(`  Entries: ${lines.length}`);
+		console.log(`  Duration: ${duration.toFixed(2)}s`);
+		console.log(`  Last event: ${last.e} at ${new Date(last.t).toLocaleTimeString()}\n`);
 
-    // Count event types
-    const events: Record<string, number> = {};
-    for (const line of lines) {
-      const entry = JSON.parse(line);
-      events[entry.e] = (events[entry.e] || 0) + 1;
-    }
+		// Count event types
+		const events: Record<string, number> = {};
+		for (const line of lines) {
+			const entry = JSON.parse(line);
+			events[entry.e] = (events[entry.e] || 0) + 1;
+		}
 
-    console.log('Event breakdown:');
-    for (const [event, count] of Object.entries(events).sort((a, b) => b[1] - a[1])) {
-      console.log(`  ${event}: ${count}`);
-    }
-  }
+		console.log('Event breakdown:');
+		for (const [event, count] of Object.entries(events).sort((a, b) => b[1] - a[1])) {
+			console.log(`  ${event}: ${count}`);
+		}
+	}
 } else {
-  console.log('❌ Backend log file not found');
-  console.log(`   Expected: ${RUST_LOG_TAURI}`);
-  console.log(`   Or: ${RUST_LOG_ROOT}`);
-  console.log('   Run the app to generate logs\n');
+	console.log('❌ Backend log file not found');
+	console.log(`   Expected: ${RUST_LOG_TAURI}`);
+	console.log(`   Or: ${RUST_LOG_ROOT}`);
+	console.log('   Run the app to generate logs\n');
 }
 
 console.log('\n💡 Next steps:');

@@ -8,17 +8,10 @@
 import { cn } from '@/lib/utils';
 
 interface CheckerBoardProps {
-  className?: string;
-  children?: React.ReactNode;
+	className?: string;
+	children?: React.ReactNode;
 }
 
-export const CheckerBoard = ({
-  className = '',
-  children
-}: CheckerBoardProps) => {
-  return (
-    <div className={cn('relative bg-muted', className)}>
-      {children}
-    </div>
-  );
+export const CheckerBoard = ({ children, className = '' }: CheckerBoardProps) => {
+	return <div className={cn('relative bg-muted', className)}>{children}</div>;
 };

@@ -20,6 +20,7 @@
  * THE SOFTWARE.
  */
 
+
 #include "outfit.h"
 
 Color Outfit::getColor(int color)

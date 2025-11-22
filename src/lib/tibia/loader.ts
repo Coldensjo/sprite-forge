@@ -5,235 +5,236 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
-import { SpriteReader } from './spriteReader';
+import { logger, logError, EventCode } from '@/lib/debug';
+
 import { loadDatFile } from './datReader';
-import { TibiaData, ClientVersion, CLIENT_VERSIONS, Sprite, ThingType } from './types';
-import { logger, EventCode, logError } from '@/lib/debug';
+import { SpriteReader } from './spriteReader';
+import { Sprite, TibiaData, ThingType, ClientVersion, CLIENT_VERSIONS } from './types';
 
 /**
  * Read a binary file using Tauri (optimized for large files)
  */
 async function readBinaryFile(path: string): Promise<Uint8Array> {
-  // Tauri with serde_bytes returns binary data efficiently as Uint8Array
-  const bytes = await invoke<Uint8Array>('read_file', { path });
-  return bytes;
+	// Tauri with serde_bytes returns binary data efficiently as Uint8Array
+	const bytes = await invoke<Uint8Array>('read_file', { path });
+	return bytes;
 }
 
 /**
  * Read only the signature from a DAT file (first 4 bytes)
  */
 async function readDatSignature(path: string): Promise<number> {
-  const buffer = await invoke<Uint8Array>('read_file', { path });
+	const buffer = await invoke<Uint8Array>('read_file', { path });
 
-  if (buffer.length < 4) {
-    throw new Error('DAT file is too small to contain a valid signature');
-  }
+	if (buffer.length < 4) {
+		throw new Error('DAT file is too small to contain a valid signature');
+	}
 
-  // Read signature as little-endian uint32
-  const signature = (buffer[0] | (buffer[1] << 8) | (buffer[2] << 16) | (buffer[3] << 24)) >>> 0;
-  return signature;
+	// Read signature as little-endian uint32
+	const signature = (buffer[0] | (buffer[1] << 8) | (buffer[2] << 16) | (buffer[3] << 24)) >>> 0;
+	return signature;
 }
 
 /**
  * Detect client version from signature
  */
-export function detectVersionFromSignature(signature: number): ClientVersion | null {
-  return CLIENT_VERSIONS.find((v) => v.datSignature === signature || v.sprSignature === signature) || null;
+export function detectVersionFromSignature(signature: number): null | ClientVersion {
+	return CLIENT_VERSIONS.find((v) => v.datSignature === signature || v.sprSignature === signature) || null;
 }
 
 /**
  * Load Tibia .dat file
  */
 export async function loadTibiaDat(
-  path: string,
-  version: ClientVersion,
-  onProgress?: (current: number, total: number) => void
+	path: string,
+	version: ClientVersion,
+	onProgress?: (current: number, total: number) => void
 ): Promise<{
-  signature: number;
-  items: Map<number, ThingType>;
-  itemsCount: number;
-  outfits: Map<number, ThingType>;
-  outfitsCount: number;
-  effects: Map<number, ThingType>;
-  effectsCount: number;
-  missiles: Map<number, ThingType>;
-  missilesCount: number;
+	signature: number;
+	itemsCount: number;
+	outfitsCount: number;
+	effectsCount: number;
+	missilesCount: number;
+	items: Map<number, ThingType>;
+	outfits: Map<number, ThingType>;
+	effects: Map<number, ThingType>;
+	missiles: Map<number, ThingType>;
 }> {
-  const buffer = await readBinaryFile(path);
-  const extended = version.supportsExtended;
-  const frameDurations = version.supportsFrameDurations;
+	const buffer = await readBinaryFile(path);
+	const extended = version.supportsExtended;
+	const frameDurations = version.supportsFrameDurations;
 
-  return await loadDatFile(buffer, extended, frameDurations, onProgress, version);
+	return await loadDatFile(buffer, extended, frameDurations, onProgress, version);
 }
 
 /**
  * SPR Header returned from Rust
  */
 interface SprHeader {
-  signature: number;
-  sprite_count: number;
-  extended: boolean;
+	signature: number;
+	extended: boolean;
+	sprite_count: number;
 }
 
 /**
  * Load Tibia .spr file (streaming mode - opens file in Rust backend)
  */
 export async function loadTibiaSpr(
-  path: string,
-  version: ClientVersion
+	path: string,
+	version: ClientVersion
 ): Promise<{ path: string; header: SprHeader; transparency: boolean }> {
-  const extended = version.supportsExtended;
-  const transparency = version.supportsAlphaChannel;
+	const extended = version.supportsExtended;
+	const transparency = version.supportsAlphaChannel;
 
-  // Open SPR file in Rust backend (keeps file handle open)
-  const header = await invoke<SprHeader>('open_spr_file', {
-    path,
-    extended
-  });
+	// Open SPR file in Rust backend (keeps file handle open)
+	const header = await invoke<SprHeader>('open_spr_file', {
+		path,
+		extended
+	});
 
-  return {
-    path,
-    header,
-    transparency,
-  };
+	return {
+		path,
+		header,
+		transparency
+	};
 }
 
 /**
  * Open file dialog and select .dat file
  */
-export async function selectDatFile(): Promise<string | null> {
-  const selected = await open({
-    title: 'Select Tibia.dat file',
-    multiple: false,
-    filters: [
-      {
-        name: 'Tibia DAT Files',
-        extensions: ['dat'],
-      },
-    ],
-  });
+export async function selectDatFile(): Promise<null | string> {
+	const selected = await open({
+		multiple: false,
+		title: 'Select Tibia.dat file',
+		filters: [
+			{
+				extensions: ['dat'],
+				name: 'Tibia DAT Files'
+			}
+		]
+	});
 
-  return selected as string | null;
+	return selected as null | string;
 }
 
 /**
  * Open file dialog and select .spr file
  */
-export async function selectSprFile(): Promise<string | null> {
-  const selected = await open({
-    title: 'Select Tibia.spr file',
-    multiple: false,
-    filters: [
-      {
-        name: 'Tibia SPR Files',
-        extensions: ['spr'],
-      },
-    ],
-  });
+export async function selectSprFile(): Promise<null | string> {
+	const selected = await open({
+		multiple: false,
+		title: 'Select Tibia.spr file',
+		filters: [
+			{
+				extensions: ['spr'],
+				name: 'Tibia SPR Files'
+			}
+		]
+	});
 
-  return selected as string | null;
+	return selected as null | string;
 }
 
 /**
  * Select folder containing Tibia.dat and Tibia.spr
  */
-export async function selectTibiaFolder(): Promise<{ datPath: string; sprPath: string } | null> {
-  const selected = await open({
-    title: 'Select folder containing Tibia.dat and Tibia.spr',
-    directory: true,
-    multiple: false,
-  });
+export async function selectTibiaFolder(): Promise<null | { datPath: string; sprPath: string }> {
+	const selected = await open({
+		directory: true,
+		multiple: false,
+		title: 'Select folder containing Tibia.dat and Tibia.spr'
+	});
 
-  if (!selected || typeof selected !== 'string') {
-    return null;
-  }
+	if (!selected || typeof selected !== 'string') {
+		return null;
+	}
 
-  // Construct paths for Tibia.dat and Tibia.spr
-  const datPath = `${selected}\\Tibia.dat`;
-  const sprPath = `${selected}\\Tibia.spr`;
+	// Construct paths for Tibia.dat and Tibia.spr
+	const datPath = `${selected}\\Tibia.dat`;
+	const sprPath = `${selected}\\Tibia.spr`;
 
-  return { datPath, sprPath };
+	return { datPath, sprPath };
 }
 
 /**
  * Load complete Tibia client data (.dat + .spr)
  */
 export async function loadTibiaData(
-  datPath: string,
-  sprPath: string,
-  version?: ClientVersion,
-  onProgress?: (stage: string, current: number, total: number) => void
+	datPath: string,
+	sprPath: string,
+	version?: ClientVersion,
+	onProgress?: (stage: string, current: number, total: number) => void
 ): Promise<TibiaData> {
-  // Detect version from signature if not provided
-  let detectedVersion = version;
-  if (!detectedVersion) {
-    if (onProgress) onProgress('Detecting version...', 0, 100);
-    const signature = await readDatSignature(datPath);
-    detectedVersion = detectVersionFromSignature(signature);
-    if (!detectedVersion) {
-      throw new Error(`Unknown client version with signature 0x${signature.toString(16)}`);
-    }
-  }
+	// Detect version from signature if not provided
+	let detectedVersion = version;
+	if (!detectedVersion) {
+		if (onProgress) onProgress('Detecting version...', 0, 100);
+		const signature = await readDatSignature(datPath);
+		detectedVersion = detectVersionFromSignature(signature);
+		if (!detectedVersion) {
+			throw new Error(`Unknown client version with signature 0x${signature.toString(16)}`);
+		}
+	}
 
-  // Load DAT file with detected version
-  if (onProgress) onProgress('Loading metadata...', 0, 100);
+	// Load DAT file with detected version
+	if (onProgress) onProgress('Loading metadata...', 0, 100);
 
-  const datData = await loadTibiaDat(datPath, detectedVersion, (current, total) => {
-    if (onProgress) onProgress('Loading metadata...', current, total);
-  });
+	const datData = await loadTibiaDat(datPath, detectedVersion, (current, total) => {
+		if (onProgress) onProgress('Loading metadata...', current, total);
+	});
 
-  // Load SPR file (streaming mode - instant!)
-  if (onProgress) onProgress('Opening sprite file...', 0, 100);
-  const sprData = await loadTibiaSpr(sprPath, detectedVersion);
+	// Load SPR file (streaming mode - instant!)
+	if (onProgress) onProgress('Opening sprite file...', 0, 100);
+	const sprData = await loadTibiaSpr(sprPath, detectedVersion);
 
-  // Build sprite map
-  const sprites = new Map<number, Sprite>();
+	// Build sprite map
+	const sprites = new Map<number, Sprite>();
 
-  // Load first 100-sprite window (Object Builder style: aligned to 100s)
-  // This loads sprites 1-100 for instant first page display
-  if (onProgress) onProgress('Loading initial sprites...', 0, 100);
+	// Load first 100-sprite window (Object Builder style: aligned to 100s)
+	// This loads sprites 1-100 for instant first page display
+	if (onProgress) onProgress('Loading initial sprites...', 0, 100);
 
-  const WINDOW_SIZE = 100;
-  const spriteCount = Math.min(WINDOW_SIZE, sprData.header.sprite_count);
+	const WINDOW_SIZE = 100;
+	const spriteCount = Math.min(WINDOW_SIZE, sprData.header.sprite_count);
 
-  if (spriteCount > 0) {
-    try {
-      // Batch load first window from Rust using BINARY protocol
-      const response = await invoke<Uint8Array>('read_sprites_batch_bin', {
-        path: sprData.path,
-        startId: 1,
-        count: spriteCount,
-      });
+	if (spriteCount > 0) {
+		try {
+			// Batch load first window from Rust using BINARY protocol
+			const response = await invoke<Uint8Array>('read_sprites_batch_bin', {
+				startId: 1,
+				path: sprData.path,
+				count: spriteCount
+			});
 
-      const batchedSprites = parseBinarySprites(response, sprData.transparency);
+			const batchedSprites = parseBinarySprites(response, sprData.transparency);
 
-      // Add to sprite map
-      for (const sprite of batchedSprites) {
-        sprites.set(sprite.id, sprite);
-      }
+			// Add to sprite map
+			for (const sprite of batchedSprites) {
+				sprites.set(sprite.id, sprite);
+			}
 
-      if (onProgress) onProgress('Loading initial sprites...', spriteCount, spriteCount);
-    } catch (err) {
-      logError('Failed to preload sprites', err);
-    }
-  }
+			if (onProgress) onProgress('Loading initial sprites...', spriteCount, spriteCount);
+		} catch (err) {
+			logError('Failed to preload sprites', err);
+		}
+	}
 
-  return {
-    version: detectedVersion,
-    extended: detectedVersion.supportsExtended,
-    transparency: sprData.transparency,
-    sprites,
-    spritesCount: sprData.header.sprite_count,
-    sprPath: sprData.path,
-    items: datData.items,
-    itemsCount: datData.itemsCount,
-    outfits: datData.outfits,
-    outfitsCount: datData.outfitsCount,
-    effects: datData.effects,
-    effectsCount: datData.effectsCount,
-    missiles: datData.missiles,
-    missilesCount: datData.missilesCount,
-  };
+	return {
+		sprites,
+		items: datData.items,
+		sprPath: sprData.path,
+		version: detectedVersion,
+		outfits: datData.outfits,
+		effects: datData.effects,
+		missiles: datData.missiles,
+		itemsCount: datData.itemsCount,
+		transparency: sprData.transparency,
+		outfitsCount: datData.outfitsCount,
+		effectsCount: datData.effectsCount,
+		missilesCount: datData.missilesCount,
+		spritesCount: sprData.header.sprite_count,
+		extended: detectedVersion.supportsExtended
+	};
 }
 
 /**
@@ -241,7 +242,7 @@ export async function loadTibiaData(
  * For sprite ID 5432, returns start=5400
  */
 export function getSpriteWindowStart(spriteId: number): number {
-  return Math.floor(spriteId / 100) * 100;
+	return Math.floor(spriteId / 100) * 100;
 }
 
 /**
@@ -264,65 +265,65 @@ export function getSpriteWindowStart(spriteId: number): number {
  * Format: [Count: u32] -> ([ID: u32][IsEmpty: u8][Len: u32][Data...])*
  */
 function parseBinarySprites(response: Uint8Array | ArrayBuffer, transparency: boolean): Sprite[] {
-  let view: DataView;
-  let buffer: Uint8Array;
+	let view: DataView;
+	let buffer: Uint8Array;
 
-  if (response instanceof Uint8Array) {
-    view = new DataView(response.buffer, response.byteOffset, response.byteLength);
-    buffer = response;
-  } else if (response instanceof ArrayBuffer) {
-    view = new DataView(response);
-    buffer = new Uint8Array(response);
-  } else {
-    console.error('Unexpected response type:', response);
-    return [];
-  }
+	if (response instanceof Uint8Array) {
+		view = new DataView(response.buffer, response.byteOffset, response.byteLength);
+		buffer = response;
+	} else if (response instanceof ArrayBuffer) {
+		view = new DataView(response);
+		buffer = new Uint8Array(response);
+	} else {
+		console.error('Unexpected response type:', response);
+		return [];
+	}
 
-  const sprites: Sprite[] = [];
-  let offset = 0;
+	const sprites: Sprite[] = [];
+	let offset = 0;
 
-  // Safety check
-  if (view.byteLength < 4) return [];
+	// Safety check
+	if (view.byteLength < 4) return [];
 
-  const count = view.getUint32(offset, true);
-  offset += 4;
+	const count = view.getUint32(offset, true);
+	offset += 4;
 
-  for (let i = 0; i < count; i++) {
-    // Safety check
-    if (offset + 9 > view.byteLength) break;
+	for (let i = 0; i < count; i++) {
+		// Safety check
+		if (offset + 9 > view.byteLength) break;
 
-    const id = view.getUint32(offset, true);
-    offset += 4;
+		const id = view.getUint32(offset, true);
+		offset += 4;
 
-    const isEmpty = view.getUint8(offset) === 1;
-    offset += 1;
+		const isEmpty = view.getUint8(offset) === 1;
+		offset += 1;
 
-    const len = view.getUint32(offset, true);
-    offset += 4;
+		const len = view.getUint32(offset, true);
+		offset += 4;
 
-    let compressedPixels: Uint8Array;
-    if (len > 0) {
-      if (offset + len > view.byteLength) {
-        console.error(`Binary parse error: sprite ${id} length ${len} exceeds buffer`);
-        compressedPixels = new Uint8Array(0);
-        offset = view.byteLength; // Stop parsing
-      } else {
-        // Use slice to create a copy
-        compressedPixels = buffer.slice(offset, offset + len);
-        offset += len;
-      }
-    } else {
-      compressedPixels = new Uint8Array(0);
-    }
+		let compressedPixels: Uint8Array;
+		if (len > 0) {
+			if (offset + len > view.byteLength) {
+				console.error(`Binary parse error: sprite ${id} length ${len} exceeds buffer`);
+				compressedPixels = new Uint8Array(0);
+				offset = view.byteLength; // Stop parsing
+			} else {
+				// Use slice to create a copy
+				compressedPixels = buffer.slice(offset, offset + len);
+				offset += len;
+			}
+		} else {
+			compressedPixels = new Uint8Array(0);
+		}
 
-    sprites.push({
-      id,
-      isEmpty,
-      transparent: transparency,
-      compressedPixels,
-    });
-  }
-  return sprites;
+		sprites.push({
+			id,
+			isEmpty,
+			compressedPixels,
+			transparent: transparency
+		});
+	}
+	return sprites;
 }
 
 /**
@@ -330,62 +331,62 @@ function parseBinarySprites(response: Uint8Array | ArrayBuffer, transparency: bo
  * Object Builder style: aligned to 100-sprite boundaries
  */
 export async function loadSpriteWindow(
-  sprPath: string,
-  spriteId: number,
-  totalSprites: number,
-  transparency: boolean,
-  spriteCache: Map<number, Sprite>
+	sprPath: string,
+	spriteId: number,
+	totalSprites: number,
+	transparency: boolean,
+	spriteCache: Map<number, Sprite>
 ): Promise<void> {
-  const WINDOW_SIZE = 100;
+	const WINDOW_SIZE = 100;
 
-  // Calculate window boundaries (aligned to 100s)
-  const windowStart = getSpriteWindowStart(spriteId);
-  const startId = Math.max(1, windowStart);
-  const endId = Math.min(startId + WINDOW_SIZE - 1, totalSprites);
-  const count = endId - startId + 1;
+	// Calculate window boundaries (aligned to 100s)
+	const windowStart = getSpriteWindowStart(spriteId);
+	const startId = Math.max(1, windowStart);
+	const endId = Math.min(startId + WINDOW_SIZE - 1, totalSprites);
+	const count = endId - startId + 1;
 
-  // Check if we already have this window cached
-  let allCached = true;
-  for (let id = startId; id <= endId; id++) {
-    if (!spriteCache.has(id)) {
-      allCached = false;
-      break;
-    }
-  }
+	// Check if we already have this window cached
+	let allCached = true;
+	for (let id = startId; id <= endId; id++) {
+		if (!spriteCache.has(id)) {
+			allCached = false;
+			break;
+		}
+	}
 
-  logger.log(EventCode.LOADER_WINDOW, { s: startId, e: endId, req: spriteId, sz: spriteCache.size, cached: allCached });
+	logger.log(EventCode.LOADER_WINDOW, { e: endId, s: startId, req: spriteId, cached: allCached, sz: spriteCache.size });
 
-  if (allCached) {
-    logger.log(EventCode.LOADER_CACHED, { s: startId, e: endId });
-    return; // Window already loaded
-  }
+	if (allCached) {
+		logger.log(EventCode.LOADER_CACHED, { e: endId, s: startId });
+		return; // Window already loaded
+	}
 
-  try {
-    logger.log(EventCode.LOADER_READ, { s: startId, e: endId, n: count });
+	try {
+		logger.log(EventCode.LOADER_READ, { e: endId, n: count, s: startId });
 
-    // Batch load window from Rust using BINARY protocol
-    const response = await invoke<Uint8Array>('read_sprites_batch_bin', {
-      path: sprPath,
-      startId,
-      count,
-    });
+		// Batch load window from Rust using BINARY protocol
+		const response = await invoke<Uint8Array>('read_sprites_batch_bin', {
+			count,
+			startId,
+			path: sprPath
+		});
 
-    const batchedSprites = parseBinarySprites(response, transparency);
+		const batchedSprites = parseBinarySprites(response, transparency);
 
-    // Add to cache
-    for (const sprite of batchedSprites) {
-      spriteCache.set(sprite.id, sprite);
-    }
+		// Add to cache
+		for (const sprite of batchedSprites) {
+			spriteCache.set(sprite.id, sprite);
+		}
 
-    logger.log(EventCode.LOADER_ADDED, { n: batchedSprites.length, sz: spriteCache.size, bin: true });
+		logger.log(EventCode.LOADER_ADDED, { bin: true, sz: spriteCache.size, n: batchedSprites.length });
 
-    // NO CACHE EVICTION - Object Builder pattern
-    // Sprites are kept in memory for the entire session
-    // This prevents race conditions where sprites are evicted before rendering
-    // Modern systems can easily handle 50,000+ sprites (~200 MB)
-  } catch (err) {
-    logError(`Failed to load sprite window ${startId}-${endId}`, err);
-  }
+		// NO CACHE EVICTION - Object Builder pattern
+		// Sprites are kept in memory for the entire session
+		// This prevents race conditions where sprites are evicted before rendering
+		// Modern systems can easily handle 50,000+ sprites (~200 MB)
+	} catch (err) {
+		logError(`Failed to load sprite window ${startId}-${endId}`, err);
+	}
 }
 
 /**
@@ -399,75 +400,71 @@ export async function loadSpriteWindow(
  * - Skips already cached sprites
  */
 export async function loadSpriteIds(
-  sprPath: string,
-  spriteIds: number[],
-  transparency: boolean,
-  spriteCache: Map<number, Sprite>
+	sprPath: string,
+	spriteIds: number[],
+	transparency: boolean,
+	spriteCache: Map<number, Sprite>
 ): Promise<void> {
-  // Filter out IDs that are already cached or invalid
-  const uncachedIds = spriteIds.filter(id => id > 0 && !spriteCache.has(id));
+	// Filter out IDs that are already cached or invalid
+	const uncachedIds = spriteIds.filter((id) => id > 0 && !spriteCache.has(id));
 
-  if (uncachedIds.length === 0) {
-    logger.log(EventCode.LOADER_CACHED, { n: spriteIds.length });
-    return; // All sprites already cached
-  }
+	if (uncachedIds.length === 0) {
+		logger.log(EventCode.LOADER_CACHED, { n: spriteIds.length });
+		return; // All sprites already cached
+	}
 
-  // Remove duplicates
-  const uniqueIds = [...new Set(uncachedIds)];
+	// Remove duplicates
+	const uniqueIds = [...new Set(uncachedIds)];
 
-  logger.log(EventCode.LOADER_READ, {
-    ids: uniqueIds.slice(0, 5),
-    total: uniqueIds.length,
-    method: 'list'
-  });
+	logger.log(EventCode.LOADER_READ, {
+		method: 'list',
+		total: uniqueIds.length,
+		ids: uniqueIds.slice(0, 5)
+	});
 
-  try {
-    // Load all unique IDs in one go using the new optimized BINARY command
-    const response = await invoke<Uint8Array>('read_sprites_list_bin', {
-      path: sprPath,
-      ids: uniqueIds,
-    });
+	try {
+		// Load all unique IDs in one go using the new optimized BINARY command
+		const response = await invoke<Uint8Array>('read_sprites_list_bin', {
+			path: sprPath,
+			ids: uniqueIds
+		});
 
-    const batchedSprites = parseBinarySprites(response, transparency);
+		const batchedSprites = parseBinarySprites(response, transparency);
 
-    // Add to cache
-    for (const sprite of batchedSprites) {
-      spriteCache.set(sprite.id, sprite);
-    }
+		// Add to cache
+		for (const sprite of batchedSprites) {
+			spriteCache.set(sprite.id, sprite);
+		}
 
-    logger.log(EventCode.LOADER_ADDED, {
-      n: batchedSprites.length,
-      sz: spriteCache.size,
-      bin: true
-    });
-  } catch (err) {
-    logError(`Failed to load sprite list of ${uniqueIds.length} items`, err);
-  }
+		logger.log(EventCode.LOADER_ADDED, {
+			bin: true,
+			sz: spriteCache.size,
+			n: batchedSprites.length
+		});
+	} catch (err) {
+		logError(`Failed to load sprite list of ${uniqueIds.length} items`, err);
+	}
 }
 
 /**
  * Helper to get sprite from reader (with caching)
  * @deprecated Use TibiaDataContext.getSprite instead
  */
-export function getSpriteFromReader(
-  reader: SpriteReader,
-  spriteCache: Map<number, Sprite>,
-  id: number
-): Sprite | null {
-  // Check cache first
-  if (spriteCache.has(id)) {
-    return spriteCache.get(id)!;
-  }
+export function getSpriteFromReader(reader: SpriteReader, spriteCache: Map<number, Sprite>, id: number): null | Sprite {
+	// Check cache first
+	if (spriteCache.has(id)) {
+		return spriteCache.get(id)!;
+	}
 
-  // This function is synchronous and relies on the old reader.
-  // We should ideally deprecate it or make it async to use IPC.
-  // But for now, we leave it as is since it's marked deprecated.
-  // The new architecture uses loadSpriteIds / loadSpriteWindow which are async.
+	// This function is synchronous and relies on the old reader.
+	// We should ideally deprecate it or make it async to use IPC.
+	// But for now, we leave it as is since it's marked deprecated.
+	// The new architecture uses loadSpriteIds / loadSpriteWindow which are async.
 
-  const sprite = reader.readSprite(id);
-  if (sprite) {
-    spriteCache.set(id, sprite);
-  }
+	const sprite = reader.readSprite(id);
+	if (sprite) {
+		spriteCache.set(id, sprite);
+	}
 
-  return sprite;
+	return sprite;
 }
