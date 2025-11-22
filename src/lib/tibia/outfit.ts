@@ -16,8 +16,17 @@ const HSI_SI_VALUES = 7;
  * @returns RGB color array [r, g, b] (0-255)
  */
 export function getOutfitColor(color: number): [number, number, number] {
-    if (color >= HSI_H_STEPS * HSI_SI_VALUES) {
+    // Handle color values: wrap around using modulo for values >= 133
+    // Tibia supports color IDs up to 255, but the HSI palette only has 133 colors (0-132)
+    // Colors >= 133 wrap around: 133 -> 0, 134 -> 1, ..., 206 -> 73, etc.
+    if (isNaN(color) || color < 0) {
         color = 0;
+    } else {
+        color = Math.floor(color);
+        // Wrap around for values >= 133 (like the C++ reference implementation)
+        if (color >= HSI_H_STEPS * HSI_SI_VALUES) {
+            color = color % (HSI_H_STEPS * HSI_SI_VALUES);
+        }
     }
 
     let loc1 = 0;

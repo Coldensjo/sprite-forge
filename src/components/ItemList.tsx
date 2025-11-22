@@ -142,7 +142,7 @@ export const ItemList = () => {
       if (cancelled) return;
 
       // OPTIMIZATION: Collect ALL sprite IDs for an item at once (all frames/patterns)
-      // This matches Object Builder behavior
+      // With the new read_sprites_list command, this is very fast even for thousands of sprites
       const collectAllSpriteIds = (itemIds: number[]) => {
         const ids: number[] = [];
         for (const id of itemIds) {
@@ -305,7 +305,7 @@ export const ItemList = () => {
     <div className="w-full h-full bg-card rounded-lg shadow-island flex flex-col overflow-hidden relative">
       <div className="h-8 px-3 flex items-center gap-2 border-b border-border/50 bg-secondary/50">
         <Select value={selectedCategory} onValueChange={(value) => setSelectedCategory(value as ThingCategory)}>
-          <SelectTrigger className="h-6 w-24 text-xs">
+          <SelectTrigger className="h-6 w-24 text-xs mt-[1px]">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>

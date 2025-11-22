@@ -198,26 +198,18 @@ export async function loadTibiaData(
 
   if (spriteCount > 0) {
     try {
-      // Batch load first window from Rust
-      const batchedSprites = await invoke<Array<{
-        id: number;
-        is_empty: boolean;
-        compressed_pixels: Uint8Array;
-      }>>('read_sprites_batch', {
+      // Batch load first window from Rust using BINARY protocol
+      const response = await invoke<Uint8Array>('read_sprites_batch_bin', {
         path: sprData.path,
         startId: 1,
         count: spriteCount,
       });
 
+      const batchedSprites = parseBinarySprites(response, sprData.transparency);
+
       // Add to sprite map
-      for (const spriteData of batchedSprites) {
-        const sprite: Sprite = {
-          id: spriteData.id,
-          isEmpty: spriteData.is_empty,
-          transparent: sprData.transparency,
-          compressedPixels: spriteData.compressed_pixels,
-        };
-        sprites.set(spriteData.id, sprite);
+      for (const sprite of batchedSprites) {
+        sprites.set(sprite.id, sprite);
       }
 
       if (onProgress) onProgress('Loading initial sprites...', spriteCount, spriteCount);
@@ -267,6 +259,76 @@ export function getSpriteWindowStart(spriteId: number): number {
  * - Multiple concurrent calls for same window will skip redundant loads
  * - Safe to call in parallel for different windows
  */
+/**
+ * Helper to parse binary sprite response
+ * Format: [Count: u32] -> ([ID: u32][IsEmpty: u8][Len: u32][Data...])*
+ */
+function parseBinarySprites(response: Uint8Array | ArrayBuffer, transparency: boolean): Sprite[] {
+  let view: DataView;
+  let buffer: Uint8Array;
+
+  if (response instanceof Uint8Array) {
+    view = new DataView(response.buffer, response.byteOffset, response.byteLength);
+    buffer = response;
+  } else if (response instanceof ArrayBuffer) {
+    view = new DataView(response);
+    buffer = new Uint8Array(response);
+  } else {
+    console.error('Unexpected response type:', response);
+    return [];
+  }
+
+  const sprites: Sprite[] = [];
+  let offset = 0;
+
+  // Safety check
+  if (view.byteLength < 4) return [];
+
+  const count = view.getUint32(offset, true);
+  offset += 4;
+
+  for (let i = 0; i < count; i++) {
+    // Safety check
+    if (offset + 9 > view.byteLength) break;
+
+    const id = view.getUint32(offset, true);
+    offset += 4;
+
+    const isEmpty = view.getUint8(offset) === 1;
+    offset += 1;
+
+    const len = view.getUint32(offset, true);
+    offset += 4;
+
+    let compressedPixels: Uint8Array;
+    if (len > 0) {
+      if (offset + len > view.byteLength) {
+        console.error(`Binary parse error: sprite ${id} length ${len} exceeds buffer`);
+        compressedPixels = new Uint8Array(0);
+        offset = view.byteLength; // Stop parsing
+      } else {
+        // Use slice to create a copy
+        compressedPixels = buffer.slice(offset, offset + len);
+        offset += len;
+      }
+    } else {
+      compressedPixels = new Uint8Array(0);
+    }
+
+    sprites.push({
+      id,
+      isEmpty,
+      transparent: transparency,
+      compressedPixels,
+    });
+  }
+  return sprites;
+}
+
+/**
+ * Load a 100-sprite window around the given sprite ID
+ * Object Builder style: aligned to 100-sprite boundaries
+ */
 export async function loadSpriteWindow(
   sprPath: string,
   spriteId: number,
@@ -301,29 +363,21 @@ export async function loadSpriteWindow(
   try {
     logger.log(EventCode.LOADER_READ, { s: startId, e: endId, n: count });
 
-    // Batch load window from Rust
-    const batchedSprites = await invoke<Array<{
-      id: number;
-      is_empty: boolean;
-      compressed_pixels: Uint8Array;
-    }>>('read_sprites_batch', {
+    // Batch load window from Rust using BINARY protocol
+    const response = await invoke<Uint8Array>('read_sprites_batch_bin', {
       path: sprPath,
       startId,
       count,
     });
 
+    const batchedSprites = parseBinarySprites(response, transparency);
+
     // Add to cache
-    for (const spriteData of batchedSprites) {
-      const sprite: Sprite = {
-        id: spriteData.id,
-        isEmpty: spriteData.is_empty,
-        transparent: transparency,
-        compressedPixels: spriteData.compressed_pixels,
-      };
-      spriteCache.set(spriteData.id, sprite);
+    for (const sprite of batchedSprites) {
+      spriteCache.set(sprite.id, sprite);
     }
 
-    logger.log(EventCode.LOADER_ADDED, { n: batchedSprites.length, sz: spriteCache.size });
+    logger.log(EventCode.LOADER_ADDED, { n: batchedSprites.length, sz: spriteCache.size, bin: true });
 
     // NO CACHE EVICTION - Object Builder pattern
     // Sprites are kept in memory for the entire session
@@ -358,85 +412,37 @@ export async function loadSpriteIds(
     return; // All sprites already cached
   }
 
-  // Remove duplicates and sort for consecutive range detection
-  const sortedIds = [...new Set(uncachedIds)].sort((a, b) => a - b);
-
-  // Group consecutive IDs into ranges for efficient batch loading
-  // OPTIMIZATION: Merge ranges that are close together to reduce IPC calls
-  // It's faster to load a few extra unused sprites than to make many separate IPC calls
-  const MAX_GAP = 50; // Merge ranges if gap is less than this
-
-  const ranges: Array<{ start: number; count: number }> = [];
-  if (sortedIds.length > 0) {
-    let rangeStart = sortedIds[0];
-    let rangeEnd = sortedIds[0];
-
-    for (let i = 1; i < sortedIds.length; i++) {
-      const id = sortedIds[i];
-      const gap = id - rangeEnd - 1;
-
-      if (gap <= MAX_GAP) {
-        // Extend current range (including the gap)
-        rangeEnd = id;
-      } else {
-        // Gap too large, close current range and start new one
-        ranges.push({ start: rangeStart, count: rangeEnd - rangeStart + 1 });
-        rangeStart = id;
-        rangeEnd = id;
-      }
-    }
-    // Add final range
-    ranges.push({ start: rangeStart, count: rangeEnd - rangeStart + 1 });
-  }
+  // Remove duplicates
+  const uniqueIds = [...new Set(uncachedIds)];
 
   logger.log(EventCode.LOADER_READ, {
-    ids: sortedIds.slice(0, 5),
-    total: sortedIds.length,
-    ranges: ranges.length,
-    merged: true
+    ids: uniqueIds.slice(0, 5),
+    total: uniqueIds.length,
+    method: 'list'
   });
 
-  // Load each range using batch loading
-  // We can run these in parallel for better performance
-  const loadPromises = ranges.map(async (range) => {
-    try {
-      const batchedSprites = await invoke<Array<{
-        id: number;
-        is_empty: boolean;
-        compressed_pixels: Uint8Array;
-      }>>('read_sprites_batch', {
-        path: sprPath,
-        startId: range.start,
-        count: range.count,
-      });
+  try {
+    // Load all unique IDs in one go using the new optimized BINARY command
+    const response = await invoke<Uint8Array>('read_sprites_list_bin', {
+      path: sprPath,
+      ids: uniqueIds,
+    });
 
-      // Add to cache
-      for (const spriteData of batchedSprites) {
-        // Only add if it was actually requested or part of the gap filling
-        // (We add all to cache because why not? Free pre-loading)
-        const sprite: Sprite = {
-          id: spriteData.id,
-          isEmpty: spriteData.is_empty,
-          transparent: transparency,
-          compressedPixels: spriteData.compressed_pixels,
-        };
-        spriteCache.set(spriteData.id, sprite);
-      }
+    const batchedSprites = parseBinarySprites(response, transparency);
 
-      return batchedSprites.length;
-    } catch (err) {
-      logError(`Failed to load sprite range ${range.start}-${range.start + range.count - 1}`, err);
-      return 0;
+    // Add to cache
+    for (const sprite of batchedSprites) {
+      spriteCache.set(sprite.id, sprite);
     }
-  });
 
-  const results = await Promise.all(loadPromises);
-  const totalLoaded = results.reduce((a, b) => a + b, 0);
-
-  logger.log(EventCode.LOADER_ADDED, {
-    n: totalLoaded,
-    sz: spriteCache.size
-  });
+    logger.log(EventCode.LOADER_ADDED, {
+      n: batchedSprites.length,
+      sz: spriteCache.size,
+      bin: true
+    });
+  } catch (err) {
+    logError(`Failed to load sprite list of ${uniqueIds.length} items`, err);
+  }
 }
 
 /**
@@ -453,7 +459,11 @@ export function getSpriteFromReader(
     return spriteCache.get(id)!;
   }
 
-  // Load from reader
+  // This function is synchronous and relies on the old reader.
+  // We should ideally deprecate it or make it async to use IPC.
+  // But for now, we leave it as is since it's marked deprecated.
+  // The new architecture uses loadSpriteIds / loadSpriteWindow which are async.
+
   const sprite = reader.readSprite(id);
   if (sprite) {
     spriteCache.set(id, sprite);

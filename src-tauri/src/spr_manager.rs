@@ -338,6 +338,244 @@ impl SprManager {
 
         Ok(sprites)
     }
+
+    /// Read a list of specific sprite IDs efficiently
+    pub fn read_sprites_list(&mut self, path: &str, ids: Vec<u32>) -> Result<Vec<SpriteData>, String> {
+        let reader = self.readers.get_mut(path)
+            .ok_or_else(|| format!("SPR file not open: {}", path))?;
+
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        // Remove duplicates and sort
+        let mut sorted_ids = ids.clone();
+        sorted_ids.sort_unstable();
+        sorted_ids.dedup();
+
+        // Filter valid IDs
+        let max_id = reader.get_header().sprite_count;
+        sorted_ids.retain(|&id| id > 0 && id <= max_id);
+
+        if sorted_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let mut sprites = Vec::with_capacity(sorted_ids.len());
+
+        // OPTIMIZATION: Read all addresses for the requested IDs
+        // We can't read a single block of addresses because they might be scattered.
+        // However, we can group them into chunks if they are close.
+        
+        // Group IDs into chunks where gaps are small (< 100 IDs)
+        let mut chunks: Vec<Vec<u32>> = Vec::new();
+        let mut current_chunk: Vec<u32> = Vec::new();
+        
+        for &id in &sorted_ids {
+            if current_chunk.is_empty() {
+                current_chunk.push(id);
+            } else {
+                let last_id = *current_chunk.last().unwrap();
+                if id - last_id < 100 {
+                    current_chunk.push(id);
+                } else {
+                    chunks.push(current_chunk);
+                    current_chunk = vec![id];
+                }
+            }
+        }
+        if !current_chunk.is_empty() {
+            chunks.push(current_chunk);
+        }
+
+        // Process each chunk
+        for chunk in chunks {
+            if chunk.is_empty() { continue; }
+            
+            let start_id = chunk[0];
+            let end_id = *chunk.last().unwrap();
+            let count = end_id - start_id + 1;
+
+            // Read addresses for this chunk
+            let start_offset = reader.header_size + ((start_id - 1) as u64 * 4);
+            
+            reader.file.seek(SeekFrom::Start(start_offset))
+                .map_err(|e| format!("Failed to seek to address table: {}", e))?;
+
+            let mut addresses_buf = vec![0u8; (count * 4) as usize];
+            reader.file.read_exact(&mut addresses_buf)
+                .map_err(|e| format!("Failed to read address table: {}", e))?;
+
+            // Collect valid file positions
+            let mut valid_sprites = Vec::with_capacity(chunk.len());
+            
+            for &id in &chunk {
+                let offset_idx = (id - start_id) as usize;
+                let offset = offset_idx * 4;
+                
+                let address = u32::from_le_bytes([
+                    addresses_buf[offset],
+                    addresses_buf[offset + 1],
+                    addresses_buf[offset + 2],
+                    addresses_buf[offset + 3],
+                ]);
+
+                if address != 0 {
+                    valid_sprites.push((id, address as u64));
+                } else {
+                    sprites.push(SpriteData {
+                        id,
+                        is_empty: true,
+                        compressed_pixels: Vec::new(),
+                    });
+                }
+            }
+
+            if valid_sprites.is_empty() {
+                continue;
+            }
+
+            // Sort by file position
+            valid_sprites.sort_by_key(|k| k.1);
+
+            // Read sprite data
+            // Use the same logic as batch read: if dense, read block; if sparse, read individually
+            let min_pos = valid_sprites.first().unwrap().1;
+            let max_pos = valid_sprites.last().unwrap().1;
+            
+            // Estimate span size (max_pos + ~4KB - min_pos)
+            let span_size = (max_pos + 4096) - min_pos;
+
+            // If span is reasonable (< 5MB) and density is high enough, read bulk
+            // Density check: if we are reading > 20% of the span, it's worth reading the whole thing
+            // to avoid seeks.
+            // Average sprite size ~500 bytes.
+            let estimated_data_size = valid_sprites.len() as u64 * 500;
+            
+            if span_size < 5 * 1024 * 1024 && (estimated_data_size * 5 > span_size || valid_sprites.len() > 50) {
+                 // BULK READ
+                reader.file.seek(SeekFrom::Start(min_pos))
+                    .map_err(|e| format!("Failed to seek to data block: {}", e))?;
+
+                let mut file_buf = vec![0u8; span_size as usize];
+                let bytes_read = reader.file.read(&mut file_buf)
+                    .map_err(|e| format!("Failed to read data block: {}", e))?;
+
+                for (id, pos) in valid_sprites {
+                    let local_offset = (pos - min_pos) as usize;
+                    
+                    if local_offset + 5 > bytes_read { continue; }
+
+                    let len_offset = local_offset + 3; // Skip RGB
+                    let length = u16::from_le_bytes([
+                        file_buf[len_offset],
+                        file_buf[len_offset + 1]
+                    ]);
+
+                    if length == 0 {
+                        sprites.push(SpriteData { id, is_empty: true, compressed_pixels: Vec::new() });
+                        continue;
+                    }
+
+                    let data_offset = len_offset + 2;
+                    let data_end = data_offset + length as usize;
+
+                    if data_end <= bytes_read {
+                        sprites.push(SpriteData {
+                            id,
+                            is_empty: false,
+                            compressed_pixels: file_buf[data_offset..data_end].to_vec(),
+                        });
+                    }
+                }
+            } else {
+                // SEQUENTIAL READ
+                let mut current_pos = reader.file.stream_position()
+                    .map_err(|e| format!("Failed to get stream pos: {}", e))?;
+
+                for (id, pos) in valid_sprites {
+                    let target_pos = pos + 3; // Skip RGB
+                    
+                    if current_pos != target_pos {
+                        reader.file.seek(SeekFrom::Start(target_pos))
+                            .map_err(|e| format!("Failed to seek: {}", e))?;
+                        current_pos = target_pos;
+                    }
+
+                    let mut len_buf = [0u8; 2];
+                    reader.file.read_exact(&mut len_buf)
+                        .map_err(|e| format!("Failed to read length: {}", e))?;
+                    current_pos += 2;
+                    
+                    let length = u16::from_le_bytes(len_buf);
+
+                    if length == 0 {
+                        sprites.push(SpriteData { id, is_empty: true, compressed_pixels: Vec::new() });
+                        continue;
+                    }
+
+                    let mut pixels = vec![0u8; length as usize];
+                    reader.file.read_exact(&mut pixels)
+                        .map_err(|e| format!("Failed to read pixels: {}", e))?;
+                    current_pos += length as u64;
+
+                    sprites.push(SpriteData {
+                        id,
+                        is_empty: false,
+                        compressed_pixels: pixels,
+                    });
+                }
+            }
+        }
+
+        Ok(sprites)
+    }
+
+    /// Read a list of sprites and return them as a compact binary buffer
+    /// Format: [Count: u32] -> ([ID: u32][IsEmpty: u8][Len: u32][Data...])*
+    pub fn read_sprites_list_binary(&mut self, path: &str, ids: Vec<u32>) -> Result<Vec<u8>, String> {
+        let sprites = self.read_sprites_list(path, ids)?;
+        Ok(Self::pack_sprites(sprites))
+    }
+
+    /// Read a batch of sprites and return them as a compact binary buffer
+    pub fn read_sprites_batch_binary(&mut self, path: &str, start_id: u32, count: u32) -> Result<Vec<u8>, String> {
+        let sprites = self.read_sprites_batch(path, start_id, count)?;
+        Ok(Self::pack_sprites(sprites))
+    }
+
+    /// Read a single sprite and return it as a compact binary buffer (list of 1)
+    pub fn read_sprite_binary(&mut self, path: &str, id: u32) -> Result<Vec<u8>, String> {
+        let sprite = self.read_sprite(path, id)?;
+        Ok(Self::pack_sprites(vec![sprite]))
+    }
+
+    /// Helper to pack sprites into binary format
+    fn pack_sprites(sprites: Vec<SpriteData>) -> Vec<u8> {
+        let total_pixel_bytes: usize = sprites.iter().map(|s| s.compressed_pixels.len()).sum();
+        let metadata_bytes = sprites.len() * (4 + 1 + 4); // ID(4) + Empty(1) + Len(4)
+        let header_bytes = 4; // Count(4)
+        
+        let mut buffer = Vec::with_capacity(header_bytes + metadata_bytes + total_pixel_bytes);
+        
+        // Write Count
+        buffer.extend_from_slice(&(sprites.len() as u32).to_le_bytes());
+        
+        for sprite in sprites {
+            // Write ID
+            buffer.extend_from_slice(&sprite.id.to_le_bytes());
+            
+            // Write IsEmpty
+            buffer.push(if sprite.is_empty { 1 } else { 0 });
+            
+            // Write Length
+            buffer.extend_from_slice(&(sprite.compressed_pixels.len() as u32).to_le_bytes());
+            
+            // Write Data
+            buffer.extend_from_slice(&sprite.compressed_pixels);
+        }
+        buffer
+    }
 }
 
 /// Type alias for thread-safe SPR manager

@@ -393,10 +393,10 @@ export const PropertiesPanel = () => {
   const handleRandomizeColors = () => {
     setOutfitData({
       ...outfitData,
-      head: Math.floor(Math.random() * 133),
-      body: Math.floor(Math.random() * 133),
-      legs: Math.floor(Math.random() * 133),
-      feet: Math.floor(Math.random() * 133),
+      head: Math.floor(Math.random() * 256), // 0-255
+      body: Math.floor(Math.random() * 256),
+      legs: Math.floor(Math.random() * 256),
+      feet: Math.floor(Math.random() * 256),
     });
   };
 
@@ -1150,7 +1150,10 @@ export const PropertiesPanel = () => {
                             <Label className="text-[10px] text-muted-foreground">Head</Label>
                             <TibiaColorPicker
                               value={outfitData.head}
-                              onChange={(val) => setOutfitData({ ...outfitData, head: val })}
+                              onChange={(val) => {
+                                const clampedVal = Math.max(0, Math.min(255, Math.floor(val)));
+                                setOutfitData({ ...outfitData, head: clampedVal });
+                              }}
                               className="w-full"
                             />
                           </div>
@@ -1158,7 +1161,10 @@ export const PropertiesPanel = () => {
                             <Label className="text-[10px] text-muted-foreground">Body</Label>
                             <TibiaColorPicker
                               value={outfitData.body}
-                              onChange={(val) => setOutfitData({ ...outfitData, body: val })}
+                              onChange={(val) => {
+                                const clampedVal = Math.max(0, Math.min(255, Math.floor(val)));
+                                setOutfitData({ ...outfitData, body: clampedVal });
+                              }}
                               className="w-full"
                             />
                           </div>
@@ -1166,7 +1172,10 @@ export const PropertiesPanel = () => {
                             <Label className="text-[10px] text-muted-foreground">Legs</Label>
                             <TibiaColorPicker
                               value={outfitData.legs}
-                              onChange={(val) => setOutfitData({ ...outfitData, legs: val })}
+                              onChange={(val) => {
+                                const clampedVal = Math.max(0, Math.min(255, Math.floor(val)));
+                                setOutfitData({ ...outfitData, legs: clampedVal });
+                              }}
                               className="w-full"
                             />
                           </div>
@@ -1174,7 +1183,10 @@ export const PropertiesPanel = () => {
                             <Label className="text-[10px] text-muted-foreground">Feet</Label>
                             <TibiaColorPicker
                               value={outfitData.feet}
-                              onChange={(val) => setOutfitData({ ...outfitData, feet: val })}
+                              onChange={(val) => {
+                                const clampedVal = Math.max(0, Math.min(255, Math.floor(val)));
+                                setOutfitData({ ...outfitData, feet: clampedVal });
+                              }}
                               className="w-full"
                             />
                           </div>
@@ -1561,7 +1573,10 @@ export const PropertiesPanel = () => {
                           <Label className="text-[10px] text-muted-foreground">Head</Label>
                           <TibiaColorPicker
                             value={outfitData.head}
-                            onChange={(val) => setOutfitData({ ...outfitData, head: val })}
+                            onChange={(val) => {
+                              const clampedVal = Math.max(0, Math.min(255, Math.floor(val)));
+                              setOutfitData({ ...outfitData, head: clampedVal });
+                            }}
                             className="w-full"
                           />
                         </div>
@@ -1569,7 +1584,10 @@ export const PropertiesPanel = () => {
                           <Label className="text-[10px] text-muted-foreground">Body</Label>
                           <TibiaColorPicker
                             value={outfitData.body}
-                            onChange={(val) => setOutfitData({ ...outfitData, body: val })}
+                            onChange={(val) => {
+                              const clampedVal = Math.max(0, Math.min(255, Math.floor(val)));
+                              setOutfitData({ ...outfitData, body: clampedVal });
+                            }}
                             className="w-full"
                           />
                         </div>
@@ -1577,7 +1595,10 @@ export const PropertiesPanel = () => {
                           <Label className="text-[10px] text-muted-foreground">Legs</Label>
                           <TibiaColorPicker
                             value={outfitData.legs}
-                            onChange={(val) => setOutfitData({ ...outfitData, legs: val })}
+                            onChange={(val) => {
+                              const clampedVal = Math.max(0, Math.min(255, Math.floor(val)));
+                              setOutfitData({ ...outfitData, legs: clampedVal });
+                            }}
                             className="w-full"
                           />
                         </div>
@@ -1585,7 +1606,10 @@ export const PropertiesPanel = () => {
                           <Label className="text-[10px] text-muted-foreground">Feet</Label>
                           <TibiaColorPicker
                             value={outfitData.feet}
-                            onChange={(val) => setOutfitData({ ...outfitData, feet: val })}
+                            onChange={(val) => {
+                              const clampedVal = Math.max(0, Math.min(255, Math.floor(val)));
+                              setOutfitData({ ...outfitData, feet: clampedVal });
+                            }}
                             className="w-full"
                           />
                         </div>

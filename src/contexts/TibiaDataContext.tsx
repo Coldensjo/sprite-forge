@@ -70,6 +70,7 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [selectedCategory, setSelectedCategoryState] = useState<ThingCategory>(ThingCategory.ITEM);
   const settingItemRef = React.useRef(false);
   const hasRestoredRef = React.useRef(false);
+  const hasPreloadedRef = React.useRef(false);
   const [openedSpriteId, setOpenedSpriteId] = useState<number | null>(null);
   const [spriteLoadVersion, setSpriteLoadVersion] = useState(0);
 
@@ -128,6 +129,7 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
     // Reset restoration flag BEFORE setting new data
     hasRestoredRef.current = false;
+    hasPreloadedRef.current = false;
 
     setDataState(newData);
     setSpriteReader(reader);
@@ -372,6 +374,92 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     },
     [data, spriteLoadVersion] // Include version to re-run when sprites load
   );
+
+  // Global Preloading Effect
+  useEffect(() => {
+    if (data && data.sprPath && !hasPreloadedRef.current) {
+      hasPreloadedRef.current = true;
+
+      const preload = async () => {
+        // Import dependencies dynamically
+        const { loadSpriteIds, isValidSpriteId } = await import('@/lib/tibia');
+
+        // Update loading state to show preloading phase
+        setLoading(true, { stage: 'Preparing sprite cache...', current: 0, total: 100 });
+
+        // Preload first 5 pages (500 items) of each category
+        // This ensures that when the user switches tabs, the content is likely already there
+        const PRELOAD_COUNT = 500;
+        const allIdsToLoad: number[] = [];
+
+        // Helper to collect IDs from a map
+        const collectFromMap = (map: Map<number, ThingType>) => {
+          let count = 0;
+          // Map iteration order is insertion order, which matches ID order usually
+          for (const thing of map.values()) {
+            if (count >= PRELOAD_COUNT) break;
+
+            if (thing.spriteIndex) {
+              for (const spriteId of thing.spriteIndex) {
+                if (isValidSpriteId(spriteId, data.spritesCount)) {
+                  allIdsToLoad.push(spriteId);
+                }
+              }
+            }
+            count++;
+          }
+        };
+
+        collectFromMap(data.items);
+        collectFromMap(data.outfits);
+        collectFromMap(data.effects);
+        collectFromMap(data.missiles);
+
+        if (allIdsToLoad.length > 0) {
+          try {
+            setLoading(true, { stage: `Preloading ${allIdsToLoad.length} sprites...`, current: 0, total: allIdsToLoad.length });
+
+            // OPTIMIZATION: Split into chunks to parallelize IPC serialization/deserialization
+            // and allow for smoother progress updates.
+            const CHUNK_SIZE = 500;
+            const chunks: number[][] = [];
+            for (let i = 0; i < allIdsToLoad.length; i += CHUNK_SIZE) {
+              chunks.push(allIdsToLoad.slice(i, i + CHUNK_SIZE));
+            }
+
+            let loadedCount = 0;
+
+            // Process chunks in parallel
+            await Promise.all(chunks.map(async (chunk) => {
+              await loadSpriteIds(
+                data.sprPath!,
+                chunk,
+                data.transparency,
+                data.sprites
+              );
+              loadedCount += chunk.length;
+              // Update progress (throttled slightly by React state batching)
+              setLoading(true, {
+                stage: `Preloading sprites...`,
+                current: loadedCount,
+                total: allIdsToLoad.length
+              });
+            }));
+
+            notifySpritesLoaded();
+          } catch (e) {
+            console.error("Preload failed", e);
+          }
+        }
+
+        // Finish loading completely
+        setLoading(false);
+      };
+
+      // Run preload with a slight delay to let the UI settle first
+      setTimeout(preload, 100);
+    }
+  }, [data, notifySpritesLoaded, setLoading]);
 
   return (
     <TibiaDataContext.Provider

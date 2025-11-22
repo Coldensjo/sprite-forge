@@ -37,7 +37,8 @@ export const Toolbar = () => {
       );
 
       setData(tibiaData, null as any);
-      setLoading(false);
+      // Don't set loading false here - let the context handle sprite preloading first
+      // setLoading(false);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to load files';
       setError(errorMessage);
@@ -96,19 +97,19 @@ export const Toolbar = () => {
             <FolderOpen className="h-3.5 w-3.5 mr-1.5" />
             Open Files
           </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-8 text-xs font-medium"
-          onMouseDown={(e) => e.stopPropagation()}
-          disabled={!data}
-        >
-          <Save className="h-3.5 w-3.5 mr-1.5" />
-          Save
-        </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 text-xs font-medium"
+            onMouseDown={(e) => e.stopPropagation()}
+            disabled={!data}
+          >
+            <Save className="h-3.5 w-3.5 mr-1.5" />
+            Save
+          </Button>
         </div>
 
-        <div className="h-5 w-px bg-border/50 flex-shrink-0"/>
+        <div className="h-5 w-px bg-border/50 flex-shrink-0" />
 
         <Button
           variant="ghost"
@@ -122,7 +123,7 @@ export const Toolbar = () => {
           Find
         </Button>
 
-        <div className="h-5 w-px bg-border/50 flex-shrink-0"/>
+        <div className="h-5 w-px bg-border/50 flex-shrink-0" />
 
         <TooltipProvider>
           <Tooltip>

@@ -346,10 +346,18 @@ export const SpriteCanvas = ({
 
           if (entry.layer0 && entry.layer1) {
             // Blend Base + Mask
+            // Extract only color properties (head, body, legs, feet) for blending
+            // Values >= 133 will be wrapped by getOutfitColor function
+            const colors = {
+              head: Math.max(0, Math.min(255, Math.floor(outfitData.head || 0))),
+              body: Math.max(0, Math.min(255, Math.floor(outfitData.body || 0))),
+              legs: Math.max(0, Math.min(255, Math.floor(outfitData.legs || 0))),
+              feet: Math.max(0, Math.min(255, Math.floor(outfitData.feet || 0)))
+            };
             const blendedPixels = blendOutfit(
               entry.layer0.imageData.data,
               entry.layer1.imageData.data,
-              outfitData
+              colors
             );
             const blendedImageData = offscreenCtx.createImageData(SPRITE_SIZE, SPRITE_SIZE);
             blendedImageData.data.set(blendedPixels);

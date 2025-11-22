@@ -110,6 +110,87 @@ fn read_sprites_batch(
 }
 
 #[tauri::command]
+fn read_sprites_list(
+    path: String,
+    ids: Vec<u32>,
+    spr_state: tauri::State<SprManagerState>,
+    log_state: tauri::State<LoggerState>,
+) -> Result<Vec<SpriteData>, String> {
+    let mut manager = spr_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let result = manager.read_sprites_list(&path, ids);
+
+    if let Ok(ref sprites) = result {
+        let mut logger = log_state.lock().unwrap();
+        logger.log(
+            EventCode::SprBatch,
+            serde_json::json!({"c": sprites.len(), "list": true})
+        );
+    }
+
+    result
+}
+
+use tauri::ipc::Response;
+
+#[tauri::command]
+fn read_sprites_list_bin(
+    path: String,
+    ids: Vec<u32>,
+    spr_state: tauri::State<SprManagerState>,
+    log_state: tauri::State<LoggerState>,
+) -> Result<Response, String> {
+    let mut manager = spr_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let bytes = manager.read_sprites_list_binary(&path, ids)?;
+
+    let mut logger = log_state.lock().unwrap();
+    logger.log(
+        EventCode::SprBatch,
+        serde_json::json!({"sz": bytes.len(), "bin": true})
+    );
+    
+    Ok(Response::new(bytes))
+}
+
+#[tauri::command]
+fn read_sprites_batch_bin(
+    path: String,
+    start_id: u32,
+    count: u32,
+    spr_state: tauri::State<SprManagerState>,
+    log_state: tauri::State<LoggerState>,
+) -> Result<Response, String> {
+    let mut manager = spr_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let bytes = manager.read_sprites_batch_binary(&path, start_id, count)?;
+
+    let mut logger = log_state.lock().unwrap();
+    logger.log(
+        EventCode::SprBatch,
+        serde_json::json!({"sz": bytes.len(), "bin": true, "batch": true})
+    );
+    
+    Ok(Response::new(bytes))
+}
+
+#[tauri::command]
+fn read_sprite_bin(
+    path: String,
+    id: u32,
+    spr_state: tauri::State<SprManagerState>,
+    log_state: tauri::State<LoggerState>,
+) -> Result<Response, String> {
+    let mut manager = spr_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let bytes = manager.read_sprite_binary(&path, id)?;
+
+    let mut logger = log_state.lock().unwrap();
+    logger.log(
+        EventCode::SprRead,
+        serde_json::json!({"sz": bytes.len(), "bin": true})
+    );
+    
+    Ok(Response::new(bytes))
+}
+
+#[tauri::command]
 fn set_debug_logging(
     enabled: bool,
     log_state: tauri::State<LoggerState>,
@@ -456,6 +537,10 @@ pub fn run() {
             close_spr_file,
             get_spr_header,
             read_sprites_batch,
+            read_sprites_list,
+            read_sprites_list_bin,
+            read_sprites_batch_bin,
+            read_sprite_bin,
             set_debug_logging,
             get_debug_logging,
             list_directory,
