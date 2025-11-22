@@ -15,15 +15,31 @@ interface TibiaColorPickerProps {
 const OUTFIT_COLORS = generateOutfitColorPalette();
 
 export const TibiaColorPicker = ({ value, onChange, disabled, className }: TibiaColorPickerProps) => {
-    // Ensure value is within 0-132 range (133 total outfit colors)
-    const displayColor = value >= 0 && value < OUTFIT_COLORS.length ? OUTFIT_COLORS[value] : 'transparent';
+    // Support color IDs up to 255 (Tibia's max)
+    // Values >= 133 wrap around using modulo in getOutfitColor
+    const displayValue = isNaN(value) ? 0 : Math.floor(value);
+    const paletteIndex = displayValue >= OUTFIT_COLORS.length ? displayValue % OUTFIT_COLORS.length : displayValue;
+    const displayColor = OUTFIT_COLORS[paletteIndex] || OUTFIT_COLORS[0];
+
+    const handleChange = (newValue: number) => {
+        // Allow values 0-255, but clamp to prevent negative or extremely large values
+        const clamped = Math.max(0, Math.min(255, Math.floor(newValue)));
+        onChange(clamped);
+    };
 
     return (
         <div className={cn("flex items-center gap-2", className)}>
             <Input
                 type="number"
-                value={value}
-                onChange={(e) => onChange(Number(e.target.value))}
+                min={0}
+                max={255}
+                value={displayValue}
+                onChange={(e) => {
+                    const numValue = Number(e.target.value);
+                    if (!isNaN(numValue)) {
+                        handleChange(numValue);
+                    }
+                }}
                 disabled={disabled}
                 className="h-7 w-16 text-xs font-mono text-right bg-background/50 shadow-sm hover:bg-background/80 transition-colors px-1"
             />
@@ -38,20 +54,24 @@ export const TibiaColorPicker = ({ value, onChange, disabled, className }: Tibia
                         <span className="sr-only">Pick color</span>
                     </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-64 p-2">
-                    <div className="grid grid-cols-12 gap-1">
-                        {OUTFIT_COLORS.map((color, index) => (
-                            <button
-                                key={index}
-                                className={cn(
-                                    "w-4 h-4 rounded-sm border border-border/50 hover:scale-125 transition-transform",
-                                    value === index && "ring-2 ring-primary border-primary"
-                                )}
-                                style={{ backgroundColor: color }}
-                                onClick={() => onChange(index)}
-                                title={`Color ID: ${index}`}
-                            />
-                        ))}
+                <PopoverContent className="w-auto p-2" align="start">
+                    <div className="grid gap-[1px]" style={{ gridTemplateColumns: 'repeat(19, minmax(0, 1fr))' }}>
+                        {OUTFIT_COLORS.map((color, index) => {
+                            // Check if this palette color matches the current value (accounting for wrapping)
+                            const matchesValue = displayValue === index || (displayValue >= OUTFIT_COLORS.length && displayValue % OUTFIT_COLORS.length === index);
+                            return (
+                                <button
+                                    key={index}
+                                    className={cn(
+                                        "w-4 h-4 rounded-[1px] border border-border/20 hover:scale-125 hover:z-10 transition-transform",
+                                        matchesValue && "ring-1 ring-primary border-primary z-10"
+                                    )}
+                                    style={{ backgroundColor: color }}
+                                    onClick={() => handleChange(index)}
+                                    title={`Color ID: ${index}${displayValue >= OUTFIT_COLORS.length ? ` (wraps from ${displayValue})` : ''}`}
+                                />
+                            );
+                        })}
                     </div>
                 </PopoverContent>
             </Popover>
