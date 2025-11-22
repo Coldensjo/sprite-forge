@@ -1,89 +1,428 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { ScrollArea } from "./ui/scroll-area";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
+import { Input } from "./ui/input";
 import { cn } from "@/lib/utils";
-import { SkipBack, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight, SkipForward } from "lucide-react";
+import { SkipBack, ChevronLeft, ChevronRight, SkipForward, Package, LayoutGrid, List, Square } from "lucide-react";
+import { useTibiaData } from "@/contexts/TibiaDataContext";
+import { MIN_ITEM_ID, MIN_OUTFIT_ID, MIN_EFFECT_ID, MIN_MISSILE_ID, ThingCategory, type ThingType, isValidSpriteId } from "@/lib/tibia";
+import { SpriteCanvas } from "./SpriteCanvas";
+import { logger, EventCode } from "@/lib/debug";
+import { CheckerBoard } from "./CheckerBoard";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Button } from "./ui/button";
 
-interface Item {
-  id: number;
-  name: string;
-  color: string;
-}
-
-const mockItems: Item[] = [
-  { id: 100, name: "Fire Sword", color: "#ff4500" },
-  { id: 101, name: "Brown Mushroom", color: "#8b4513" },
-  { id: 102, name: "Stone Wall", color: "#696969" },
-  { id: 103, name: "Wood Floor", color: "#8b7355" },
-  { id: 104, name: "Silver Coin", color: "#c0c0c0" },
-  { id: 105, name: "Green Poison", color: "#32cd32" },
-  { id: 106, name: "Health Potion", color: "#ff1493" },
-  { id: 107, name: "Bow", color: "#daa520" },
-  { id: 108, name: "Grass Tile", color: "#228b22" },
-  { id: 109, name: "Dark Grass", color: "#006400" },
-  { id: 110, name: "Shield", color: "#708090" },
-  { id: 111, name: "Demon Armor", color: "#8b0000" },
-  { id: 112, name: "Torch", color: "#ffa500" },
-  { id: 113, name: "Skull", color: "#f5f5dc" },
-  { id: 114, name: "Magic Staff", color: "#4169e1" },
-  { id: 115, name: "Book", color: "#4682b4" },
-  { id: 116, name: "Gold Bar", color: "#ffd700" },
-  { id: 117, name: "Gold Coin", color: "#ffb90f" },
-  { id: 118, name: "Gold Nugget", color: "#daa520" },
-  { id: 119, name: "Portal", color: "#9370db" },
-  { id: 120, name: "Nature Spell", color: "#00fa9a" },
-];
+type ViewMode = 'list' | 'grid' | 'large';
 
 export const ItemList = () => {
-  const [selectedId, setSelectedId] = useState<number>(100);
+  const { data, openedItemId, setOpenedItemId, selectedCategory, setSelectedCategory, notifySpritesLoaded, highlightedItemId, setHighlightedItemId } = useTibiaData();
   const [currentPage, setCurrentPage] = useState<number>(1);
+  const [inputValue, setInputValue] = useState<string>('');
+  const [viewMode, setViewMode] = useState<ViewMode>('list');
+  const scrollViewportRef = useRef<HTMLDivElement>(null);
+  const shouldScrollToHighlightedRef = useRef(false);
   const itemsPerPage = 100;
 
-  const totalPages = Math.ceil(mockItems.length / itemsPerPage);
-  const paginatedItems = useMemo(() => {
+  const categoryLabels: Record<ThingCategory, string> = {
+    [ThingCategory.ITEM]: "Item",
+    [ThingCategory.OUTFIT]: "Outfit",
+    [ThingCategory.EFFECT]: "Effect",
+    [ThingCategory.MISSILE]: "Missile",
+  };
+
+  const getCategoryMap = useMemo(() => {
+    return (category: ThingCategory) => {
+      switch (category) {
+        case ThingCategory.ITEM:
+          return data?.items;
+        case ThingCategory.OUTFIT:
+          return data?.outfits;
+        case ThingCategory.EFFECT:
+          return data?.effects;
+        case ThingCategory.MISSILE:
+          return data?.missiles;
+        default:
+          return data?.items;
+      }
+    };
+  }, [data]);
+
+  const getThing = useCallback((id: number, category: ThingCategory) => {
+    const map = getCategoryMap(category);
+    return map?.get(id) || null;
+  }, [getCategoryMap]);
+
+  const allItemIds = useMemo(() => {
+    if (!data) return [];
+    const ids: number[] = [];
+
+    let map: Map<number, ThingType> | undefined;
+    let count: number;
+    let minId: number;
+
+    switch (selectedCategory) {
+      case ThingCategory.ITEM:
+        map = data.items;
+        count = data.itemsCount;
+        minId = MIN_ITEM_ID;
+        break;
+      case ThingCategory.OUTFIT:
+        map = data.outfits;
+        count = data.outfitsCount;
+        minId = MIN_OUTFIT_ID;
+        break;
+      case ThingCategory.EFFECT:
+        map = data.effects;
+        count = data.effectsCount;
+        minId = MIN_EFFECT_ID;
+        break;
+      case ThingCategory.MISSILE:
+        map = data.missiles;
+        count = data.missilesCount;
+        minId = MIN_MISSILE_ID;
+        break;
+      default:
+        map = data.items;
+        count = data.itemsCount;
+        minId = MIN_ITEM_ID;
+    }
+
+    if (map) {
+      for (let id = minId; id <= count; id++) {
+        if (map.has(id)) {
+          ids.push(id);
+        }
+      }
+    }
+    return ids;
+  }, [data, selectedCategory]);
+
+  const totalPages = Math.ceil(allItemIds.length / itemsPerPage);
+  const paginatedItemIds = useMemo(() => {
     const start = (currentPage - 1) * itemsPerPage;
     const end = start + itemsPerPage;
-    return mockItems.slice(start, end);
-  }, [currentPage]);
+    return allItemIds.slice(start, end);
+  }, [currentPage, allItemIds]);
+
+  useEffect(() => {
+    if (data) {
+      setCurrentPage(1);
+      // Auto-highlight first item (but don't open it)
+      const firstItemId = allItemIds[0];
+      if (firstItemId !== undefined) {
+        setHighlightedItemId(firstItemId);
+      } else {
+        setHighlightedItemId(null);
+      }
+      // Keep opened item when category changes - don't clear it
+    }
+  }, [data, selectedCategory, setOpenedItemId, allItemIds]);
+
+  // Sync input value with highlighted item
+  useEffect(() => {
+    setInputValue(highlightedItemId ? String(highlightedItemId) : '');
+  }, [highlightedItemId]);
+
+  // Load sprites for items on current page + prefetch ahead
+  useEffect(() => {
+    if (!data || !data.sprPath) return;
+
+    let cancelled = false;
+
+    const loadSpritesForCurrentPage = async () => {
+      logger.log(EventCode.ITEM_PAGE, { cat: selectedCategory, pg: currentPage, n: paginatedItemIds.length });
+
+      const { loadSpriteIds } = await import('@/lib/tibia');
+
+      if (cancelled) return;
+
+      // OPTIMIZATION: Collect ALL sprite IDs for an item at once (all frames/patterns)
+      // This matches Object Builder behavior
+      const collectAllSpriteIds = (itemIds: number[]) => {
+        const ids: number[] = [];
+        for (const id of itemIds) {
+          const item = getThing(id, selectedCategory);
+          if (item && item.spriteIndex && item.spriteIndex.length > 0) {
+            // Add ALL sprites for this item (all frames, patterns, layers)
+            for (const spriteId of item.spriteIndex) {
+              if (spriteId && isValidSpriteId(spriteId, data.spritesCount)) {
+                ids.push(spriteId);
+              }
+            }
+          }
+        }
+        return ids;
+      };
+
+      // OPTIMIZATION: Load multiple pages at once
+      // Current page + next 2 pages for smoother navigation
+      const PREFETCH_PAGES = 2;
+      const pagesToLoad = Math.min(PREFETCH_PAGES + 1, totalPages - currentPage + 1);
+
+      const allSpriteIds: number[] = [];
+
+      for (let i = 0; i < pagesToLoad; i++) {
+        const pageNum = currentPage + i;
+        if (pageNum > totalPages) break;
+
+        const start = (pageNum - 1) * itemsPerPage;
+        const end = start + itemsPerPage;
+        const pageItemIds = allItemIds.slice(start, end);
+
+        const pageSpriteIds = collectAllSpriteIds(pageItemIds);
+        allSpriteIds.push(...pageSpriteIds);
+      }
+
+      if (allSpriteIds.length > 0) {
+        logger.log(EventCode.ITEM_LOAD_BATCH, { n: allSpriteIds.length, pages: pagesToLoad });
+
+        // OPTIMIZATION: Load all at once, no filtering
+        // loadSpriteIds already handles deduplication internally
+        await loadSpriteIds(
+          data.sprPath,
+          allSpriteIds,
+          data.transparency,
+          data.sprites
+        );
+      }
+
+      if (cancelled) return;
+      notifySpritesLoaded();
+    };
+
+    loadSpritesForCurrentPage();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentPage, data, paginatedItemIds, selectedCategory, getThing, notifySpritesLoaded, allItemIds, totalPages, itemsPerPage]);
 
   const handlePageChange = (page: number) => {
     if (page >= 1 && page <= totalPages) {
       setCurrentPage(page);
+
+      // Scroll to top
+      const viewport = scrollViewportRef.current?.querySelector('[data-radix-scroll-area-viewport]');
+      if (viewport) {
+        viewport.scrollTop = 0;
+      }
+
+      // Auto-highlight first item on the new page (but don't open it)
+      const start = (page - 1) * itemsPerPage;
+      const firstItemId = allItemIds[start];
+      if (firstItemId !== undefined) {
+        setHighlightedItemId(firstItemId);
+      }
     }
   };
 
-  return (
-    <div className="w-64 bg-card rounded-lg shadow-island flex flex-col overflow-hidden relative">
-      <div className="h-10 px-3 flex items-center border-b border-border/50 bg-secondary/50">
-        <h2 className="text-xs font-semibold text-foreground uppercase tracking-wide">Items</h2>
-        <span className="ml-auto text-xs text-muted-foreground font-mono">{mockItems.length}</span>
+  const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      const itemId = parseInt(inputValue);
+      if (!isNaN(itemId) && data) {
+        // Check if item exists
+        const item = getThing(itemId, selectedCategory);
+        if (item) {
+          // Find the index of this item in allItemIds
+          const itemIndex = allItemIds.indexOf(itemId);
+          if (itemIndex !== -1) {
+            // Calculate which page this item is on
+            const targetPage = Math.floor(itemIndex / itemsPerPage) + 1;
+            // Navigate to that page
+            setCurrentPage(targetPage);
+            // Set flag to scroll to highlighted item
+            shouldScrollToHighlightedRef.current = true;
+            // Highlight the item (not open it)
+            setHighlightedItemId(itemId);
+          }
+        }
+      }
+    }
+  };
+
+  // Scroll highlighted item to center when it changes (only if triggered by input)
+  useEffect(() => {
+    if (shouldScrollToHighlightedRef.current && highlightedItemId) {
+      // Wait for DOM to update
+      setTimeout(() => {
+        const viewport = scrollViewportRef.current?.querySelector('[data-radix-scroll-area-viewport]');
+        if (viewport) {
+          // Find the highlighted item button
+          const highlightedButton = viewport.querySelector(`[data-item-id="${highlightedItemId}"]`) as HTMLElement;
+          if (highlightedButton) {
+            // Calculate scroll position to center the item
+            const viewportHeight = viewport.clientHeight;
+            const itemTop = highlightedButton.offsetTop;
+            const itemHeight = highlightedButton.offsetHeight;
+            const scrollTop = itemTop - (viewportHeight / 2) + (itemHeight / 2);
+
+            viewport.scrollTo({
+              top: Math.max(0, scrollTop),
+              behavior: 'smooth'
+            });
+          }
+        }
+        shouldScrollToHighlightedRef.current = false;
+      }, 100);
+    }
+  }, [highlightedItemId, currentPage]);
+
+  // Show empty state if no data loaded
+  if (!data) {
+    return (
+      <div className="w-full h-full bg-card rounded-lg shadow-island flex flex-col overflow-hidden">
+        <div className="h-8 px-3 flex items-center gap-2 border-b border-border/50 bg-secondary/50">
+          <Select value={selectedCategory} onValueChange={(value) => setSelectedCategory(value as ThingCategory)}>
+            <SelectTrigger className="h-6 w-24 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ThingCategory.ITEM}>Item</SelectItem>
+              <SelectItem value={ThingCategory.OUTFIT}>Outfit</SelectItem>
+              <SelectItem value={ThingCategory.EFFECT}>Effect</SelectItem>
+              <SelectItem value={ThingCategory.MISSILE}>Missile</SelectItem>
+            </SelectContent>
+          </Select>
+          <span className="ml-auto text-xs text-muted-foreground font-mono">0</span>
+        </div>
+        <div className="flex-1 flex items-center justify-center p-4">
+          <div className="text-center text-muted-foreground">
+            <Package className="h-10 w-10 mx-auto mb-2 opacity-50" />
+            <p className="text-xs">No files loaded</p>
+            <p className="text-[10px] mt-1">Click "Open Files" to load Tibia.dat</p>
+          </div>
+        </div>
       </div>
-      
-      <ScrollArea className="flex-1">
-        <div className="p-2 space-y-1 pb-16">
-          {paginatedItems.map((item) => (
-            <button
-              key={item.id}
-              onClick={() => setSelectedId(item.id)}
-              className={cn(
-                "w-full flex items-center gap-3 px-2 py-2 rounded-md transition-all",
-                "hover:bg-item-hover",
-                selectedId === item.id && "bg-primary/15 ring-1 ring-primary/50"
-              )}
-            >
-              <div 
-                className="w-9 h-9 rounded-md flex items-center justify-center flex-shrink-0 shadow-sm"
-                style={{ backgroundColor: item.color }}
+    );
+  }
+
+  return (
+    <div className="w-full h-full bg-card rounded-lg shadow-island flex flex-col overflow-hidden relative">
+      <div className="h-8 px-3 flex items-center gap-2 border-b border-border/50 bg-secondary/50">
+        <Select value={selectedCategory} onValueChange={(value) => setSelectedCategory(value as ThingCategory)}>
+          <SelectTrigger className="h-6 w-24 text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ThingCategory.ITEM}>Item</SelectItem>
+            <SelectItem value={ThingCategory.OUTFIT}>Outfit</SelectItem>
+            <SelectItem value={ThingCategory.EFFECT}>Effect</SelectItem>
+            <SelectItem value={ThingCategory.MISSILE}>Missile</SelectItem>
+          </SelectContent>
+        </Select>
+
+        <div className="ml-auto flex items-center gap-1">
+          <span className="text-xs text-muted-foreground font-mono mr-1">{allItemIds.length}</span>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-6 w-6 p-0 hover:bg-secondary">
+                {viewMode === 'list' && <List className="h-3.5 w-3.5 text-muted-foreground" />}
+                {viewMode === 'grid' && <LayoutGrid className="h-3.5 w-3.5 text-muted-foreground" />}
+                {viewMode === 'large' && <Square className="h-3.5 w-3.5 text-muted-foreground" />}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => setViewMode('list')}>
+                <List className="mr-2 h-4 w-4" />
+                <span>List</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setViewMode('grid')}>
+                <LayoutGrid className="mr-2 h-4 w-4" />
+                <span>Grid (50/50)</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setViewMode('large')}>
+                <Square className="mr-2 h-4 w-4" />
+                <span>Large</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </div>
+
+      <ScrollArea className="flex-1" ref={scrollViewportRef}>
+        <div className={cn(
+          "p-2 pb-16",
+          viewMode === 'list' && "space-y-0.5",
+          viewMode === 'grid' && "grid grid-cols-2 gap-1",
+          viewMode === 'large' && "grid grid-cols-1 gap-2"
+        )}>
+          {paginatedItemIds.map((id) => {
+            const item = getThing(id, selectedCategory);
+            if (!item) return null;
+
+            return (
+              <button
+                key={id}
+                data-item-id={id}
+                onClick={() => setHighlightedItemId(id)}
+                onDoubleClick={() => {
+                  setOpenedItemId(id);
+                  setHighlightedItemId(id);
+                }}
+                className={cn(
+                  "w-full rounded-md transition-all hover:bg-item-hover",
+                  highlightedItemId === id && "bg-primary/15 ring-1 ring-primary/50",
+                  viewMode === 'list' && "flex items-center gap-2 px-2 py-1",
+                  viewMode === 'grid' && "flex items-center px-1 py-0.5 gap-1.5",
+                  viewMode === 'large' && "flex items-center px-1 py-0.5 gap-1.5"
+                )}
               >
-                <span className="text-[9px] font-mono font-bold text-white/90 drop-shadow">
-                  {item.id}
-                </span>
-              </div>
-              <div className="flex-1 text-left min-w-0">
-                <div className="text-xs text-foreground truncate font-medium">{item.name}</div>
-                <div className="text-[10px] text-muted-foreground font-mono">ID: {item.id}</div>
-              </div>
-            </button>
-          ))}
+                <CheckerBoard className={cn(
+                  "rounded-md border border-border/50 flex items-center justify-center flex-shrink-0 overflow-hidden",
+                  viewMode === 'list' && "w-8 h-8",
+                  viewMode === 'grid' && "w-12 h-12",
+                  viewMode === 'large' && "w-32 h-32"
+                )}>
+                  {item.spriteIndex && item.spriteIndex.length > 0 ? (
+                    <SpriteCanvas
+                      renderMode="list"
+                      thing={item}
+                      width={item.width}
+                      height={item.height}
+                      scale={
+                        viewMode === 'list' ? 36 / (Math.max(item.width, item.height) * 32) :
+                          viewMode === 'grid' ? 48 / (Math.max(item.width, item.height) * 32) :
+                            128 / (Math.max(item.width, item.height) * 32)
+                      }
+                      showEmpty
+                    />
+                  ) : (
+                    <span className="text-[9px] font-mono font-bold text-foreground">{id}</span>
+                  )}
+                </CheckerBoard>
+                <div className={cn(
+                  "min-w-0",
+                  viewMode === 'list' && "flex-1 text-left",
+                  viewMode === 'grid' && "flex-1 text-right",
+                  viewMode === 'large' && "flex-1 text-right"
+                )}>
+                  {viewMode === 'grid' || viewMode === 'large' ? (
+                    <div className="text-[11px] text-foreground font-mono font-medium leading-tight">
+                      {id}
+                    </div>
+                  ) : (
+                    <>
+                      <div className="text-[11px] text-foreground font-mono font-medium leading-tight">
+                        {id}
+                      </div>
+                      {(item.isMarketItem && item.marketName || item.stackable) && (
+                        <div className="text-[9px] text-muted-foreground leading-tight truncate">
+                          {item.isMarketItem && item.marketName ? item.marketName : ''}
+                          {item.isMarketItem && item.marketName && item.stackable ? ' • ' : ''}
+                          {item.stackable && !item.marketName ? 'Stackable' : ''}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </button>
+            );
+          })}
         </div>
       </ScrollArea>
 
@@ -100,16 +439,6 @@ export const ItemList = () => {
             <SkipBack className="w-3.5 h-3.5 text-foreground" />
           </button>
           <button
-            onClick={() => handlePageChange(currentPage - 5)}
-            disabled={currentPage <= 5}
-            className={cn(
-              "w-7 h-7 flex items-center justify-center rounded bg-secondary hover:bg-secondary/80 transition-colors",
-              currentPage <= 5 && "opacity-50 cursor-not-allowed"
-            )}
-          >
-            <ChevronsLeft className="w-3.5 h-3.5 text-foreground" />
-          </button>
-          <button
             onClick={() => handlePageChange(currentPage - 1)}
             disabled={currentPage === 1}
             className={cn(
@@ -119,9 +448,14 @@ export const ItemList = () => {
           >
             <ChevronLeft className="w-3.5 h-3.5 text-foreground" />
           </button>
-          <div className="w-12 h-7 flex items-center justify-center rounded bg-secondary/50 text-xs font-mono text-foreground mx-1">
-            {currentPage}
-          </div>
+          <Input
+            type="text"
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
+            onKeyDown={handleInputKeyDown}
+            placeholder="-"
+            className="w-16 h-7 text-xs font-mono text-center bg-secondary/50 border-0 mx-1 px-1"
+          />
           <button
             onClick={() => handlePageChange(currentPage + 1)}
             disabled={currentPage === totalPages}
@@ -131,16 +465,6 @@ export const ItemList = () => {
             )}
           >
             <ChevronRight className="w-3.5 h-3.5 text-foreground" />
-          </button>
-          <button
-            onClick={() => handlePageChange(currentPage + 5)}
-            disabled={currentPage + 5 > totalPages}
-            className={cn(
-              "w-7 h-7 flex items-center justify-center rounded bg-secondary hover:bg-secondary/80 transition-colors",
-              currentPage + 5 > totalPages && "opacity-50 cursor-not-allowed"
-            )}
-          >
-            <ChevronsRight className="w-3.5 h-3.5 text-foreground" />
           </button>
           <button
             onClick={() => handlePageChange(totalPages)}

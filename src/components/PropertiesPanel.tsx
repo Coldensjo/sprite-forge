@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Label } from "./ui/label";
 import { Input } from "./ui/input";
 import { Switch } from "./ui/switch";
@@ -7,411 +7,1853 @@ import { Slider } from "./ui/slider";
 import { Separator } from "./ui/separator";
 import { Button } from "./ui/button";
 import { ScrollArea } from "./ui/scroll-area";
-import { SkipBack, ChevronLeft, Play, ChevronRight, SkipForward, ChevronUp, ChevronDown } from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "./ui/alert-dialog";
+import { SkipBack, ChevronLeft, Play, Pause, ChevronRight, SkipForward, ChevronUp, ChevronDown, FileQuestion, ZoomIn, ZoomOut, X, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, ArrowUpLeft, ArrowUpRight, ArrowDownLeft, ArrowDownRight, RotateCcw, Shuffle } from "lucide-react";
+import { useTibiaData } from "@/contexts/TibiaDataContext";
+import { ThingCategory, isValidSpriteId } from "@/lib/tibia";
+import { SpriteCanvas } from "./SpriteCanvas";
+import { CheckerBoard } from "./CheckerBoard";
+import { TibiaColorPicker } from "./TibiaColorPicker";
+import { MarketCategory } from "@/lib/tibia";
+
+interface ItemPropertiesState {
+  zoom: number;
+  panX: number;
+  panY: number;
+  patternX: number;
+  patternY: number;
+  patternZ: number;
+  currentFrame: number;
+  currentLayer: number;
+  isPlaying: boolean;
+  showExactSize: boolean;
+  showGrid: boolean;
+  outfitData: {
+    head: number;
+    body: number;
+    legs: number;
+    feet: number;
+    addons: boolean[];
+  };
+}
+
+const getItemStateKey = (category: ThingCategory, id: number) => {
+  return `sprite-forge-item-state-${category}-${id}`;
+};
+
+const loadItemState = (category: ThingCategory, id: number): Partial<ItemPropertiesState> | null => {
+  try {
+    if (typeof window !== 'undefined') {
+      const key = getItemStateKey(category, id);
+      const saved = localStorage.getItem(key);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        // Verify we got valid data
+        if (parsed && typeof parsed === 'object') {
+          return parsed;
+        }
+      }
+    }
+  } catch (e) {
+    console.error(`Failed to load item state for ${category}-${id} from localStorage:`, e);
+  }
+  return null;
+};
+
+const saveItemState = (category: ThingCategory, id: number, state: ItemPropertiesState) => {
+  try {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(getItemStateKey(category, id), JSON.stringify(state));
+    }
+  } catch (e) {
+    console.error('Failed to save item state to localStorage:', e);
+  }
+};
 
 export const PropertiesPanel = () => {
-  const [offsetEnabled, setOffsetEnabled] = useState(false);
-  const [lightEnabled, setLightEnabled] = useState(true);
-  const [lightIntensity, setLightIntensity] = useState(3);
+  const { data, openedItemId, openedItemCategory, setOpenedItemId, removeOpenedItem, selectedCategory, getThing, updateThing, notifySpritesLoaded, updateCounter } = useTibiaData();
+  const item = openedItemId && openedItemCategory ? getThing(openedItemId, openedItemCategory) : null;
 
+  // Draft state for editing
+  const [draftItem, setDraftItem] = useState<typeof item>(null);
+  const [hasChanges, setHasChanges] = useState(false);
+  const [showCloseConfirm, setShowCloseConfirm] = useState(false);
+
+  // Initialize draft when item changes
+  useEffect(() => {
+    if (item) {
+      setDraftItem({ ...item });
+      setHasChanges(false);
+    } else {
+      setDraftItem(null);
+      setHasChanges(false);
+    }
+  }, [item, openedItemId, updateCounter]);
+
+  const handlePropertyChange = (property: string, value: any) => {
+    if (!draftItem) return;
+
+    // Handle numeric conversions
+    let finalValue = value;
+    if (typeof (draftItem as any)[property] === 'number' && typeof value === 'string') {
+      finalValue = Number(value);
+    }
+
+    setDraftItem({ ...draftItem, [property]: finalValue });
+    setHasChanges(true);
+  };
+
+  const handleSave = () => {
+    if (!draftItem || !openedItemId || !hasChanges) return;
+
+    // Extract only the properties that exist in ThingType
+    const updates: Partial<typeof item> = {};
+    Object.keys(draftItem).forEach(key => {
+      if (item && (draftItem as any)[key] !== (item as any)[key]) {
+        (updates as any)[key] = (draftItem as any)[key];
+      }
+    });
+
+    if (openedItemCategory) {
+      updateThing(openedItemId, openedItemCategory, updates);
+    }
+    setHasChanges(false);
+  };
+
+  const handleClose = () => {
+    // If there are unsaved changes, ask for confirmation
+    if (hasChanges) {
+      setShowCloseConfirm(true);
+      return;
+    }
+    
+    // No changes, close immediately and delete everything
+    performClose();
+  };
+
+  const performClose = () => {
+    if (!openedItemId || !openedItemCategory) return;
+    
+    // Delete the item's state from localStorage
+    try {
+      if (typeof window !== 'undefined') {
+        const key = getItemStateKey(openedItemCategory, openedItemId);
+        localStorage.removeItem(key);
+      }
+    } catch (e) {
+      console.error('Failed to delete item state from localStorage:', e);
+    }
+    
+    // Remove item from opened items list (this will also update localStorage)
+    removeOpenedItem(openedItemId, openedItemCategory);
+    
+    setOpenedItemId(null);
+    setDraftItem(null);
+    setHasChanges(false);
+    setShowCloseConfirm(false);
+  };
+
+  // Visibility helpers based on category and version (matching Object Builder logic)
+  const clientVersion = data?.version.value || 0;
+  // ALWAYS use openedItemCategory when an item is opened - don't let selectedCategory affect the properties panel
+  const itemCategory = openedItemCategory || selectedCategory;
+  const isItem = itemCategory === ThingCategory.ITEM;
+  const isOutfit = itemCategory === ThingCategory.OUTFIT;
+  const isEffect = itemCategory === ThingCategory.EFFECT;
+  const isMissile = itemCategory === ThingCategory.MISSILE;
+
+  // Version-specific visibility checks
+  const showPatternZ = clientVersion >= 755;
+  const showGroundBorder = isItem && clientVersion >= 755;
+  const showHangable = isItem && clientVersion >= 755;
+  const showDontHide = isItem && clientVersion >= 780;
+  const showIgnoreLook = isItem && clientVersion >= 780;
+  const showHasCharges = isItem && clientVersion >= 780 && clientVersion <= 854;
+  const showFloorChange = isItem && clientVersion >= 710 && clientVersion <= 854;
+  const showTranslucent = isItem && clientVersion >= 860;
+  const showEquipment = isItem && clientVersion >= 900;
+  const showMarket = isItem && clientVersion >= 940;
+  const showNoMoveAnimation = isItem && clientVersion >= 1010;
+  const showDefaultActions = isItem && clientVersion >= 1021;
+  const showUsable = isItem && clientVersion >= 1021;
+  const showWrappable = isItem && clientVersion >= 1021;
+  const showTopEffect = isItem && clientVersion >= 1021;
+  const showAnimationProperties = clientVersion >= 1050;
+
+  // Category-specific visibility checks
+  const showPhysicsGround = isItem;
+  const showMinimap = isItem;
+  const showDisplacement = isItem || isOutfit;
+  const showDisplacementElevation = isItem;
+  const showLayerPosition = isItem;
+  const showWriting = isItem;
+  const showLensHelp = isItem;
+  const showInteraction = isItem;
+  const showHooks = isItem;
+  const showAnimateAlways = isOutfit;
+
+  const [offsetEnabled, setOffsetEnabled] = useState(item?.hasOffset || false);
+  const [lightEnabled, setLightEnabled] = useState(item?.hasLight || false);
+  const [lightIntensity, setLightIntensity] = useState(item?.lightLevel || 0);
+  const [zoom, setZoom] = useState(1);
+  const [panX, setPanX] = useState(0);
+  const [panY, setPanY] = useState(0);
+  const [showExactSize, setShowExactSize] = useState(false);
+  const [showGrid, setShowGrid] = useState(false);
+
+  // Pattern and frame state for rendering
+  const [patternX, setPatternX] = useState(0);
+  const [patternY, setPatternY] = useState(0);
+  const [patternZ, setPatternZ] = useState(0);
+  const [currentFrame, setCurrentFrame] = useState(0);
+  const [currentLayer, setCurrentLayer] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+
+  // Outfit data state (for outfit colorization and addons)
+  const [outfitData, setOutfitData] = useState({
+    head: 0,
+    body: 0,
+    legs: 0,
+    feet: 0,
+    addons: [false, false] // [addon1, addon2]
+  });
+
+  // Track if we've loaded state for current item
+  const hasLoadedStateRef = useRef(false);
+  // Track if we're currently loading state (prevents save effect from running during load)
+  const isLoadingStateRef = useRef(false);
+  // Track previous item to save its state when switching
+  const previousItemRef = useRef<{ id: number; category: ThingCategory } | null>(null);
+  // Use refs to track current state values so we can capture them reliably when switching items
+  const stateRefs = useRef({
+    zoom: 1,
+    panX: 0,
+    panY: 0,
+    patternX: 0,
+    patternY: 0,
+    patternZ: 0,
+    currentFrame: 0,
+    currentLayer: 0,
+    isPlaying: false,
+    showExactSize: false,
+    showGrid: false,
+    outfitData: { head: 0, body: 0, legs: 0, feet: 0, addons: [false, false] }
+  });
+  
+  // Keep refs in sync with state
+  useEffect(() => {
+    stateRefs.current.zoom = zoom;
+    stateRefs.current.panX = panX;
+    stateRefs.current.panY = panY;
+    stateRefs.current.patternX = patternX;
+    stateRefs.current.patternY = patternY;
+    stateRefs.current.patternZ = patternZ;
+    stateRefs.current.currentFrame = currentFrame;
+    stateRefs.current.currentLayer = currentLayer;
+    stateRefs.current.isPlaying = isPlaying;
+    stateRefs.current.showExactSize = showExactSize;
+    stateRefs.current.showGrid = showGrid;
+    stateRefs.current.outfitData = outfitData;
+  }, [zoom, panX, panY, patternX, patternY, patternZ, currentFrame, currentLayer, isPlaying, showExactSize, showGrid, outfitData]);
+
+  // Animation loop
+  useEffect(() => {
+    let timeoutId: NodeJS.Timeout;
+
+    if (isPlaying && item && draftItem && item.frames > 1) {
+      // For outfits, skip first frame if animateAlways is false
+      const skipFirstFrame = isOutfit && draftItem && !draftItem.animateAlways;
+      const startFrame = skipFirstFrame ? 1 : 0;
+      const endFrame = item.frames - 1;
+      const frameCount = endFrame - startFrame + 1;
+
+      if (frameCount <= 0) {
+        setIsPlaying(false);
+        return;
+      }
+
+      const animate = () => {
+        setCurrentFrame(prev => {
+          let nextFrame = prev + 1;
+          if (nextFrame > endFrame) {
+            nextFrame = startFrame;
+          }
+          return nextFrame;
+        });
+      };
+
+      // Determine duration for current frame
+      let duration = 200; // Default 200ms
+      if (draftItem.frameDurations && item.frameDurations[currentFrame]) {
+        const fd = item.frameDurations[currentFrame];
+        // Use minimum duration if available, otherwise default
+        duration = fd.minimum > 0 ? fd.minimum : 200;
+      }
+
+      timeoutId = setTimeout(animate, duration);
+    }
+
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, [isPlaying, item, currentFrame, isOutfit, draftItem]);
+
+  const zoomLevels = [1, 2, 4, 8];
+
+  const handleZoomIn = () => {
+    const currentIndex = zoomLevels.indexOf(zoom);
+    if (currentIndex < zoomLevels.length - 1) {
+      setZoom(zoomLevels[currentIndex + 1]);
+    }
+  };
+
+  const handleZoomOut = () => {
+    const currentIndex = zoomLevels.indexOf(zoom);
+    if (currentIndex > 0) {
+      setZoom(zoomLevels[currentIndex - 1]);
+    }
+  };
+
+  const handleResetPan = () => {
+    setPanX(0);
+    setPanY(0);
+  };
+
+  // Direction handlers for outfits
+  // Arrow buttons control direction (patternX):
+  // Up = North, Down = South, Left = West, Right = East
+  // Tibia directions: 0=East, 1=North, 2=South, 3=West
+
+  const handlePatternUp = () => {
+    // Up arrow = North (patternX = 0) - SWAPPED
+    setPatternX(0);
+  };
+
+  const handlePatternDown = () => {
+    // Down arrow = South (patternX = 2)
+    if (item && item.patternX >= 3) {
+      setPatternX(2);
+    }
+  };
+
+  const handlePatternLeft = () => {
+    // Left arrow = West (patternX = 3)
+    if (item && item.patternX >= 4) {
+      setPatternX(3);
+    }
+  };
+
+  const handlePatternRight = () => {
+    // Right arrow = East (patternX = 1) - SWAPPED
+    if (item && item.patternX >= 2) {
+      setPatternX(1);
+    }
+  };
+
+  // Frame navigation handlers
+  const handleFirstFrame = () => {
+    setCurrentFrame(0);
+
+  };
+
+  const handlePrevFrame = () => {
+    if (currentFrame > 0) {
+      setCurrentFrame(currentFrame - 1);
+    }
+  };
+
+  const handleNextFrame = () => {
+    if (item && currentFrame < item.frames - 1) {
+      setCurrentFrame(currentFrame + 1);
+    }
+  };
+
+  const handleLastFrame = () => {
+    if (item) {
+      setCurrentFrame(draftItem.frames - 1);
+    }
+  };
+
+  const handlePlayPause = () => {
+    if (!isPlaying) {
+      // Starting animation - check if we need to skip first frame for outfits
+      if (isOutfit && draftItem && !draftItem.animateAlways && currentFrame === 0 && draftItem.frames > 1) {
+        setCurrentFrame(1);
+      }
+      setIsPlaying(true);
+    } else {
+      // Pausing animation - for outfits, return to idle frame (frame 0)
+      setIsPlaying(false);
+      if (isOutfit) {
+        setCurrentFrame(0);
+      }
+    }
+  };
+
+  const handleRandomizeColors = () => {
+    setOutfitData({
+      ...outfitData,
+      head: Math.floor(Math.random() * 133),
+      body: Math.floor(Math.random() * 133),
+      legs: Math.floor(Math.random() * 133),
+      feet: Math.floor(Math.random() * 133),
+    });
+  };
+
+  // Load saved state when item changes
+  useEffect(() => {
+    if (draftItem && openedItemId && openedItemCategory) {
+      // Save previous item's state before loading new item (use refs to get reliable values)
+      if (previousItemRef.current && 
+          (previousItemRef.current.id !== openedItemId || previousItemRef.current.category !== openedItemCategory) &&
+          hasLoadedStateRef.current) {
+        // Use refs to capture state values reliably (these are from the previous item)
+        const prevState: ItemPropertiesState = {
+          zoom: stateRefs.current.zoom,
+          panX: stateRefs.current.panX,
+          panY: stateRefs.current.panY,
+          patternX: stateRefs.current.patternX,
+          patternY: stateRefs.current.patternY,
+          patternZ: stateRefs.current.patternZ,
+          currentFrame: stateRefs.current.currentFrame,
+          currentLayer: stateRefs.current.currentLayer,
+          isPlaying: stateRefs.current.isPlaying,
+          showExactSize: stateRefs.current.showExactSize,
+          showGrid: stateRefs.current.showGrid,
+          outfitData: { ...stateRefs.current.outfitData } // Deep copy for outfitData
+        };
+        saveItemState(previousItemRef.current.category, previousItemRef.current.id, prevState);
+      }
+      
+      // Reset the loaded flag BEFORE loading new state (prevents saving during transition)
+      hasLoadedStateRef.current = false;
+      // Set loading flag to prevent save effect from running
+      isLoadingStateRef.current = true;
+      
+      // Load the saved state for THIS SPECIFIC item (using the exact ID and category)
+      const savedState = loadItemState(openedItemCategory, openedItemId);
+      
+      
+      // ALWAYS set ALL properties - use saved state if available, otherwise use defaults
+      // This ensures no state leaks from previous items
+      const zoomValue = savedState?.zoom !== undefined ? savedState.zoom : 1;
+      const panXValue = savedState?.panX !== undefined ? savedState.panX : 0;
+      const panYValue = savedState?.panY !== undefined ? savedState.panY : 0;
+      
+      // Pattern values with defaults based on item type
+      // Use openedItemCategory directly (not itemCategory which depends on selectedCategory)
+      let patternXValue = savedState?.patternX !== undefined ? savedState.patternX : 0;
+      let patternYValue = savedState?.patternY !== undefined ? savedState.patternY : 0;
+      if (!savedState) {
+        // Set defaults based on opened item's category if no saved state
+        if (openedItemCategory === ThingCategory.MISSILE) {
+          patternXValue = 1;
+          patternYValue = 2;
+        } else if (openedItemCategory === ThingCategory.OUTFIT) {
+          patternXValue = 2;
+          patternYValue = 0;
+        }
+      }
+      // Validate against item limits
+      patternXValue = Math.min(patternXValue, Math.max(0, draftItem.patternX - 1));
+      patternYValue = Math.min(patternYValue, Math.max(0, draftItem.patternY - 1));
+      const patternZValue = savedState?.patternZ !== undefined 
+        ? Math.min(savedState.patternZ, Math.max(0, draftItem.patternZ - 1))
+        : 0;
+      
+      const currentFrameValue = savedState?.currentFrame !== undefined
+        ? Math.min(savedState.currentFrame, Math.max(0, draftItem.frames - 1))
+        : 0;
+      const currentLayerValue = savedState?.currentLayer !== undefined
+        ? Math.min(savedState.currentLayer, Math.max(0, draftItem.layers - 1))
+        : 0;
+      const isPlayingValue = savedState?.isPlaying !== undefined ? savedState.isPlaying : false;
+      const showExactSizeValue = savedState?.showExactSize !== undefined ? savedState.showExactSize : false;
+      const showGridValue = savedState?.showGrid !== undefined ? savedState.showGrid : false;
+      
+      // Outfit data
+      let outfitDataValue;
+      if (savedState?.outfitData) {
+        outfitDataValue = { ...savedState.outfitData };
+        // Ensure addons array matches item's patternY
+        if (isOutfit && item) {
+          const addonCount = Math.max(0, item.patternY - 1);
+          if (!outfitDataValue.addons || outfitDataValue.addons.length !== addonCount) {
+            outfitDataValue.addons = Array(addonCount).fill(false);
+          } else {
+            outfitDataValue.addons = outfitDataValue.addons.slice(0, addonCount);
+          }
+        }
+      } else if (isOutfit && item) {
+        const addonCount = Math.max(0, item.patternY - 1);
+        outfitDataValue = {
+          head: 0,
+          body: 0,
+          legs: 0,
+          feet: 0,
+          addons: Array(addonCount).fill(false)
+        };
+      } else {
+        outfitDataValue = { head: 0, body: 0, legs: 0, feet: 0, addons: [false, false] };
+      }
+      
+      // Set ALL state values explicitly (no conditional setting)
+      setZoom(zoomValue);
+      stateRefs.current.zoom = zoomValue;
+      setPanX(panXValue);
+      stateRefs.current.panX = panXValue;
+      setPanY(panYValue);
+      stateRefs.current.panY = panYValue;
+      setPatternX(patternXValue);
+      stateRefs.current.patternX = patternXValue;
+      setPatternY(patternYValue);
+      stateRefs.current.patternY = patternYValue;
+      setPatternZ(patternZValue);
+      stateRefs.current.patternZ = patternZValue;
+      setCurrentFrame(currentFrameValue);
+      stateRefs.current.currentFrame = currentFrameValue;
+      setCurrentLayer(currentLayerValue);
+      stateRefs.current.currentLayer = currentLayerValue;
+      setIsPlaying(isPlayingValue);
+      stateRefs.current.isPlaying = isPlayingValue;
+      setShowExactSize(showExactSizeValue);
+      stateRefs.current.showExactSize = showExactSizeValue;
+      setShowGrid(showGridValue);
+      stateRefs.current.showGrid = showGridValue;
+      setOutfitData(outfitDataValue);
+      stateRefs.current.outfitData = { ...outfitDataValue };
+      
+      // Always update these from item
+      setOffsetEnabled(draftItem.hasOffset);
+      setLightEnabled(draftItem.hasLight);
+      setLightIntensity(draftItem.lightLevel);
+      
+      // Update previous item ref immediately after loading completes
+      previousItemRef.current = { id: openedItemId, category: openedItemCategory };
+      hasLoadedStateRef.current = true;
+      // Clear loading flag AFTER a brief delay to ensure all state updates are complete
+      // This prevents the save effect from running immediately after loading
+      setTimeout(() => {
+        isLoadingStateRef.current = false;
+      }, 100);
+    } else {
+      hasLoadedStateRef.current = false;
+      isLoadingStateRef.current = false;
+      previousItemRef.current = null;
+    }
+  }, [draftItem, openedItemId, openedItemCategory, isOutfit, item]);
+
+  // Save state whenever properties change (but only after state has been loaded and for current item)
+  useEffect(() => {
+    // Don't save if we're currently loading state (prevents overwriting during load)
+    if (isLoadingStateRef.current) {
+      return;
+    }
+    
+    // CRITICAL: Only save if:
+    // 1. We have a valid item
+    // 2. State has been loaded (not during transition)
+    // 3. previousItemRef matches current item (ensures we're saving for the right item)
+    if (openedItemId && openedItemCategory && hasLoadedStateRef.current && draftItem) {
+      // Double-check that we're saving for the correct item
+      if (previousItemRef.current && 
+          previousItemRef.current.id === openedItemId && 
+          previousItemRef.current.category === openedItemCategory) {
+        // Use current state values (refs are kept in sync)
+        const state: ItemPropertiesState = {
+          zoom,
+          panX,
+          panY,
+          patternX,
+          patternY,
+          patternZ,
+          currentFrame,
+          currentLayer,
+          isPlaying,
+          showExactSize,
+          showGrid,
+          outfitData: { ...outfitData } // Deep copy
+        };
+        // Save with the EXACT item ID and category to ensure correct key
+        saveItemState(openedItemCategory, openedItemId, state);
+      }
+    }
+  }, [zoom, panX, panY, patternX, patternY, patternZ, currentFrame, currentLayer, isPlaying, showExactSize, showGrid, outfitData, openedItemId, openedItemCategory, draftItem]);
+
+  // Load ALL sprites for the selected item (handles animated items correctly)
+  useEffect(() => {
+    if (!data || !item || !draftItem || !data.sprPath || !draftItem.spriteIndex) return;
+
+    // Collect all unique sprite IDs used by this item
+    const spriteIds = Array.from(new Set(draftItem.spriteIndex.filter(id => id > 0)));
+
+    if (spriteIds.length === 0) return;
+
+    const loadItemSprites = async () => {
+      try {
+        const { loadSpriteIds } = await import('@/lib/tibia');
+        // Load ALL sprites for this item (all frames, patterns, layers)
+        await loadSpriteIds(
+          data.sprPath!,
+          spriteIds,
+          data.transparency,
+          data.sprites
+        );
+        notifySpritesLoaded();
+      } catch (err) {
+        console.error('Failed to load item sprites:', err);
+      }
+    };
+
+    loadItemSprites();
+  }, [data, item, draftItem, notifySpritesLoaded]);
+
+
+  // Show empty state if no data loaded or no item selected
+  if (!data || !item) {
+    return (
+      <div className="flex-1 bg-card rounded-lg shadow-island-lg flex flex-col overflow-hidden">
+        <div className="h-8 px-4 flex items-center border-b border-border/50 bg-secondary/50">
+          <h2 className="text-xs font-semibold text-foreground uppercase tracking-wide">Object Properties</h2>
+        </div>
+        <div className="flex-1 flex items-center justify-center p-4">
+          <div className="text-center text-muted-foreground">
+            <FileQuestion className="h-16 w-16 mx-auto mb-3 opacity-50" />
+            <p className="text-sm font-medium">No {itemCategory === ThingCategory.ITEM ? 'item' :
+              itemCategory === ThingCategory.OUTFIT ? 'outfit' :
+                itemCategory === ThingCategory.EFFECT ? 'effect' : 'missile'} selected</p>
+            <p className="text-xs mt-1">Select a {itemCategory === ThingCategory.ITEM ? 'item' :
+              itemCategory === ThingCategory.OUTFIT ? 'outfit' :
+                itemCategory === ThingCategory.EFFECT ? 'effect' : 'missile'} from the list to view properties</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const firstSpriteId = item && item.spriteIndex && item.spriteIndex.length > 0 ? item.spriteIndex[0] : 0;
+
+  // Wait for draft to be initialized
+  if (!draftItem) {
+    return (
+      <div className="flex-1 bg-card rounded-lg shadow-island-lg flex flex-col overflow-hidden">
+        <div className="h-8 px-4 flex items-center border-b border-border/50 bg-secondary/50">
+          <h2 className="text-xs font-semibold text-foreground uppercase tracking-wide">Object Properties</h2>
+        </div>
+        <div className="flex-1 flex items-center justify-center p-4">
+          <div className="text-center text-muted-foreground">
+            <FileQuestion className="h-16 w-16 mx-auto mb-3 opacity-50" />
+            <p className="text-sm font-medium">No {itemCategory === ThingCategory.ITEM ? 'item' :
+              itemCategory === ThingCategory.OUTFIT ? 'outfit' :
+                itemCategory === ThingCategory.EFFECT ? 'effect' : 'missile'} selected</p>
+            <p className="text-xs mt-1">Select a {itemCategory === ThingCategory.ITEM ? 'item' :
+              itemCategory === ThingCategory.OUTFIT ? 'outfit' :
+                itemCategory === ThingCategory.EFFECT ? 'effect' : 'missile'} from the list to view properties</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 bg-card rounded-lg shadow-island-lg flex flex-col overflow-hidden">
-      <div className="h-10 px-4 flex items-center border-b border-border/50 bg-secondary/50">
-        <h2 className="text-xs font-semibold text-foreground uppercase tracking-wide">Item Properties</h2>
+      <div className="h-8 px-4 flex items-center border-b border-border/50 bg-secondary/50">
+        <h2 className="text-xs font-semibold text-foreground uppercase tracking-wide">
+          {itemCategory === ThingCategory.ITEM ? 'Object' :
+            itemCategory === ThingCategory.OUTFIT ? 'Outfit' :
+              itemCategory === ThingCategory.EFFECT ? 'Effect' : 'Missile'} Properties - ID {draftItem.id}
+          {draftItem.isMarketItem && draftItem.marketName && ` - ${draftItem.marketName}`}
+        </h2>
       </div>
 
       <ScrollArea className="flex-1">
         <div className="p-4">
-        <div className="flex gap-4 mb-4">
-          <div className="flex-shrink-0 w-[360px]">
-            <div className="flex flex-col items-center justify-between space-y-4">
-              <div className="relative w-full">
-                <div className="absolute top-2 left-1/2 -translate-x-1/2 z-10 flex items-center gap-1 bg-secondary/90 backdrop-blur-sm rounded-md p-1 border border-border/50 shadow-lg">
-                  <Button variant="ghost" size="icon" className="h-7 w-7 hover:bg-secondary/50">
-                    <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" />
-                  </Button>
-                  <Button variant="ghost" size="icon" className="h-7 w-7 hover:bg-secondary/50">
-                    <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
-                  </Button>
-                  <Button variant="ghost" size="icon" className="h-7 w-7 bg-secondary border border-border hover:bg-secondary/80">
-                    <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-                  </Button>
-                  <Button variant="ghost" size="icon" className="h-7 w-7 hover:bg-secondary/50">
-                    <ChevronLeft className="h-3.5 w-3.5 text-muted-foreground" />
-                  </Button>
-                </div>
-                <div className="w-full aspect-square bg-secondary/30 border border-border/50 rounded-lg flex items-center justify-center">
-                  <div
-                    className="w-3/4 h-3/4 bg-gradient-to-br from-orange-500 to-red-600 rounded-lg"
-                    style={{ boxShadow: "0 0 40px rgba(251, 146, 60, 0.4)", transform: "rotate(-5deg)" }}
-                  />
-                </div>
-                <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-secondary/90 backdrop-blur-sm px-2 py-1 rounded text-xs text-muted-foreground font-mono border border-border/50">
-                  32x32
-                </div>
-              </div>
-              <div className="w-full flex flex-col items-center gap-2">
-                <div className="flex items-center gap-1 bg-secondary/50 rounded-lg p-1 border border-border/50">
-                  <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-secondary">
-                    <SkipBack className="h-4 w-4" />
-                  </Button>
-                  <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-secondary">
-                    <ChevronLeft className="h-4 w-4" />
-                  </Button>
-                  <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-primary/20">
-                    <Play className="h-4 w-4" />
-                  </Button>
-                  <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-secondary">
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
-                  <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-secondary">
-                    <SkipForward className="h-4 w-4" />
-                  </Button>
-                </div>
-                <div className="bg-secondary/50 backdrop-blur-sm px-3 py-1 rounded text-xs text-muted-foreground font-mono border border-border/50">
-                  Frame 1/8
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-4 flex-1">
-            <div className="bg-gradient-to-br from-secondary/40 to-secondary/20 rounded-md p-3 border border-border/40">
-              <div className="flex items-center gap-1.5 pb-2 mb-4 border-b border-border/30">
-                <div className="w-0.5 h-3 bg-primary rounded-full" />
-                <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Dimensions</h3>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="flex items-center justify-between gap-2">
-                  <Label htmlFor="width" className="text-xs whitespace-nowrap text-foreground">
-                    Width
-                  </Label>
-                  <Input
-                    id="width"
-                    type="number"
-                    min="1"
-                    max="128"
-                    defaultValue="1"
-                    className="h-8 w-16 text-xs font-mono text-right bg-background/50"
-                  />
-                </div>
-                <div className="flex items-center justify-between gap-2">
-                  <Label htmlFor="height" className="text-xs whitespace-nowrap text-foreground">
-                    Height
-                  </Label>
-                  <Input
-                    id="height"
-                    type="number"
-                    min="1"
-                    max="128"
-                    defaultValue="1"
-                    className="h-8 w-16 text-xs font-mono text-right bg-background/50"
-                  />
-                </div>
-                <div className="flex items-center justify-between gap-2">
-                  <Label htmlFor="crop-size" className="text-xs whitespace-nowrap text-foreground">
-                    Crop Size
-                  </Label>
-                  <Input
-                    id="crop-size"
-                    type="number"
-                    min="1"
-                    max="128"
-                    defaultValue="32"
-                    className="h-8 w-16 text-xs font-mono text-right bg-background/50"
-                  />
-                </div>
-                <div className="flex items-center justify-between gap-2">
-                  <Label htmlFor="layers" className="text-xs whitespace-nowrap text-foreground">
-                    Layers
-                  </Label>
-                  <Input
-                    id="layers"
-                    type="number"
-                    min="1"
-                    max="128"
-                    defaultValue="1"
-                    className="h-8 w-16 text-xs font-mono text-right bg-background/50"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-gradient-to-br from-secondary/40 to-secondary/20 rounded-md p-3 border border-border/40">
-              <div className="flex items-center gap-1.5 pb-2 mb-4 border-b border-border/30">
-                <div className="w-0.5 h-3 bg-primary rounded-full" />
-                <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Pattern & Frames</h3>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="flex items-center justify-between gap-2">
-                  <Label htmlFor="pattern-x" className="text-xs whitespace-nowrap text-foreground">
-                    Pattern X
-                  </Label>
-                  <Input
-                    id="pattern-x"
-                    type="number"
-                    defaultValue="4"
-                    className="h-8 w-16 text-xs font-mono text-center bg-background/50"
-                  />
-                </div>
-                <div className="flex items-center justify-between gap-2">
-                  <Label htmlFor="pattern-y" className="text-xs whitespace-nowrap text-foreground">
-                    Pattern Y
-                  </Label>
-                  <Input
-                    id="pattern-y"
-                    type="number"
-                    defaultValue="4"
-                    className="h-8 w-16 text-xs font-mono text-center bg-background/50"
-                  />
-                </div>
-                <div className="flex items-center justify-between gap-2">
-                  <Label htmlFor="pattern-z" className="text-xs whitespace-nowrap text-foreground">
-                    Pattern Z
-                  </Label>
-                  <Input
-                    id="pattern-z"
-                    type="number"
-                    defaultValue="1"
-                    className="h-8 w-16 text-xs font-mono text-center bg-background/50"
-                  />
-                </div>
-                <div className="flex items-center justify-between gap-2">
-                  <Label htmlFor="frames" className="text-xs whitespace-nowrap text-foreground">
-                    Frames
-                  </Label>
-                  <Input
-                    id="frames"
-                    type="number"
-                    defaultValue="1"
-                    className="h-8 w-16 text-xs font-mono text-right bg-background/50"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-gradient-to-br from-secondary/40 to-secondary/20 rounded-md p-3 border border-border/40">
-              <div className="flex items-center justify-between pb-2 mb-4 border-b border-border/30">
-                <div className="flex items-center gap-1.5">
-                  <div className="w-0.5 h-3 bg-primary rounded-full" />
-                  <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Offset</h3>
-                </div>
-                <Switch id="offset-enabled" checked={offsetEnabled} onCheckedChange={setOffsetEnabled} />
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-1">
-                  <Label htmlFor="offset-x" className="text-xs font-medium text-muted-foreground/90">
-                    Offset X
-                  </Label>
-                  <Input
-                    id="offset-x"
-                    type="number"
-                    defaultValue="0"
-                    disabled={!offsetEnabled}
-                    className="h-8 text-xs font-mono text-right bg-background/50"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="offset-y" className="text-xs font-medium text-muted-foreground/90">
-                    Offset Y
-                  </Label>
-                  <Input
-                    id="offset-y"
-                    type="number"
-                    defaultValue="0"
-                    disabled={!offsetEnabled}
-                    className="h-8 text-xs font-mono text-right bg-background/50"
-                  />
-                </div>
-              </div>
-            </div>
-
-          </div>
-        </div>
-
-        <Separator />
-
-        {/* properties panel */}
-        <div className="flex gap-4 mt-4">
-          <div className="flex-1 space-y-4 min-w-0">
-            <div className="bg-gradient-to-br from-secondary/40 to-secondary/20 rounded-md p-3 border border-border/40">
-              <div className="flex items-center gap-1.5 pb-2 mb-3 border-b border-border/30">
-                <div className="w-0.5 h-3 bg-primary rounded-full" />
-                <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Floor Settings</h3>
-              </div>
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="floor" className="text-xs">
-                    Is Floor
-                  </Label>
-                  <Switch id="floor" />
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-gradient-to-br from-secondary/40 to-secondary/20 rounded-md p-3 border border-border/40">
-              <div className="flex items-center justify-between pb-2 mb-4 border-b border-border/30">
-                <div className="flex items-center gap-1.5">
-                  <div className="w-0.5 h-3 bg-primary rounded-full" />
-                  <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Light Settings</h3>
-                </div>
-                <Switch id="light-enabled" checked={lightEnabled} onCheckedChange={setLightEnabled} />
-              </div>
-              <div className="space-y-4">
-                <div className="flex items-center justify-between gap-4">
-                  <Label htmlFor="light-color" className="text-xs whitespace-nowrap">
-                    Light Color
-                  </Label>
-                  <div className="flex gap-2 items-center">
-                    <Input
-                      id="light-color"
-                      type="number"
-                      defaultValue="156"
-                      disabled={!lightEnabled}
-                      className="h-8 w-20 text-xs font-mono text-right bg-background/50"
-                    />
-                    <div className="w-8 h-8 rounded border border-border bg-orange-500 flex-shrink-0" />
+          <div className={`grid gap-4 mb-4 grid-cols-1 min-[820px]:grid-cols-[361px_1fr] ${isOutfit ? '' : 'min-[1400px]:grid-cols-[361px_1fr_1fr]'}`}>
+            <div className="w-full max-w-[361px] mx-auto min-[820px]:w-[361px] min-[820px]:max-w-none">
+              <div className="flex flex-col items-center justify-between space-y-4">
+                <div className="relative w-full">
+                  {/* Size badge - Top Left */}
+                  <div className="absolute top-2 left-2 z-10 bg-secondary/90 backdrop-blur-sm px-2 py-0.5 rounded text-[10px] text-muted-foreground font-mono border border-border/50 shadow-lg">
+                    {draftItem.width * draftItem.exactSize}x{draftItem.height * draftItem.exactSize}
                   </div>
+
+                  {/* Pattern controls - Top Center (Outfits only) */}
+                  {itemCategory === ThingCategory.OUTFIT && (
+                    <div className="absolute top-2 left-1/2 -translate-x-1/2 z-10 flex items-center gap-0.5 bg-secondary/90 backdrop-blur-sm rounded-md px-1 py-0.5 border border-border/50 shadow-lg">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 hover:bg-primary/20 hover:text-primary transition-colors p-0"
+                        onClick={handlePatternUp}
+                        disabled={!item}
+                        title="North"
+                      >
+                        <ChevronUp className="h-3 w-3" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 hover:bg-primary/20 hover:text-primary transition-colors p-0"
+                        onClick={handlePatternRight}
+                        disabled={!item || item.patternX < 2}
+                        title="East"
+                      >
+                        <ChevronRight className="h-3 w-3" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 hover:bg-primary/20 hover:text-primary transition-colors p-0"
+                        onClick={handlePatternDown}
+                        disabled={!item || item.patternX < 3}
+                        title="South"
+                      >
+                        <ChevronDown className="h-3 w-3" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 hover:bg-primary/20 hover:text-primary transition-colors p-0"
+                        onClick={handlePatternLeft}
+                        disabled={!item || item.patternX < 4}
+                        title="West"
+                      >
+                        <ChevronLeft className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  )}
+
+                  {/* Missile Directional Controls - Overlay on Canvas */}
+                  {itemCategory === ThingCategory.MISSILE && (
+                    <div className="absolute inset-0 z-10 pointer-events-none">
+                      {/* Top Row */}
+                      <div className="absolute top-8 left-1/2 -translate-x-1/2 flex gap-8 pointer-events-auto">
+                        <Button variant="ghost" size="icon" className="h-8 w-8 p-0 bg-secondary/80 hover:bg-secondary border border-border/50 rounded-full" onClick={() => { setPatternX(0); setPatternY(0); }}>
+                          <ArrowUpLeft className="h-4 w-4 text-muted-foreground" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 p-0 bg-secondary/80 hover:bg-secondary border border-border/50 rounded-full" onClick={() => { setPatternX(1); setPatternY(0); }}>
+                          <ArrowUp className="h-4 w-4 text-muted-foreground" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 p-0 bg-secondary/80 hover:bg-secondary border border-border/50 rounded-full" onClick={() => { setPatternX(2); setPatternY(0); }}>
+                          <ArrowUpRight className="h-4 w-4 text-muted-foreground" />
+                        </Button>
+                      </div>
+
+                      {/* Middle Row */}
+                      <div className="absolute top-1/2 -translate-y-1/2 left-8 flex flex-col gap-1 pointer-events-auto">
+                        <Button variant="ghost" size="icon" className="h-8 w-8 p-0 bg-secondary/80 hover:bg-secondary border border-border/50 rounded-full" onClick={() => { setPatternX(0); setPatternY(1); }}>
+                          <ArrowLeft className="h-4 w-4 text-muted-foreground" />
+                        </Button>
+                      </div>
+                      <div className="absolute top-1/2 -translate-y-1/2 right-8 flex flex-col gap-1 pointer-events-auto">
+                        <Button variant="ghost" size="icon" className="h-8 w-8 p-0 bg-secondary/80 hover:bg-secondary border border-border/50 rounded-full" onClick={() => { setPatternX(2); setPatternY(1); }}>
+                          <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                        </Button>
+                      </div>
+
+                      {/* Bottom Row */}
+                      <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex gap-8 pointer-events-auto">
+                        <Button variant="ghost" size="icon" className="h-8 w-8 p-0 bg-secondary/80 hover:bg-secondary border border-border/50 rounded-full" onClick={() => { setPatternX(0); setPatternY(2); }}>
+                          <ArrowDownLeft className="h-4 w-4 text-muted-foreground" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 p-0 bg-secondary/80 hover:bg-secondary border border-border/50 rounded-full" onClick={() => { setPatternX(1); setPatternY(2); }}>
+                          <ArrowDown className="h-4 w-4 text-muted-foreground" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 p-0 bg-secondary/80 hover:bg-secondary border border-border/50 rounded-full" onClick={() => { setPatternX(2); setPatternY(2); }}>
+                          <ArrowDownRight className="h-4 w-4 text-muted-foreground" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Zoom controls - Top Right (Vertical) */}
+                  <div className="absolute top-2 right-2 z-10 flex flex-col items-center gap-1">
+                    <div className="flex flex-col items-center gap-0.5 bg-secondary/90 backdrop-blur-sm rounded-md px-1 py-0.5 border border-border/50 shadow-lg">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 hover:bg-secondary/50 p-0"
+                        onClick={handleZoomIn}
+                        disabled={zoom === zoomLevels[zoomLevels.length - 1]}
+                      >
+                        <ZoomIn className="h-3 w-3 text-muted-foreground" />
+                      </Button>
+                      <div className="px-1 text-[10px] font-mono text-foreground min-w-[1.5rem] text-center">
+                        {zoom}x
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 hover:bg-secondary/50 p-0"
+                        onClick={handleZoomOut}
+                        disabled={zoom === zoomLevels[0]}
+                      >
+                        <ZoomOut className="h-3 w-3 text-muted-foreground" />
+                      </Button>
+                    </div>
+                    <div className="bg-secondary/90 backdrop-blur-sm rounded-md px-1 py-0.5 border border-border/50 shadow-lg">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 hover:bg-secondary/50 p-0"
+                        onClick={handleResetPan}
+                        title="Reset center"
+                      >
+                        <RotateCcw className="h-3 w-3 text-muted-foreground" />
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Sprite Canvas */}
+                  <CheckerBoard className="w-full aspect-square border border-border/50 rounded-lg flex items-center justify-center overflow-hidden">
+                    {firstSpriteId > 0 ? (
+                      <SpriteCanvas
+                        renderMode={(openedItemCategory === ThingCategory.MISSILE || openedItemCategory === ThingCategory.OUTFIT) ? "preview" : "full"}
+                        thing={item}
+                        patternX={patternX}
+                        patternY={patternY}
+                        patternZ={patternZ}
+                        frame={currentFrame}
+                        layer={currentLayer}
+                        scale={zoom}
+                        panX={panX}
+                        panY={panY}
+                        onPanChange={(x, y) => {
+                          setPanX(x);
+                          setPanY(y);
+                        }}
+                        showEmpty
+                        showGrid={showGrid}
+                        showExactSize={showExactSize}
+                        outfitData={isOutfit ? outfitData : undefined}
+                      />
+                    ) : (
+                      <div className="text-muted-foreground text-xs">No sprite</div>
+                    )}
+                  </CheckerBoard>
+
+                  {/* Frame controls - Floating above canvas bottom */}
+                  {draftItem.frames > 1 && (
+                    <>
+                      {/* Frame count - Bottom Left */}
+                      <div className="absolute bottom-2 left-2 z-10 bg-secondary/90 backdrop-blur-sm px-2 py-0.5 rounded text-[10px] text-muted-foreground font-mono border border-border/50 shadow-lg">
+                        Frame {currentFrame + 1}/{draftItem.frames}
+                      </div>
+
+                      {/* Frame bar - Bottom Center */}
+                      <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-10 flex items-center gap-0.5 bg-secondary/90 backdrop-blur-sm rounded-md px-1 py-0.5 border border-border/50 shadow-lg">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 hover:bg-secondary/50 p-0"
+                          onClick={handleFirstFrame}
+                          disabled={currentFrame === 0 || isPlaying}
+                        >
+                          <SkipBack className="h-3 w-3" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 hover:bg-secondary/50 p-0"
+                          onClick={handlePrevFrame}
+                          disabled={currentFrame === 0 || isPlaying}
+                        >
+                          <ChevronLeft className="h-3 w-3" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className={`h-6 w-6 p-0 ${isPlaying ? 'bg-primary/20 text-primary' : 'hover:bg-primary/20'}`}
+                          onClick={handlePlayPause}
+                        >
+                          {isPlaying ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 hover:bg-secondary/50 p-0"
+                          onClick={handleNextFrame}
+                          disabled={currentFrame >= item.frames - 1 || isPlaying}
+                        >
+                          <ChevronRight className="h-3 w-3" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 hover:bg-secondary/50 p-0"
+                          onClick={handleLastFrame}
+                          disabled={currentFrame >= item.frames - 1 || isPlaying}
+                        >
+                          <SkipForward className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </>
+                  )}
                 </div>
-                <div className="flex items-center justify-between gap-4">
-                  <Label htmlFor="light-intensity" className="text-xs whitespace-nowrap">
-                    Intensity
-                  </Label>
-                  <div className="flex gap-2 items-center flex-1 max-w-[180px]">
-                    <Slider
-                      value={[lightIntensity]}
-                      onValueChange={(value) => setLightIntensity(value[0])}
-                      max={5}
-                      step={1}
-                      disabled={!lightEnabled}
-                      className="flex-1"
-                    />
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-4 min-[820px]:col-span-1">
+              <div className="bg-secondary/20 rounded-md border border-border/40 overflow-hidden">
+                <div className="flex items-center gap-1.5 px-3 py-2 bg-secondary/40 border-b border-border/30">
+                  <div className="w-0.5 h-3 bg-primary rounded-full" />
+                  <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Dimensions</h3>
+                </div>
+                <div className="p-3 grid grid-cols-2 gap-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <Label htmlFor="width" className="text-xs whitespace-nowrap text-muted-foreground">
+                      Width
+                    </Label>
                     <Input
-                      id="light-intensity"
+                      id="width"
                       type="number"
-                      min="0"
-                      max="5"
-                      value={lightIntensity}
-                      onChange={(e) => setLightIntensity(Number(e.target.value))}
-                      disabled={!lightEnabled}
-                      className="h-8 w-12 text-xs font-mono text-right bg-background/50"
+                      min="1"
+                      max="128"
+                      value={draftItem.width}
+                      onChange={(e) => handlePropertyChange('width', e.target.value)}
+                      className="h-7 w-16 text-xs font-mono text-right bg-background/50 shadow-sm hover:bg-background/80 transition-colors"
                     />
                   </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <Label htmlFor="height" className="text-xs whitespace-nowrap text-muted-foreground">
+                      Height
+                    </Label>
+                    <Input
+                      id="height"
+                      type="number"
+                      min="1"
+                      max="128"
+                      value={draftItem.height}
+                      onChange={(e) => handlePropertyChange('height', e.target.value)}
+                      className="h-7 w-16 text-xs font-mono text-right bg-background/50 shadow-sm hover:bg-background/80 transition-colors"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <Label htmlFor="crop-size" className="text-xs whitespace-nowrap text-muted-foreground">
+                      Exact Size
+                    </Label>
+                    <Input
+                      id="crop-size"
+                      type="number"
+                      min="1"
+                      max="128"
+                      value={draftItem.exactSize}
+                      onChange={(e) => handlePropertyChange('exactSize', e.target.value)}
+                      className="h-7 w-16 text-xs font-mono text-right bg-background/50 shadow-sm hover:bg-background/80 transition-colors"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <Label htmlFor="frames" className="text-xs whitespace-nowrap text-muted-foreground">
+                      Frames
+                    </Label>
+                    <Input
+                      id="frames"
+                      type="number"
+                      value={draftItem.frames}
+                      onChange={(e) => handlePropertyChange('frames', e.target.value)}
+                      className="h-7 w-16 text-xs font-mono text-right bg-background/50 shadow-sm hover:bg-background/80 transition-colors"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-secondary/20 rounded-md border border-border/40 overflow-hidden">
+                <div className="flex items-center gap-1.5 px-3 py-2 bg-secondary/40 border-b border-border/30">
+                  <div className="w-0.5 h-3 bg-primary rounded-full" />
+                  <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Pattern & Layers</h3>
+                </div>
+                <div className="p-3 grid grid-cols-2 gap-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <Label htmlFor="pattern-x" className="text-xs whitespace-nowrap text-muted-foreground">
+                      Pattern X
+                    </Label>
+                    <Input
+                      id="pattern-x"
+                      type="number"
+                      value={draftItem.patternX}
+                      onChange={(e) => handlePropertyChange('patternX', e.target.value)}
+                      className="h-7 w-16 text-xs font-mono text-center bg-background/50 shadow-sm hover:bg-background/80 transition-colors"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <Label htmlFor="pattern-y" className="text-xs whitespace-nowrap text-muted-foreground">
+                      Pattern Y
+                    </Label>
+                    <Input
+                      id="pattern-y"
+                      type="number"
+                      value={draftItem.patternY}
+                      onChange={(e) => handlePropertyChange('patternY', e.target.value)}
+                      className="h-7 w-16 text-xs font-mono text-center bg-background/50 shadow-sm hover:bg-background/80 transition-colors"
+                    />
+                  </div>
+                  {showPatternZ && (
+                    <div className="flex items-center justify-between gap-2">
+                      <Label htmlFor="pattern-z" className="text-xs whitespace-nowrap text-muted-foreground">
+                        Pattern Z
+                      </Label>
+                      <Input
+                        id="pattern-z"
+                        type="number"
+                        value={draftItem.patternZ}
+                        onChange={(e) => handlePropertyChange('patternZ', e.target.value)}
+                        className="h-7 w-16 text-xs font-mono text-center bg-background/50 shadow-sm hover:bg-background/80 transition-colors"
+                      />
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between gap-2">
+                    <Label htmlFor="layers" className="text-xs whitespace-nowrap text-muted-foreground">
+                      Layers
+                    </Label>
+                    <Input
+                      id="layers"
+                      type="number"
+                      min="1"
+                      max="128"
+                      value={draftItem.layers}
+                      onChange={(e) => handlePropertyChange('layers', e.target.value)}
+                      className="h-7 w-16 text-xs font-mono text-right bg-background/50 shadow-sm hover:bg-background/80 transition-colors"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-secondary/20 rounded-md border border-border/40 overflow-hidden">
+                <div className="flex items-center gap-1.5 px-3 py-2 bg-secondary/40 border-b border-border/30">
+                  <div className="w-0.5 h-3 bg-primary rounded-full" />
+                  <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">View Options</h3>
+                </div>
+                <div className="p-3 grid grid-cols-2 gap-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <Label htmlFor="show-exact-size" className="text-xs whitespace-nowrap text-muted-foreground">
+                      Show Exact Size
+                    </Label>
+                    <Switch id="show-exact-size" checked={showExactSize} onCheckedChange={setShowExactSize} />
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <Label htmlFor="show-grid" className="text-xs whitespace-nowrap text-muted-foreground">
+                      Show Grid
+                    </Label>
+                    <Switch id="show-grid" checked={showGrid} onCheckedChange={setShowGrid} />
+                  </div>
                 </div>
               </div>
             </div>
 
-            <div className="bg-gradient-to-br from-secondary/40 to-secondary/20 rounded-md p-3 border border-border/40">
-              <div className="flex items-center gap-1.5 pb-2 mb-3 border-b border-border/30">
-                <div className="w-0.5 h-3 bg-primary rounded-full" />
-                <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Flags</h3>
-              </div>
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <Label className="text-xs">Can Be Grabbed</Label>
-                  <Switch defaultChecked />
-                </div>
-                <div className="flex items-center justify-between">
-                  <Label className="text-xs">Stackable</Label>
-                  <Switch />
-                </div>
-                <div className="flex items-center justify-between">
-                  <Label className="text-xs">Blocks Path</Label>
-                  <Switch />
-                </div>
-                <div className="flex items-center justify-between">
-                  <Label className="text-xs">Full Ground</Label>
-                  <Switch defaultChecked />
-                </div>
-                <div className="flex items-center justify-between">
-                  <Label className="text-xs">Ignore Look</Label>
-                  <Switch />
+            {!isOutfit && (
+              <div className="hidden min-[1400px]:block">
+                <div className="bg-secondary/20 rounded-md border border-border/40 overflow-hidden h-[361px] flex flex-col">
+                  <div className="flex items-center gap-1.5 px-3 py-2 bg-secondary/40 border-b border-border/30 flex-shrink-0">
+                    <div className="w-0.5 h-3 bg-primary rounded-full" />
+                    <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Visuals</h3>
+                  </div>
+                <div className="p-3 space-y-4 overflow-y-auto flex-1">
+                  {/* Light Settings */}
+                  <div>
+                    <div className="pb-1 mb-3 border-b border-border/30"></div>
+                    <div className="space-y-2 pl-1">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs text-muted-foreground">Has Light</Label>
+                        <Switch checked={draftItem.hasLight} onCheckedChange={(checked) => handlePropertyChange('hasLight', checked)} />
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 pl-2 border-l-2 border-border/30">
+                        <div className="flex flex-col gap-1">
+                          <Label className="text-[10px] text-muted-foreground">Color</Label>
+                          <TibiaColorPicker
+                            value={draftItem.lightColor || 0}
+                            onChange={(val) => handlePropertyChange('lightColor', val)}
+                            disabled={!draftItem.hasLight}
+                            className="w-full"
+                          />
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <Label className="text-[10px] text-muted-foreground">Intensity</Label>
+                          <Input value={draftItem.lightLevel || 0} onChange={(e) => handlePropertyChange('lightLevel', e.target.value)} disabled={!draftItem.hasLight} className="h-7 w-full text-xs font-mono text-right bg-background/50 shadow-sm hover:bg-background/80 transition-colors" />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Displacement */}
+                  {showDisplacement && (
+                    <div>
+                      <div className="pb-1 mb-3 border-b border-border/30"></div>
+                      <div className="space-y-2 pl-1">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-xs text-muted-foreground">Has Offset</Label>
+                          <Switch checked={draftItem.hasOffset} onCheckedChange={(checked) => handlePropertyChange('hasOffset', checked)} />
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 pl-2 border-l-2 border-border/30">
+                          <div className="flex items-center gap-2">
+                            <Label className="text-[10px] text-muted-foreground">X:</Label>
+                            <Input value={draftItem.offsetX || 0} onChange={(e) => handlePropertyChange('offsetX', e.target.value)} disabled={!draftItem.hasOffset} className="h-7 w-full text-xs font-mono text-right bg-background/50 shadow-sm hover:bg-background/80 transition-colors" />
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Label className="text-[10px] text-muted-foreground">Y:</Label>
+                            <Input value={draftItem.offsetY || 0} onChange={(e) => handlePropertyChange('offsetY', e.target.value)} disabled={!draftItem.hasOffset} className="h-7 w-full text-xs font-mono text-right bg-background/50 shadow-sm hover:bg-background/80 transition-colors" />
+                          </div>
+                        </div>
+                        {showDisplacementElevation && (
+                          <div className="flex items-center justify-between">
+                            <Label className="text-xs text-muted-foreground">Elevation</Label>
+                            <div className="flex items-center gap-2">
+                              <Input value={draftItem.elevation || 0} onChange={(e) => handlePropertyChange('elevation', e.target.value)} disabled={!draftItem.hasElevation} className="h-7 w-16 text-xs font-mono text-right bg-background/50 shadow-sm hover:bg-background/80 transition-colors px-1" />
+                              <Switch checked={draftItem.hasElevation} onCheckedChange={(checked) => handlePropertyChange('hasElevation', checked)} />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Minimap */}
+                  {showMinimap && (
+                    <div>
+                      <div className="pb-1 mb-3 border-b border-border/30"></div>
+                      <div className="space-y-2 pl-1">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-xs text-muted-foreground">Show on Minimap</Label>
+                          <Switch checked={draftItem.miniMap} onCheckedChange={(checked) => handlePropertyChange('miniMap', checked)} />
+                        </div>
+                        <div className="flex items-center justify-between pl-2 border-l-2 border-border/30">
+                          <Label className="text-[10px] text-muted-foreground">Color</Label>
+                          <TibiaColorPicker
+                            value={draftItem.miniMapColor || 0}
+                            onChange={(val) => handlePropertyChange('miniMapColor', val)}
+                            disabled={!draftItem.miniMap}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Flags - For Outfits */}
+                  {showAnimateAlways && (
+                    <div>
+                      <div className="pb-1 mb-3 border-b border-border/30"></div>
+                      <div className="space-y-2 pl-1">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-xs text-muted-foreground">Animate Always</Label>
+                          <Switch checked={draftItem.animateAlways} onCheckedChange={(checked) => handlePropertyChange('animateAlways', checked)} />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Outfit Colors - Only show for outfits with color mask (layers > 1) */}
+                  {isOutfit && draftItem && draftItem.layers > 1 && (
+                    <div>
+                      <div className="pb-1 mb-3 border-b border-border/30"></div>
+                      <div className="space-y-2 pl-1">
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="flex flex-col gap-1">
+                            <Label className="text-[10px] text-muted-foreground">Head</Label>
+                            <TibiaColorPicker
+                              value={outfitData.head}
+                              onChange={(val) => setOutfitData({ ...outfitData, head: val })}
+                              className="w-full"
+                            />
+                          </div>
+                          <div className="flex flex-col gap-1">
+                            <Label className="text-[10px] text-muted-foreground">Body</Label>
+                            <TibiaColorPicker
+                              value={outfitData.body}
+                              onChange={(val) => setOutfitData({ ...outfitData, body: val })}
+                              className="w-full"
+                            />
+                          </div>
+                          <div className="flex flex-col gap-1">
+                            <Label className="text-[10px] text-muted-foreground">Legs</Label>
+                            <TibiaColorPicker
+                              value={outfitData.legs}
+                              onChange={(val) => setOutfitData({ ...outfitData, legs: val })}
+                              className="w-full"
+                            />
+                          </div>
+                          <div className="flex flex-col gap-1">
+                            <Label className="text-[10px] text-muted-foreground">Feet</Label>
+                            <TibiaColorPicker
+                              value={outfitData.feet}
+                              onChange={(val) => setOutfitData({ ...outfitData, feet: val })}
+                              className="w-full"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Addons - For Outfits */}
+                  {isOutfit && item && item.patternY > 1 && (
+                    <div>
+                      <div className="pb-1 mb-3 border-b border-border/30"></div>
+                      <div className="space-y-2 pl-1">
+                        {Array.from({ length: item.patternY - 1 }, (_, i) => i + 1).map((addonLevel) => (
+                          <div key={addonLevel} className="flex items-center justify-between">
+                            <Label className="text-xs text-muted-foreground">Addon {addonLevel}</Label>
+                            <Switch
+                              checked={outfitData.addons[addonLevel - 1] || false}
+                              onCheckedChange={(checked) => {
+                                const newAddons = [...outfitData.addons];
+                                newAddons[addonLevel - 1] = checked;
+                                setOutfitData({ ...outfitData, addons: newAddons });
+                              }}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
-
+            )}
           </div>
 
-          <div className="flex-1 space-y-4 min-w-0">
-            <div className="bg-gradient-to-br from-secondary/40 to-secondary/20 rounded-md p-3 border border-border/40">
-              <div className="flex items-center gap-1.5 pb-2 mb-3 border-b border-border/30">
-                <div className="w-0.5 h-3 bg-primary rounded-full" />
-                <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Object Settings</h3>
+          <Separator />
+
+          <div className="bg-secondary/20 rounded-md border border-border/40 overflow-hidden mt-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 p-4">
+
+              {/* Column 1 - Physical & Visual Attributes */}
+              <div className="space-y-6">
+
+                {/* Physics & Ground */}
+                {showPhysicsGround && (
+                  <div>
+                    <div className="flex items-center gap-2 pb-1 mb-3 border-b border-border/30">
+                      <h4 className="text-[11px] font-bold text-primary/80 uppercase tracking-wider">Physics & Ground</h4>
+                    </div>
+                    <div className="space-y-3 pl-1">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs text-muted-foreground">Is Ground</Label>
+                        <div className="flex items-center gap-2">
+                          <Input
+                            type="number"
+                            value={draftItem.groundSpeed || 0}
+                            onChange={(e) => handlePropertyChange('groundSpeed', e.target.value)}
+                            disabled={!draftItem.isGround}
+                            className="h-7 w-16 text-xs font-mono text-right bg-background/50 shadow-sm hover:bg-background/80 transition-colors px-1"
+                            placeholder="Speed"
+                          />
+                          <Switch checked={draftItem.isGround} onCheckedChange={(checked) => handlePropertyChange('isGround', checked)} />
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs text-muted-foreground">Unpassable</Label>
+                        <Switch checked={draftItem.isUnpassable} onCheckedChange={(checked) => handlePropertyChange('isUnpassable', checked)} />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs text-muted-foreground">Unmoveable</Label>
+                        <Switch checked={draftItem.isUnmoveable} onCheckedChange={(checked) => handlePropertyChange('isUnmoveable', checked)} />
+                      </div>
+                      {showNoMoveAnimation && (
+                        <div className="flex items-center justify-between">
+                          <Label className="text-xs text-muted-foreground">No Move Animation</Label>
+                          <Switch checked={draftItem.noMoveAnimation} onCheckedChange={(checked) => handlePropertyChange('noMoveAnimation', checked)} />
+                        </div>
+                      )}
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs text-muted-foreground">Block Pathfind</Label>
+                        <Switch checked={draftItem.blockPathfind} onCheckedChange={(checked) => handlePropertyChange('blockPathfind', checked)} />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs text-muted-foreground">Block Missiles</Label>
+                        <Switch checked={draftItem.blockMissile} onCheckedChange={(checked) => handlePropertyChange('blockMissile', checked)} />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs text-muted-foreground">Full Ground</Label>
+                        <Switch checked={draftItem.isFullGround} onCheckedChange={(checked) => handlePropertyChange('isFullGround', checked)} />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Appearance */}
+                {isItem && (
+                  <div>
+                    <div className="flex items-center gap-2 pb-1 mb-3 border-b border-border/30">
+                      <h4 className="text-[11px] font-bold text-primary/80 uppercase tracking-wider">Appearance</h4>
+                    </div>
+                    <div className="space-y-2 pl-1">
+                      {showLensHelp && (
+                        <div className="flex items-center justify-between">
+                          <Label className="text-xs text-muted-foreground">Lens Help</Label>
+                          <div className="flex items-center gap-2">
+                            <Input value={draftItem.lensHelp || 0} onChange={(e) => handlePropertyChange('lensHelp', e.target.value)} disabled={!draftItem.isLensHelp} className="h-7 w-16 text-xs font-mono text-right bg-background/50 shadow-sm hover:bg-background/80 transition-colors px-1" />
+                            <Switch checked={draftItem.isLensHelp} onCheckedChange={(checked) => handlePropertyChange('isLensHelp', checked)} />
+                          </div>
+                        </div>
+                      )}
+                      {showTranslucent && (
+                        <div className="flex items-center justify-between">
+                          <Label className="text-xs text-muted-foreground">Translucent</Label>
+                          <Switch checked={draftItem.isTranslucent} onCheckedChange={(checked) => handlePropertyChange('isTranslucent', checked)} />
+                        </div>
+                      )}
+                      {showDontHide && (
+                        <div className="flex items-center justify-between">
+                          <Label className="text-xs text-muted-foreground">Don't Hide</Label>
+                          <Switch checked={draftItem.dontHide} onCheckedChange={(checked) => handlePropertyChange('dontHide', checked)} />
+                        </div>
+                      )}
+                      {showIgnoreLook && (
+                        <div className="flex items-center justify-between">
+                          <Label className="text-xs text-muted-foreground">Ignore Look</Label>
+                          <Switch checked={draftItem.ignoreLook} onCheckedChange={(checked) => handlePropertyChange('ignoreLook', checked)} />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Light Settings - Show when top Visuals block is hidden or for outfits */}
+                <div className={isOutfit ? '' : 'min-[1400px]:hidden'}>
+                  <div className="flex items-center gap-2 pb-1 mb-3 border-b border-border/30">
+                    <h4 className="text-[11px] font-bold text-primary/80 uppercase tracking-wider">Light</h4>
+                  </div>
+                  <div className="space-y-2 pl-1">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs text-muted-foreground">Has Light</Label>
+                      <Switch checked={draftItem.hasLight} onCheckedChange={(checked) => handlePropertyChange('hasLight', checked)} />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 pl-2 border-l-2 border-border/30">
+                      <div className="flex flex-col gap-1">
+                        <Label className="text-[10px] text-muted-foreground">Color</Label>
+                        <TibiaColorPicker
+                          value={draftItem.lightColor || 0}
+                          onChange={(val) => handlePropertyChange('lightColor', val)}
+                          disabled={!draftItem.hasLight}
+                          className="w-full"
+                        />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <Label className="text-[10px] text-muted-foreground">Intensity</Label>
+                        <Input value={draftItem.lightLevel || 0} onChange={(e) => handlePropertyChange('lightLevel', e.target.value)} disabled={!draftItem.hasLight} className="h-7 w-full text-xs font-mono text-right bg-background/50 shadow-sm hover:bg-background/80 transition-colors" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Flags - For Outfits */}
+                {isOutfit && showAnimateAlways && (
+                  <div>
+                    <div className="flex items-center gap-2 pb-1 mb-3 border-b border-border/30">
+                      <h4 className="text-[11px] font-bold text-primary/80 uppercase tracking-wider">Flags</h4>
+                    </div>
+                    <div className="space-y-2 pl-1">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs text-muted-foreground">Animate Always</Label>
+                        <Switch checked={draftItem.animateAlways} onCheckedChange={(checked) => handlePropertyChange('animateAlways', checked)} />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
               </div>
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="type" className="text-xs">
-                    Item Type
-                  </Label>
-                  <Select defaultValue="ground">
-                    <SelectTrigger className="h-8 w-32">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="ground">Ground</SelectItem>
-                      <SelectItem value="container">Container</SelectItem>
-                      <SelectItem value="weapon">Weapon</SelectItem>
-                      <SelectItem value="armor">Armor</SelectItem>
-                      <SelectItem value="effect">Effect</SelectItem>
-                      <SelectItem value="projectile">Projectile</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="appears-minimap" className="text-xs">
-                    Appears on Minimap
-                  </Label>
-                  <Switch id="appears-minimap" />
-                </div>
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="has-displacement" className="text-xs">
-                    Has Displacement
-                  </Label>
-                  <Switch id="has-displacement" />
-                </div>
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="has-elevation" className="text-xs">
-                    Has Elevation
-                  </Label>
-                  <Switch id="has-elevation" />
-                </div>
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="elevation" className="text-xs">
-                    Elevation
-                  </Label>
-                  <Input id="elevation" type="number" defaultValue="0" className="h-8 w-20 text-xs font-mono text-right bg-background/50" />
-                </div>
+
+              {/* Column 2 - Interaction & Gameplay */}
+              <div className="space-y-6">
+
+                {/* Interaction */}
+                {showInteraction && (
+                  <div>
+                    <div className="flex items-center gap-2 pb-1 mb-3 border-b border-border/30">
+                      <h4 className="text-[11px] font-bold text-primary/80 uppercase tracking-wider">Interaction</h4>
+                    </div>
+                    <div className="space-y-3 pl-1">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs text-muted-foreground">Pickupable</Label>
+                        <Switch checked={draftItem.pickupable} onCheckedChange={(checked) => handlePropertyChange('pickupable', checked)} />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs text-muted-foreground">Stackable</Label>
+                        <Switch checked={draftItem.stackable} onCheckedChange={(checked) => handlePropertyChange('stackable', checked)} />
+                      </div>
+                      {showHasCharges && (
+                        <div className="flex items-center justify-between">
+                          <Label className="text-xs text-muted-foreground">Has Charges</Label>
+                          <Switch checked={draftItem.hasCharges} onCheckedChange={(checked) => handlePropertyChange('hasCharges', checked)} />
+                        </div>
+                      )}
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs text-muted-foreground">Container</Label>
+                        <Switch checked={draftItem.isContainer} onCheckedChange={(checked) => handlePropertyChange('isContainer', checked)} />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs text-muted-foreground">Rotatable</Label>
+                        <Switch checked={draftItem.rotatable} onCheckedChange={(checked) => handlePropertyChange('rotatable', checked)} />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs text-muted-foreground">Multi Use</Label>
+                        <Switch checked={draftItem.multiUse} onCheckedChange={(checked) => handlePropertyChange('multiUse', checked)} />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs text-muted-foreground">Force Use</Label>
+                        <Switch checked={draftItem.forceUse} onCheckedChange={(checked) => handlePropertyChange('forceUse', checked)} />
+                      </div>
+                      {showUsable && (
+                        <div className="flex items-center justify-between">
+                          <Label className="text-xs text-muted-foreground">Usable</Label>
+                          <Switch checked={draftItem.usable} onCheckedChange={(checked) => handlePropertyChange('usable', checked)} />
+                        </div>
+                      )}
+                      {showWrappable && (
+                        <>
+                          <div className="flex items-center justify-between">
+                            <Label className="text-xs text-muted-foreground">Wrappable</Label>
+                            <Switch checked={draftItem.wrappable} onCheckedChange={(checked) => handlePropertyChange('wrappable', checked)} />
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <Label className="text-xs text-muted-foreground">Unwrappable</Label>
+                            <Switch checked={draftItem.unwrappable} onCheckedChange={(checked) => handlePropertyChange('unwrappable', checked)} />
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Hooks & Hanging */}
+                {showHooks && (
+                  <div>
+                    <div className="flex items-center gap-2 pb-1 mb-3 border-b border-border/30">
+                      <h4 className="text-[11px] font-bold text-primary/80 uppercase tracking-wider">Hooks & Hanging</h4>
+                    </div>
+                    <div className="space-y-3 pl-1">
+                      {showHangable && (
+                        <div className="flex items-center justify-between">
+                          <Label className="text-xs text-muted-foreground">Hangable</Label>
+                          <Switch checked={draftItem.hangable} onCheckedChange={(checked) => handlePropertyChange('hangable', checked)} />
+                        </div>
+                      )}
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs text-muted-foreground">Horizontal Hook</Label>
+                        <Switch checked={draftItem.isHorizontal} onCheckedChange={(checked) => handlePropertyChange('isHorizontal', checked)} />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs text-muted-foreground">Vertical Hook</Label>
+                        <Switch checked={draftItem.isVertical} onCheckedChange={(checked) => handlePropertyChange('isVertical', checked)} />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Default Actions */}
+                {showDefaultActions && (
+                  <div>
+                    <div className="flex items-center gap-2 pb-1 mb-3 border-b border-border/30">
+                      <h4 className="text-[11px] font-bold text-primary/80 uppercase tracking-wider">Default Actions</h4>
+                    </div>
+                    <div className="space-y-2 pl-1">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs text-muted-foreground">Has Default Action</Label>
+                        <Switch checked={draftItem.hasDefaultAction} onCheckedChange={(checked) => handlePropertyChange('hasDefaultAction', checked)} />
+                      </div>
+                      <div className="flex items-center justify-between pl-2 border-l-2 border-border/30">
+                        <Label className="text-[10px] text-muted-foreground">Action</Label>
+                        <Input value={draftItem.defaultAction || 0} onChange={(e) => handlePropertyChange('defaultAction', e.target.value)} disabled={!draftItem.hasDefaultAction} className="h-7 w-16 text-xs font-mono text-right bg-background/50 shadow-sm hover:bg-background/80 transition-colors" />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Equipment */}
+                {showEquipment && (
+                  <div>
+                    <div className="flex items-center gap-2 pb-1 mb-3 border-b border-border/30">
+                      <h4 className="text-[11px] font-bold text-primary/80 uppercase tracking-wider">Equipment</h4>
+                    </div>
+                    <div className="space-y-2 pl-1">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs text-muted-foreground">Is Cloth</Label>
+                        <Switch checked={draftItem.cloth} onCheckedChange={(checked) => handlePropertyChange('cloth', checked)} />
+                      </div>
+                      <div className="flex items-center justify-between pl-2 border-l-2 border-border/30">
+                        <Label className="text-[10px] text-muted-foreground">Slot</Label>
+                        <Input value={draftItem.clothSlot || 0} onChange={(e) => handlePropertyChange('clothSlot', e.target.value)} disabled={!draftItem.cloth} className="h-7 w-16 text-xs font-mono text-right bg-background/50 shadow-sm hover:bg-background/80 transition-colors" />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Displacement - Show when top Visuals block is hidden or for outfits */}
+                {showDisplacement && (
+                  <div className={isOutfit ? '' : 'min-[1400px]:hidden'}>
+                    <div className="flex items-center gap-2 pb-1 mb-3 border-b border-border/30">
+                      <h4 className="text-[11px] font-bold text-primary/80 uppercase tracking-wider">Displacement</h4>
+                    </div>
+                    <div className="space-y-2 pl-1">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs text-muted-foreground">Has Offset</Label>
+                        <Switch checked={draftItem.hasOffset} onCheckedChange={(checked) => handlePropertyChange('hasOffset', checked)} />
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 pl-2 border-l-2 border-border/30">
+                        <div className="flex items-center gap-2">
+                          <Label className="text-[10px] text-muted-foreground">X:</Label>
+                          <Input value={draftItem.offsetX || 0} onChange={(e) => handlePropertyChange('offsetX', e.target.value)} disabled={!draftItem.hasOffset} className="h-7 w-full text-xs font-mono text-right bg-background/50 shadow-sm hover:bg-background/80 transition-colors" />
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Label className="text-[10px] text-muted-foreground">Y:</Label>
+                          <Input value={draftItem.offsetY || 0} onChange={(e) => handlePropertyChange('offsetY', e.target.value)} disabled={!draftItem.hasOffset} className="h-7 w-full text-xs font-mono text-right bg-background/50 shadow-sm hover:bg-background/80 transition-colors" />
+                        </div>
+                      </div>
+                      {showDisplacementElevation && (
+                        <div className="flex items-center justify-between">
+                          <Label className="text-xs text-muted-foreground">Elevation</Label>
+                          <div className="flex items-center gap-2">
+                            <Input value={draftItem.elevation || 0} onChange={(e) => handlePropertyChange('elevation', e.target.value)} disabled={!draftItem.hasElevation} className="h-7 w-16 text-xs font-mono text-right bg-background/50 shadow-sm hover:bg-background/80 transition-colors px-1" />
+                            <Switch checked={draftItem.hasElevation} onCheckedChange={(checked) => handlePropertyChange('hasElevation', checked)} />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Addons - For Outfits */}
+                {isOutfit && item && item.patternY > 1 && (
+                  <div>
+                    <div className="flex items-center gap-2 pb-1 mb-3 border-b border-border/30">
+                      <h4 className="text-[11px] font-bold text-primary/80 uppercase tracking-wider">Addons</h4>
+                    </div>
+                    <div className="space-y-2 pl-1">
+                      {Array.from({ length: item.patternY - 1 }, (_, i) => i + 1).map((addonLevel) => (
+                        <div key={addonLevel} className="flex items-center justify-between">
+                          <Label className="text-xs text-muted-foreground">Addon {addonLevel}</Label>
+                          <Switch
+                            checked={outfitData.addons[addonLevel - 1] || false}
+                            onCheckedChange={(checked) => {
+                              const newAddons = [...outfitData.addons];
+                              newAddons[addonLevel - 1] = checked;
+                              setOutfitData({ ...outfitData, addons: newAddons });
+                            }}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+              </div>
+
+              {/* Column 3 - Positioning & Metadata */}
+              <div className="space-y-6">
+
+                {/* Outfit Colors - Only show for outfits with color mask (layers > 1) */}
+                {isOutfit && draftItem && draftItem.layers > 1 && (
+                  <div>
+                    <div className="flex items-center justify-between gap-2 pb-1 mb-3 border-b border-border/30">
+                      <h4 className="text-[11px] font-bold text-primary/80 uppercase tracking-wider">Outfit Colors</h4>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 hover:bg-primary/20 hover:text-primary transition-colors"
+                        onClick={handleRandomizeColors}
+                        title="Randomize colors"
+                      >
+                        <Shuffle className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                    <div className="space-y-2 pl-1">
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="flex flex-col gap-1">
+                          <Label className="text-[10px] text-muted-foreground">Head</Label>
+                          <TibiaColorPicker
+                            value={outfitData.head}
+                            onChange={(val) => setOutfitData({ ...outfitData, head: val })}
+                            className="w-full"
+                          />
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <Label className="text-[10px] text-muted-foreground">Body</Label>
+                          <TibiaColorPicker
+                            value={outfitData.body}
+                            onChange={(val) => setOutfitData({ ...outfitData, body: val })}
+                            className="w-full"
+                          />
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <Label className="text-[10px] text-muted-foreground">Legs</Label>
+                          <TibiaColorPicker
+                            value={outfitData.legs}
+                            onChange={(val) => setOutfitData({ ...outfitData, legs: val })}
+                            className="w-full"
+                          />
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <Label className="text-[10px] text-muted-foreground">Feet</Label>
+                          <TibiaColorPicker
+                            value={outfitData.feet}
+                            onChange={(val) => setOutfitData({ ...outfitData, feet: val })}
+                            className="w-full"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Flags - For Outfits (only show when top Visuals is hidden and not an outfit) */}
+                {showAnimateAlways && !isOutfit && (
+                  <div className="min-[1400px]:hidden">
+                    <div className="flex items-center gap-2 pb-1 mb-3 border-b border-border/30">
+                      <h4 className="text-[11px] font-bold text-primary/80 uppercase tracking-wider">Flags</h4>
+                    </div>
+                    <div className="space-y-2 pl-1">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs text-muted-foreground">Animate Always</Label>
+                        <Switch checked={draftItem.animateAlways} onCheckedChange={(checked) => handlePropertyChange('animateAlways', checked)} />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Writing & Reading */}
+                {showWriting && (
+                  <div>
+                    <div className="flex items-center gap-2 pb-1 mb-3 border-b border-border/30">
+                      <h4 className="text-[11px] font-bold text-primary/80 uppercase tracking-wider">Writing & Reading</h4>
+                    </div>
+                    <div className="space-y-2 pl-1">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs text-muted-foreground">Writable</Label>
+                        <Switch checked={draftItem.writable} onCheckedChange={(checked) => handlePropertyChange('writable', checked)} />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs text-muted-foreground">Writable Once</Label>
+                        <Switch checked={draftItem.writableOnce} onCheckedChange={(checked) => handlePropertyChange('writableOnce', checked)} />
+                      </div>
+                      <div className="flex items-center justify-between pl-2 border-l-2 border-border/30">
+                        <Label className="text-[10px] text-muted-foreground">Max Chars</Label>
+                        <Input value={draftItem.maxTextLength || 0} onChange={(e) => handlePropertyChange('maxTextLength', e.target.value)} disabled={!draftItem.writable && !draftItem.writableOnce} className="h-7 w-16 text-xs font-mono text-right bg-background/50 shadow-sm hover:bg-background/80 transition-colors" />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Layer Position */}
+                {showLayerPosition && (
+                  <div>
+                    <div className="flex items-center gap-2 pb-1 mb-3 border-b border-border/30">
+                      <h4 className="text-[11px] font-bold text-primary/80 uppercase tracking-wider">Layer Position</h4>
+                    </div>
+                    <div className="space-y-2 pl-1">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs text-muted-foreground">Lying Object</Label>
+                        <Switch checked={draftItem.isLyingObject} onCheckedChange={(checked) => handlePropertyChange('isLyingObject', checked)} />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs text-muted-foreground">Always On Top</Label>
+                        <Switch checked={draftItem.isOnTop} onCheckedChange={(checked) => handlePropertyChange('isOnTop', checked)} />
+                      </div>
+                      {showTopEffect && (
+                        <div className="flex items-center justify-between">
+                          <Label className="text-xs text-muted-foreground">Top Effect</Label>
+                          <Switch checked={draftItem.topEffect} onCheckedChange={(checked) => handlePropertyChange('topEffect', checked)} />
+                        </div>
+                      )}
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs text-muted-foreground">Always On Bottom</Label>
+                        <Switch checked={draftItem.isOnBottom} onCheckedChange={(checked) => handlePropertyChange('isOnBottom', checked)} />
+                      </div>
+                      {showGroundBorder && (
+                        <div className="flex items-center justify-between">
+                          <Label className="text-xs text-muted-foreground">Ground Border</Label>
+                          <Switch checked={draftItem.isGroundBorder} onCheckedChange={(checked) => handlePropertyChange('isGroundBorder', checked)} />
+                        </div>
+                      )}
+                      {showFloorChange && (
+                        <div className="flex items-center justify-between">
+                          <Label className="text-xs text-muted-foreground">Floor Change</Label>
+                          <Switch checked={draftItem.floorChange} onCheckedChange={(checked) => handlePropertyChange('floorChange', checked)} />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Animation Properties (10.50+) */}
+                {showAnimationProperties && (
+                  <div>
+                    <div className="flex items-center gap-2 pb-1 mb-3 border-b border-border/30">
+                      <h4 className="text-[11px] font-bold text-primary/80 uppercase tracking-wider">Animation</h4>
+                    </div>
+                    <div className="space-y-2 pl-1">
+                      <div className="flex items-center justify-between pl-2 border-l-2 border-border/30">
+                        <Label className="text-[10px] text-muted-foreground">Is Animation</Label>
+                        <Switch checked={draftItem.isAnimation} onCheckedChange={(checked) => handlePropertyChange('isAnimation', checked)} />
+                      </div>
+                      <div className="flex items-center justify-between pl-2 border-l-2 border-border/30">
+                        <Label className="text-[10px] text-muted-foreground">Mode</Label>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] text-muted-foreground">{draftItem.animationMode === 0 ? 'Async' : 'Sync'}</span>
+                          <Switch checked={draftItem.animationMode === 1} onCheckedChange={(checked) => handlePropertyChange('animationMode', checked ? 1 : 0)} />
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between pl-2 border-l-2 border-border/30">
+                        <Label className="text-[10px] text-muted-foreground">Loop Count</Label>
+                        <Input value={draftItem.loopCount || 0} onChange={(e) => handlePropertyChange('loopCount', e.target.value)} className="h-7 w-16 text-xs font-mono text-right bg-background/50 shadow-sm hover:bg-background/80 transition-colors" />
+                      </div>
+                      <div className="flex items-center justify-between pl-2 border-l-2 border-border/30">
+                        <Label className="text-[10px] text-muted-foreground">Start Frame</Label>
+                        <Input value={draftItem.startFrame || 0} onChange={(e) => handlePropertyChange('startFrame', e.target.value)} className="h-7 w-16 text-xs font-mono text-right bg-background/50 shadow-sm hover:bg-background/80 transition-colors" />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Market */}
+                {showMarket && (
+                  <div>
+                    <div className="flex items-center gap-2 pb-1 mb-3 border-b border-border/30">
+                      <h4 className="text-[11px] font-bold text-primary/80 uppercase tracking-wider">Market</h4>
+                    </div>
+                    <div className="space-y-2 pl-1">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs text-muted-foreground">Market Item</Label>
+                        <Switch checked={draftItem.isMarketItem} onCheckedChange={(checked) => handlePropertyChange('isMarketItem', checked)} />
+                      </div>
+                      <div className="pl-2 border-l-2 border-border/30 space-y-2">
+                        <div className="flex flex-col gap-1">
+                          <Label className="text-[10px] text-muted-foreground">Name</Label>
+                          <Input value={draftItem.marketName || ''} onChange={(e) => handlePropertyChange('marketName', e.target.value)} disabled={!draftItem.isMarketItem} className="h-7 w-full text-xs bg-background/50 shadow-sm hover:bg-background/80 transition-colors" />
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="flex flex-col gap-1">
+                            <Label className="text-[10px] text-muted-foreground">Category</Label>
+                            <Select
+                              value={String(draftItem.marketCategory || 1)}
+                              onValueChange={(val) => handlePropertyChange('marketCategory', parseInt(val))}
+                              disabled={!draftItem.isMarketItem}
+                            >
+                              <SelectTrigger className="h-7 w-full text-xs bg-background/50 shadow-sm hover:bg-background/80 transition-colors">
+                                <SelectValue placeholder="Select category" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {Object.entries(MarketCategory)
+                                  .filter(([key]) => isNaN(Number(key)))
+                                  .map(([key, value]) => (
+                                    <SelectItem key={value} value={String(value)}>
+                                      {key.replace(/_/g, ' ')}
+                                    </SelectItem>
+                                  ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="flex flex-col gap-1">
+                            <Label className="text-[10px] text-muted-foreground">Trade As</Label>
+                            <Input value={draftItem.marketTradeAs || 0} onChange={(e) => handlePropertyChange('marketTradeAs', e.target.value)} disabled={!draftItem.isMarketItem} className="h-7 w-full text-xs font-mono text-right bg-background/50 shadow-sm hover:bg-background/80 transition-colors" />
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="flex flex-col gap-1">
+                            <Label className="text-[10px] text-muted-foreground">Show As</Label>
+                            <Input value={draftItem.marketShowAs || 0} onChange={(e) => handlePropertyChange('marketShowAs', e.target.value)} disabled={!draftItem.isMarketItem} className="h-7 w-full text-xs font-mono text-right bg-background/50 shadow-sm hover:bg-background/80 transition-colors" />
+                          </div>
+                          <div className="flex flex-col gap-1">
+                            <Label className="text-[10px] text-muted-foreground">Profession</Label>
+                            <Input value={draftItem.marketRestrictProfession || 0} onChange={(e) => handlePropertyChange('marketRestrictProfession', e.target.value)} disabled={!draftItem.isMarketItem} className="h-7 w-full text-xs font-mono text-right bg-background/50 shadow-sm hover:bg-background/80 transition-colors" />
+                          </div>
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <Label className="text-[10px] text-muted-foreground">Level</Label>
+                          <Input value={draftItem.marketRestrictLevel || 0} onChange={(e) => handlePropertyChange('marketRestrictLevel', e.target.value)} disabled={!draftItem.isMarketItem} className="h-7 w-full text-xs font-mono text-right bg-background/50 shadow-sm hover:bg-background/80 transition-colors" />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Fluids */}
+                {isItem && (
+                  <div>
+                    <div className="flex items-center gap-2 pb-1 mb-3 border-b border-border/30">
+                      <h4 className="text-[11px] font-bold text-primary/80 uppercase tracking-wider">Fluids</h4>
+                    </div>
+                    <div className="space-y-3 pl-1">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs text-muted-foreground">Fluid Container</Label>
+                        <Switch checked={draftItem.isFluidContainer} onCheckedChange={(checked) => handlePropertyChange('isFluidContainer', checked)} />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs text-muted-foreground">Is Fluid</Label>
+                        <Switch checked={draftItem.isFluid} onCheckedChange={(checked) => handlePropertyChange('isFluid', checked)} />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Minimap - Show when top Visuals block is hidden or for outfits */}
+                {showMinimap && (
+                  <div className={isOutfit ? '' : 'min-[1400px]:hidden'}>
+                    <div className="flex items-center gap-2 pb-1 mb-3 border-b border-border/30">
+                      <h4 className="text-[11px] font-bold text-primary/80 uppercase tracking-wider">Minimap</h4>
+                    </div>
+                    <div className="space-y-2 pl-1">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs text-muted-foreground">Show on Minimap</Label>
+                        <Switch checked={draftItem.miniMap} onCheckedChange={(checked) => handlePropertyChange('miniMap', checked)} />
+                      </div>
+                      <div className="flex items-center justify-between pl-2 border-l-2 border-border/30">
+                        <Label className="text-[10px] text-muted-foreground">Color</Label>
+                        <TibiaColorPicker
+                          value={draftItem.miniMapColor || 0}
+                          onChange={(val) => handlePropertyChange('miniMapColor', val)}
+                          disabled={!draftItem.miniMap}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
               </div>
             </div>
-
-            <div className="bg-gradient-to-br from-secondary/40 to-secondary/20 rounded-md p-3 border border-border/40">
-              <div className="flex items-center gap-1.5 pb-2 mb-3 border-b border-border/30">
-                <div className="w-0.5 h-3 bg-primary rounded-full" />
-                <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Reading/Writing</h3>
-              </div>
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <Label className="text-xs">Can Read</Label>
-                  <Switch />
-                </div>
-                <div className="flex items-center justify-between">
-                  <Label className="text-xs">Can Write Once</Label>
-                  <Switch />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="max-chars" className="text-xs">
-                    Max Characters
-                  </Label>
-                  <Input id="max-chars" type="number" defaultValue="0" className="h-8" />
-                </div>
-              </div>
-            </div>
-
           </div>
-        </div>
         </div>
       </ScrollArea>
+
+      {/* Footer with action buttons */}
+      <div className="border-t border-border/50 bg-secondary/30 p-2 flex items-center gap-2 justify-end h-[45px]">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleClose}
+          className="h-7"
+        >
+          <X className="h-3.5 w-3.5 mr-1" />
+          Close
+        </Button>
+        <Button
+          size="sm"
+          onClick={handleSave}
+          disabled={!hasChanges}
+          className="h-7"
+        >
+          Save Changes
+        </Button>
+      </div>
+
+      {/* Confirmation dialog for closing with unsaved changes */}
+      <AlertDialog open={showCloseConfirm} onOpenChange={setShowCloseConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Unsaved Changes</AlertDialogTitle>
+            <AlertDialogDescription>
+              You have unsaved changes. Are you sure you want to close? All unsaved changes and state will be lost.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={performClose}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Close
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
