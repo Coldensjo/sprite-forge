@@ -5,13 +5,14 @@ import { useToast } from '@/hooks/use-toast';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useTibiaData } from '@/contexts/TibiaDataContext';
 import { usePanelSettings } from '@/contexts/PanelSettingsContext';
-import { X, Eye, Save, List, Minus, Square, Search, Palette, FolderOpen } from 'lucide-react';
+import { X, Eye, Save, List, Info, Minus, Square, Search, Palette, FolderOpen } from 'lucide-react';
 
 import { Button } from './ui/button';
 import { FindDialog } from './FindDialog';
 import { LoadingDialog } from './LoadingDialog';
 import { FolderSelectDialog } from './FolderSelectDialog';
 import { ThemeSettingsDialog } from './ThemeSettingsDialog';
+import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from './ui/tooltip';
 
 export const Toolbar = () => {
@@ -176,8 +177,87 @@ export const Toolbar = () => {
 					</Tooltip>
 				</TooltipProvider>
 
-				<div className="ml-auto text-[11px] text-muted-foreground flex-shrink-0">
+				<div className="ml-auto text-[11px] text-muted-foreground flex-shrink-0 flex items-center gap-2">
 					<span className="font-mono">{data ? `v${data.version.label} | ${data.itemsCount} items` : 'No files loaded'}</span>
+					{data && (
+						<Popover>
+							<PopoverTrigger asChild>
+								<Button
+									size="icon"
+									variant="ghost"
+									title="Show file information"
+									onMouseDown={(e) => e.stopPropagation()}
+									className="h-6 w-6 hover:bg-primary/20 hover:text-primary transition-colors"
+								>
+									<Info className="h-3.5 w-3.5" />
+								</Button>
+							</PopoverTrigger>
+							<PopoverContent align="end" side="bottom" className="w-auto min-w-[240px] p-2.5">
+								<div className="space-y-0.5 text-xs">
+									<div className="flex justify-between items-center gap-4">
+										<span className="text-muted-foreground whitespace-nowrap">Version:</span>
+										<span className="font-mono text-foreground text-right">{data.version.label}</span>
+									</div>
+									<div className="flex justify-between items-center gap-4">
+										<span className="text-muted-foreground whitespace-nowrap">Sprite Dimension:</span>
+										<span className="font-mono text-foreground text-right">32x32</span>
+									</div>
+									<div className="flex justify-between items-center gap-4">
+										<span className="text-muted-foreground whitespace-nowrap">Dat:</span>
+										<span className="font-mono text-foreground text-right">
+											{data.version.datSignature.toString(16).toUpperCase()}
+										</span>
+									</div>
+									<div className="flex justify-between items-center gap-4">
+										<span className="text-muted-foreground whitespace-nowrap">Items:</span>
+										<span className="font-mono text-foreground text-right">{data.items.size}</span>
+									</div>
+									<div className="flex justify-between items-center gap-4">
+										<span className="text-muted-foreground whitespace-nowrap">Outfits:</span>
+										<span className="font-mono text-foreground text-right">{data.outfits.size}</span>
+									</div>
+									<div className="flex justify-between items-center gap-4">
+										<span className="text-muted-foreground whitespace-nowrap">Effects:</span>
+										<span className="font-mono text-foreground text-right">{data.effects.size}</span>
+									</div>
+									<div className="flex justify-between items-center gap-4">
+										<span className="text-muted-foreground whitespace-nowrap">Missiles:</span>
+										<span className="font-mono text-foreground text-right">{data.missiles.size}</span>
+									</div>
+									<div className="flex justify-between items-center gap-4">
+										<span className="text-muted-foreground whitespace-nowrap">Spr:</span>
+										<span className="font-mono text-foreground text-right">
+											{data.version.sprSignature.toString(16).toUpperCase()}
+										</span>
+									</div>
+									<div className="flex justify-between items-center gap-4">
+										<span className="text-muted-foreground whitespace-nowrap">Sprites:</span>
+										<span className="font-mono text-foreground text-right">{data.spritesCount}</span>
+									</div>
+									<div className="flex justify-between items-center gap-4">
+										<span className="text-muted-foreground whitespace-nowrap">Extended:</span>
+										<span className="font-mono text-foreground text-right">{data.extended ? 'Yes' : 'No'}</span>
+									</div>
+									<div className="flex justify-between items-center gap-4">
+										<span className="text-muted-foreground whitespace-nowrap">Transparency:</span>
+										<span className="font-mono text-foreground text-right">{data.transparency ? 'Yes' : 'No'}</span>
+									</div>
+									<div className="flex justify-between items-center gap-4">
+										<span className="text-muted-foreground whitespace-nowrap">Improv. Anim.:</span>
+										<span className="font-mono text-foreground text-right">
+											{data.version.supportsFrameDurations ? 'Yes' : 'No'}
+										</span>
+									</div>
+									<div className="flex justify-between items-center gap-4">
+										<span className="text-muted-foreground whitespace-nowrap">Frame Groups:</span>
+										<span className="font-mono text-foreground text-right">
+											{data.version.supportsFrameDurations ? 'Yes' : 'No'}
+										</span>
+									</div>
+								</div>
+							</PopoverContent>
+						</Popover>
+					)}
 				</div>
 
 				<div className="ml-2 flex items-center flex-shrink-0">
