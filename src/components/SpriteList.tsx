@@ -148,7 +148,7 @@ export const SpriteList = () => {
 	if (!data) {
 		return (
 			<div className="w-[216px] bg-card rounded-lg shadow-island flex flex-col overflow-hidden">
-				<div className="h-8 px-3 flex items-center border-b border-border/50 bg-secondary/50">
+				<div className="h-8 px-3 flex items-center border-b border-border/50 bg-secondary/80">
 					<h2 className="text-xs font-semibold text-foreground uppercase tracking-wide">Sprites</h2>
 					<span className="ml-auto text-xs text-muted-foreground font-mono">0</span>
 				</div>
@@ -165,7 +165,7 @@ export const SpriteList = () => {
 
 	return (
 		<div className="w-[216px] bg-card rounded-lg shadow-island flex flex-col overflow-hidden relative">
-			<div className="h-8 px-3 flex items-center border-b border-border/50 bg-secondary/50">
+			<div className="h-8 px-3 flex items-center border-b border-border/50 bg-secondary/80">
 				<h2 className="text-xs font-semibold text-foreground uppercase tracking-wide">Sprites</h2>
 
 				<div className="ml-auto flex items-center gap-1">

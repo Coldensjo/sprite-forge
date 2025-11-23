@@ -5,12 +5,13 @@ import { useToast } from '@/hooks/use-toast';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useTibiaData } from '@/contexts/TibiaDataContext';
 import { usePanelSettings } from '@/contexts/PanelSettingsContext';
-import { X, Eye, Save, List, Minus, Square, Search, FolderOpen } from 'lucide-react';
+import { X, Eye, Save, List, Minus, Square, Search, Palette, FolderOpen } from 'lucide-react';
 
 import { Button } from './ui/button';
 import { FindDialog } from './FindDialog';
 import { LoadingDialog } from './LoadingDialog';
 import { FolderSelectDialog } from './FolderSelectDialog';
+import { ThemeSettingsDialog } from './ThemeSettingsDialog';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from './ui/tooltip';
 
 export const Toolbar = () => {
@@ -19,6 +20,7 @@ export const Toolbar = () => {
 	const { toast } = useToast();
 	const [findDialogOpen, setFindDialogOpen] = useState(false);
 	const [folderDialogOpen, setFolderDialogOpen] = useState(false);
+	const [themeDialogOpen, setThemeDialogOpen] = useState(false);
 
 	const handleFolderSelect = async (selectedPath: string) => {
 		try {
@@ -155,6 +157,23 @@ export const Toolbar = () => {
 							<p>Toggle Opened Objects Panel</p>
 						</TooltipContent>
 					</Tooltip>
+
+					<Tooltip>
+						<TooltipTrigger asChild>
+							<Button
+								size="icon"
+								variant="ghost"
+								className="h-8 w-8"
+								onMouseDown={(e) => e.stopPropagation()}
+								onClick={() => setThemeDialogOpen(true)}
+							>
+								<Palette className="h-4 w-4" />
+							</Button>
+						</TooltipTrigger>
+						<TooltipContent>
+							<p>Theme Settings</p>
+						</TooltipContent>
+					</Tooltip>
 				</TooltipProvider>
 
 				<div className="ml-auto text-[11px] text-muted-foreground flex-shrink-0">
@@ -199,6 +218,7 @@ export const Toolbar = () => {
 				onOpenChange={setFolderDialogOpen}
 				title="Select folder containing Tibia.dat and Tibia.spr"
 			/>
+			<ThemeSettingsDialog open={themeDialogOpen} onOpenChange={setThemeDialogOpen} />
 		</>
 	);
 };

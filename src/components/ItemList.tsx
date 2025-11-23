@@ -297,7 +297,7 @@ export const ItemList = () => {
 	if (!data) {
 		return (
 			<div className="w-full h-full bg-card rounded-lg shadow-island flex flex-col overflow-hidden">
-				<div className="h-8 px-3 flex items-center gap-2 border-b border-border/50 bg-secondary/50">
+				<div className="h-8 px-3 flex items-center gap-2 border-b border-border/50 bg-secondary/80">
 					<Select value={selectedCategory} onValueChange={(value) => setSelectedCategory(value as ThingCategory)}>
 						<SelectTrigger className="h-6 w-24 text-xs">
 							<SelectValue />
@@ -324,7 +324,7 @@ export const ItemList = () => {
 
 	return (
 		<div className="w-full h-full bg-card rounded-lg shadow-island flex flex-col overflow-hidden relative">
-			<div className="h-8 px-3 flex items-center gap-2 border-b border-border/50 bg-secondary/50">
+			<div className="h-8 px-3 flex items-center gap-2 border-b border-border/50 bg-secondary/80">
 				<Select value={selectedCategory} onValueChange={(value) => setSelectedCategory(value as ThingCategory)}>
 					<SelectTrigger className="h-6 w-24 text-xs mt-[1px]">
 						<SelectValue />

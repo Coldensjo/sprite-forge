@@ -13,7 +13,7 @@ export const OpenedItemsPanel = () => {
 	if (!data) {
 		return (
 			<div className="w-[216px] max-h-[200px] bg-card rounded-lg shadow-island flex flex-col overflow-hidden flex-shrink-0">
-				<div className="h-8 px-3 flex items-center border-b border-border/50 bg-secondary/50 flex-shrink-0">
+				<div className="h-8 px-3 flex items-center border-b border-border/50 bg-secondary/80 flex-shrink-0">
 					<h2 className="text-xs font-semibold text-foreground uppercase tracking-wide">Opened Objects</h2>
 				</div>
 				<div className="flex-1 flex items-center justify-center p-4 min-h-0">
@@ -47,7 +47,7 @@ export const OpenedItemsPanel = () => {
 
 	return (
 		<div className="w-[216px] max-h-[200px] bg-card rounded-lg shadow-island flex flex-col overflow-hidden flex-shrink-0">
-			<div className="h-8 px-3 flex items-center border-b border-border/50 bg-secondary/50 flex-shrink-0">
+			<div className="h-8 px-3 flex items-center border-b border-border/50 bg-secondary/80 flex-shrink-0">
 				<h2 className="text-xs font-semibold text-foreground uppercase tracking-wide">Opened Objects</h2>
 				{openedItems.length > 0 && <span className="ml-auto text-xs text-muted-foreground font-mono">{openedItems.length}</span>}
 			</div>

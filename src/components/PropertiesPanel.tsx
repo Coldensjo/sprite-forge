@@ -678,7 +678,7 @@ export const PropertiesPanel = () => {
 	if (!data || !item) {
 		return (
 			<div className="flex-1 bg-card rounded-lg shadow-island-lg flex flex-col overflow-hidden">
-				<div className="h-8 px-4 flex items-center border-b border-border/50 bg-secondary/50">
+				<div className="h-8 px-4 flex items-center border-b border-border/50 bg-secondary/80">
 					<h2 className="text-xs font-semibold text-foreground uppercase tracking-wide">Object Properties</h2>
 				</div>
 				<div className="flex-1 flex items-center justify-center p-4">
@@ -718,7 +718,7 @@ export const PropertiesPanel = () => {
 	if (!draftItem) {
 		return (
 			<div className="flex-1 bg-card rounded-lg shadow-island-lg flex flex-col overflow-hidden">
-				<div className="h-8 px-4 flex items-center border-b border-border/50 bg-secondary/50">
+				<div className="h-8 px-4 flex items-center border-b border-border/50 bg-secondary/80">
 					<h2 className="text-xs font-semibold text-foreground uppercase tracking-wide">Object Properties</h2>
 				</div>
 				<div className="flex-1 flex items-center justify-center p-4">
@@ -754,7 +754,7 @@ export const PropertiesPanel = () => {
 
 	return (
 		<div className="flex-1 bg-card rounded-lg shadow-island-lg flex flex-col overflow-hidden">
-			<div className="h-8 px-4 flex items-center border-b border-border/50 bg-secondary/50">
+			<div className="h-8 px-4 flex items-center border-b border-border/50 bg-secondary/80">
 				<h2 className="text-xs font-semibold text-foreground uppercase tracking-wide">
 					{itemCategory === ThingCategory.ITEM
 						? 'Object'
@@ -1234,6 +1234,7 @@ export const PropertiesPanel = () => {
 														<Label className="text-[10px] text-muted-foreground">Color</Label>
 														<TibiaColorPicker
 															className="w-full"
+															mode="8bit"
 															disabled={!draftItem.hasLight}
 															value={draftItem.lightColor || 0}
 															onChange={(val) => handlePropertyChange('lightColor', val)}
@@ -1578,6 +1579,7 @@ export const PropertiesPanel = () => {
 												<Label className="text-[10px] text-muted-foreground">Color</Label>
 												<TibiaColorPicker
 													className="w-full"
+													mode="8bit"
 													disabled={!draftItem.hasLight}
 													value={draftItem.lightColor || 0}
 													onChange={(val) => handlePropertyChange('lightColor', val)}
@@ -2228,6 +2230,7 @@ export const PropertiesPanel = () => {
 											<div className="flex items-center justify-between pl-2 border-l-2 border-border/30">
 												<Label className="text-[10px] text-muted-foreground">Color</Label>
 												<TibiaColorPicker
+													mode="8bit"
 													disabled={!draftItem.miniMap}
 													value={draftItem.miniMapColor || 0}
 													onChange={(val) => handlePropertyChange('miniMapColor', val)}

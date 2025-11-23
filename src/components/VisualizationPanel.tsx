@@ -12,7 +12,7 @@ export const VisualizationPanel = () => {
 	if (!data || !item) {
 		return (
 			<div className="w-[216px] min-h-[150px] max-h-[200px] bg-card rounded-lg shadow-island flex flex-col overflow-hidden flex-shrink-0">
-				<div className="h-8 px-3 flex items-center border-b border-border/50 bg-secondary/50 flex-shrink-0">
+				<div className="h-8 px-3 flex items-center border-b border-border/50 bg-secondary/80 flex-shrink-0">
 					<h2 className="text-xs font-semibold text-foreground uppercase tracking-wide">Visualization</h2>
 				</div>
 				<div className="flex-1 flex items-center justify-center p-4 min-h-0">
@@ -27,7 +27,7 @@ export const VisualizationPanel = () => {
 
 	return (
 		<div className="w-[216px] min-h-[150px] max-h-[200px] bg-card rounded-lg shadow-island flex flex-col overflow-hidden flex-shrink-0">
-			<div className="h-8 px-3 flex items-center border-b border-border/50 bg-secondary/50 flex-shrink-0">
+			<div className="h-8 px-3 flex items-center border-b border-border/50 bg-secondary/80 flex-shrink-0">
 				<h2 className="text-xs font-semibold text-foreground uppercase tracking-wide">Visualization</h2>
 			</div>
 			<div className="flex-1 min-h-0 p-2">
