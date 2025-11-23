@@ -2,8 +2,8 @@ import { cn } from '@/lib/utils';
 import { logger, EventCode } from '@/lib/debug';
 import { useTibiaData } from '@/contexts/TibiaDataContext';
 import { useRef, useMemo, useState, useEffect, useCallback } from 'react';
-import { List, Square, Package, SkipBack, LayoutGrid, ChevronLeft, SkipForward, ChevronRight } from 'lucide-react';
 import { DropdownMenu, DropdownMenuItem, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { List, Square, Circle, Package, SkipBack, LayoutGrid, ChevronLeft, SkipForward, ChevronRight } from 'lucide-react';
 import {
 	MIN_ITEM_ID,
 	MIN_OUTFIT_ID,
@@ -19,6 +19,7 @@ import { Button } from './ui/button';
 import { ScrollArea } from './ui/scroll-area';
 import { SpriteCanvas } from './SpriteCanvas';
 import { CheckerBoard } from './CheckerBoard';
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from './ui/tooltip';
 import { Select, SelectItem, SelectValue, SelectContent, SelectTrigger } from './ui/select';
 
 type ViewMode = 'list' | 'grid' | 'large';
@@ -30,6 +31,7 @@ export const ItemList = () => {
 		setOpenedItemId,
 		selectedCategory,
 		highlightedItemId,
+		hasUnsavedChanges,
 		setSelectedCategory,
 		notifySpritesLoaded,
 		setHighlightedItemId
@@ -366,89 +368,101 @@ export const ItemList = () => {
 			</div>
 
 			<ScrollArea className="flex-1" ref={scrollViewportRef}>
-				<div
-					className={cn(
-						'p-2 pb-16',
-						viewMode === 'list' && 'space-y-0.5',
-						viewMode === 'grid' && 'grid grid-cols-2 gap-1',
-						viewMode === 'large' && 'grid grid-cols-1 gap-2'
-					)}
-				>
-					{paginatedItemIds.map((id) => {
-						const item = getThing(id, selectedCategory);
-						if (!item) return null;
+				<TooltipProvider>
+					<div
+						className={cn(
+							'p-2 pb-16',
+							viewMode === 'list' && 'space-y-0.5',
+							viewMode === 'grid' && 'grid grid-cols-2 gap-1',
+							viewMode === 'large' && 'grid grid-cols-1 gap-2'
+						)}
+					>
+						{paginatedItemIds.map((id) => {
+							const item = getThing(id, selectedCategory);
+							if (!item) return null;
 
-						return (
-							<button
-								key={id}
-								data-item-id={id}
-								onClick={() => setHighlightedItemId(id)}
-								onDoubleClick={() => {
-									setOpenedItemId(id);
-									setHighlightedItemId(id);
-								}}
-								className={cn(
-									'w-full rounded-md transition-all hover:bg-item-hover',
-									highlightedItemId === id && 'bg-primary/15 ring-1 ring-primary/50',
-									viewMode === 'list' && 'flex items-center gap-2 px-2 py-1',
-									viewMode === 'grid' && 'flex items-center px-1 py-0.5 gap-1.5',
-									viewMode === 'large' && 'flex items-center px-1 py-0.5 gap-1.5'
-								)}
-							>
-								<CheckerBoard
+							return (
+								<button
+									key={id}
+									data-item-id={id}
+									onClick={() => setHighlightedItemId(id)}
+									onDoubleClick={() => {
+										setOpenedItemId(id);
+										setHighlightedItemId(id);
+									}}
 									className={cn(
-										'rounded-md border border-border/50 flex items-center justify-center flex-shrink-0 overflow-hidden',
-										viewMode === 'list' && 'w-8 h-8',
-										viewMode === 'grid' && 'w-12 h-12',
-										viewMode === 'large' && 'w-32 h-32'
+										'w-full rounded-md transition-all hover:bg-item-hover',
+										highlightedItemId === id && 'bg-primary/15 ring-1 ring-primary/50',
+										viewMode === 'list' && 'flex items-center gap-2 px-2 py-1',
+										viewMode === 'grid' && 'flex items-center px-1 py-0.5 gap-1.5',
+										viewMode === 'large' && 'flex items-center px-1 py-0.5 gap-1.5'
 									)}
 								>
-									{item.spriteIndex && item.spriteIndex.length > 0 ? (
-										<SpriteCanvas
-											showEmpty
-											thing={item}
-											renderMode="list"
-											width={item.width}
-											height={item.height}
-											scale={
-												viewMode === 'list'
-													? 36 / (Math.max(item.width, item.height) * 32)
-													: viewMode === 'grid'
-														? 48 / (Math.max(item.width, item.height) * 32)
-														: 128 / (Math.max(item.width, item.height) * 32)
-											}
-										/>
-									) : (
-										<span className="text-[9px] font-mono font-bold text-foreground">{id}</span>
-									)}
-								</CheckerBoard>
-								<div
-									className={cn(
-										'min-w-0',
-										viewMode === 'list' && 'flex-1 text-left',
-										viewMode === 'grid' && 'flex-1 text-right',
-										viewMode === 'large' && 'flex-1 text-right'
-									)}
-								>
-									{viewMode === 'grid' || viewMode === 'large' ? (
-										<div className="text-[11px] text-foreground font-mono font-medium leading-tight">{id}</div>
-									) : (
-										<>
+									<CheckerBoard
+										className={cn(
+											'rounded-md border border-border/50 flex items-center justify-center flex-shrink-0 overflow-hidden',
+											viewMode === 'list' && 'w-8 h-8',
+											viewMode === 'grid' && 'w-12 h-12',
+											viewMode === 'large' && 'w-32 h-32'
+										)}
+									>
+										{item.spriteIndex && item.spriteIndex.length > 0 ? (
+											<SpriteCanvas
+												showEmpty
+												thing={item}
+												renderMode="list"
+												width={item.width}
+												height={item.height}
+												scale={
+													viewMode === 'list'
+														? 36 / (Math.max(item.width, item.height) * 32)
+														: viewMode === 'grid'
+															? 48 / (Math.max(item.width, item.height) * 32)
+															: 128 / (Math.max(item.width, item.height) * 32)
+												}
+											/>
+										) : (
+											<span className="text-[9px] font-mono font-bold text-foreground">{id}</span>
+										)}
+									</CheckerBoard>
+									<div
+										className={cn(
+											'min-w-0',
+											viewMode === 'list' && 'flex-1 text-left',
+											viewMode === 'grid' && 'flex-1 text-right',
+											viewMode === 'large' && 'flex-1 text-right'
+										)}
+									>
+										{viewMode === 'grid' || viewMode === 'large' ? (
 											<div className="text-[11px] text-foreground font-mono font-medium leading-tight">{id}</div>
-											{((item.isMarketItem && item.marketName) || item.stackable) && (
-												<div className="text-[9px] text-muted-foreground leading-tight truncate">
-													{item.isMarketItem && item.marketName ? item.marketName : ''}
-													{item.isMarketItem && item.marketName && item.stackable ? ' • ' : ''}
-													{item.stackable && !item.marketName ? 'Stackable' : ''}
-												</div>
-											)}
-										</>
+										) : (
+											<>
+												<div className="text-[11px] text-foreground font-mono font-medium leading-tight">{id}</div>
+												{((item.isMarketItem && item.marketName) || item.stackable) && (
+													<div className="text-[9px] text-muted-foreground leading-tight truncate">
+														{item.isMarketItem && item.marketName ? item.marketName : ''}
+														{item.isMarketItem && item.marketName && item.stackable ? ' • ' : ''}
+														{item.stackable && !item.marketName ? 'Stackable' : ''}
+													</div>
+												)}
+											</>
+										)}
+									</div>
+									{hasUnsavedChanges(id, selectedCategory) && (
+										<Tooltip>
+											<TooltipTrigger asChild>
+												<Circle className="h-2.5 w-2.5 text-primary fill-primary flex-shrink-0" />
+											</TooltipTrigger>
+											<TooltipContent>
+												<p>Unsaved changes</p>
+											</TooltipContent>
+										</Tooltip>
 									)}
-								</div>
-							</button>
-						);
-					})}
-				</div>
+								</button>
+							);
+						})}
+					</div>
+				</TooltipProvider>
 			</ScrollArea>
 
 			<div className="absolute bottom-0 left-0 right-0 p-2 bg-card/95 backdrop-blur-sm border-t border-border/50">

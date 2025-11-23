@@ -31,9 +31,11 @@ interface TibiaDataContextType {
 	setData: (data: TibiaData, reader: SpriteReader) => void;
 	removeOpenedItem: (id: number, category: ThingCategory) => void;
 	getThing: (id: number, category: ThingCategory) => null | ThingType;
+	hasUnsavedChanges: (id: number, category: ThingCategory) => boolean;
 	setOpenedItemId: (id: null | number, category?: ThingCategory) => void;
 	loadingProgress: null | { stage: string; total: number; current: number };
 	setSelectedCategoryAndItem: (category: ThingCategory, itemId: number) => void;
+	markUnsavedChanges: (id: number, category: ThingCategory, hasChanges: boolean) => void;
 	updateThing: (id: number, category: ThingCategory, updates: Partial<ThingType>) => void;
 	setLoading: (loading: boolean, progress?: { stage: string; total: number; current: number }) => void;
 }
@@ -76,6 +78,7 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 	const hasPreloadedRef = React.useRef(false);
 	const [openedSpriteId, setOpenedSpriteId] = useState<null | number>(null);
 	const [spriteLoadVersion, setSpriteLoadVersion] = useState(0);
+	const [unsavedChanges, setUnsavedChanges] = useState<Set<string>>(new Set());
 
 	// Save opened items state to localStorage
 	const saveOpenedItemsState = useCallback(
@@ -138,6 +141,7 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 		setOpenedItemCategoryState(null);
 		setOpenedItems([]);
 		setHighlightedItemId(null);
+		setUnsavedChanges(new Set());
 
 		// Reset restoration flag BEFORE setting new data
 		hasRestoredRef.current = false;
@@ -163,6 +167,7 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 		setHighlightedItemId(null);
 		setSelectedCategory(ThingCategory.ITEM);
 		setOpenedSpriteId(null);
+		setUnsavedChanges(new Set());
 		// Clear localStorage when data is cleared
 		try {
 			if (typeof window !== 'undefined') {
@@ -346,10 +351,38 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 				Object.assign(thing, updates);
 				// Force re-render by incrementing counter
 				setUpdateCounter((prev) => prev + 1);
+				// Clear unsaved changes when saved
+				const key = `${category}-${id}`;
+				setUnsavedChanges((prev) => {
+					const next = new Set(prev);
+					next.delete(key);
+					return next;
+				});
 			}
 		},
 		[data]
 	);
+
+	const hasUnsavedChanges = useCallback(
+		(id: number, category: ThingCategory): boolean => {
+			const key = `${category}-${id}`;
+			return unsavedChanges.has(key);
+		},
+		[unsavedChanges]
+	);
+
+	const markUnsavedChanges = useCallback((id: number, category: ThingCategory, hasChanges: boolean) => {
+		const key = `${category}-${id}`;
+		setUnsavedChanges((prev) => {
+			const next = new Set(prev);
+			if (hasChanges) {
+				next.add(key);
+			} else {
+				next.delete(key);
+			}
+			return next;
+		});
+	}, []);
 
 	const notifySpritesLoaded = useCallback(() => {
 		setSpriteLoadVersion((v) => {
@@ -505,7 +538,9 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 				highlightedItemId,
 				setOpenedSpriteId,
 				spriteLoadVersion,
+				hasUnsavedChanges,
 				openedItemCategory,
+				markUnsavedChanges,
 				setSelectedCategory,
 				notifySpritesLoaded,
 				setHighlightedItemId,
