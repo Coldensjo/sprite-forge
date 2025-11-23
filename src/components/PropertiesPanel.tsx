@@ -36,6 +36,7 @@ import { ScrollArea } from './ui/scroll-area';
 import { SpriteCanvas } from './SpriteCanvas';
 import { CheckerBoard } from './CheckerBoard';
 import { TibiaColorPicker } from './TibiaColorPicker';
+import { EightBitColorPicker } from './EightBitColorPicker';
 import { Select, SelectItem, SelectValue, SelectContent, SelectTrigger } from './ui/select';
 import {
 	AlertDialog,
@@ -113,6 +114,7 @@ export const PropertiesPanel = () => {
 		removeOpenedItem,
 		selectedCategory,
 		openedItemCategory,
+		markUnsavedChanges,
 		notifySpritesLoaded
 	} = useTibiaData();
 	const item = openedItemId && openedItemCategory ? getThing(openedItemId, openedItemCategory) : null;
@@ -124,17 +126,18 @@ export const PropertiesPanel = () => {
 
 	// Initialize draft when item changes
 	useEffect(() => {
-		if (item) {
+		if (item && openedItemId && openedItemCategory) {
 			setDraftItem({ ...item });
 			setHasChanges(false);
+			markUnsavedChanges(openedItemId, openedItemCategory, false);
 		} else {
 			setDraftItem(null);
 			setHasChanges(false);
 		}
-	}, [item, openedItemId, updateCounter]);
+	}, [item, openedItemId, openedItemCategory, updateCounter, markUnsavedChanges]);
 
 	const handlePropertyChange = (property: string, value: any) => {
-		if (!draftItem) return;
+		if (!draftItem || !openedItemId || !openedItemCategory) return;
 
 		// Handle numeric conversions
 		let finalValue = value;
@@ -144,10 +147,11 @@ export const PropertiesPanel = () => {
 
 		setDraftItem({ ...draftItem, [property]: finalValue });
 		setHasChanges(true);
+		markUnsavedChanges(openedItemId, openedItemCategory, true);
 	};
 
 	const handleSave = () => {
-		if (!draftItem || !openedItemId || !hasChanges) return;
+		if (!draftItem || !openedItemId || !hasChanges || !openedItemCategory) return;
 
 		// Extract only the properties that exist in ThingType
 		const updates: Partial<typeof item> = {};
@@ -157,10 +161,9 @@ export const PropertiesPanel = () => {
 			}
 		});
 
-		if (openedItemCategory) {
-			updateThing(openedItemId, openedItemCategory, updates);
-		}
+		updateThing(openedItemId, openedItemCategory, updates);
 		setHasChanges(false);
+		markUnsavedChanges(openedItemId, openedItemCategory, false);
 	};
 
 	const handleClose = () => {
@@ -1232,9 +1235,8 @@ export const PropertiesPanel = () => {
 												<div className="grid grid-cols-2 gap-2 pl-2 border-l-2 border-border/30">
 													<div className="flex flex-col gap-1">
 														<Label className="text-[10px] text-muted-foreground">Color</Label>
-														<TibiaColorPicker
+														<EightBitColorPicker
 															className="w-full"
-															mode="8bit"
 															disabled={!draftItem.hasLight}
 															value={draftItem.lightColor || 0}
 															onChange={(val) => handlePropertyChange('lightColor', val)}
@@ -1320,7 +1322,7 @@ export const PropertiesPanel = () => {
 													</div>
 													<div className="flex items-center justify-between pl-2 border-l-2 border-border/30">
 														<Label className="text-[10px] text-muted-foreground">Color</Label>
-														<TibiaColorPicker
+														<EightBitColorPicker
 															disabled={!draftItem.miniMap}
 															value={draftItem.miniMapColor || 0}
 															onChange={(val) => handlePropertyChange('miniMapColor', val)}
@@ -1577,9 +1579,8 @@ export const PropertiesPanel = () => {
 										<div className="grid grid-cols-2 gap-2 pl-2 border-l-2 border-border/30">
 											<div className="flex flex-col gap-1">
 												<Label className="text-[10px] text-muted-foreground">Color</Label>
-												<TibiaColorPicker
+												<EightBitColorPicker
 													className="w-full"
-													mode="8bit"
 													disabled={!draftItem.hasLight}
 													value={draftItem.lightColor || 0}
 													onChange={(val) => handlePropertyChange('lightColor', val)}
@@ -2229,8 +2230,7 @@ export const PropertiesPanel = () => {
 											</div>
 											<div className="flex items-center justify-between pl-2 border-l-2 border-border/30">
 												<Label className="text-[10px] text-muted-foreground">Color</Label>
-												<TibiaColorPicker
-													mode="8bit"
+												<EightBitColorPicker
 													disabled={!draftItem.miniMap}
 													value={draftItem.miniMapColor || 0}
 													onChange={(val) => handlePropertyChange('miniMapColor', val)}
