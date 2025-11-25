@@ -5,6 +5,7 @@ import { Toaster as Sonner } from '@/components/ui/sonner';
 import { Route, Routes, BrowserRouter } from 'react-router-dom';
 import { TibiaDataProvider } from '@/contexts/TibiaDataContext';
 import { PanelSettingsProvider } from '@/contexts/PanelSettingsContext';
+import { DragDropProvider } from '@/contexts/DragDropContext';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import Index from './pages/Index';
@@ -18,15 +19,17 @@ const App = () => (
 			<TooltipProvider>
 				<TibiaDataProvider>
 					<PanelSettingsProvider>
-						<Toaster />
-						<Sonner />
-						<BrowserRouter>
-							<Routes>
-								<Route path="/" element={<Index />} />
-								{/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-								<Route path="*" element={<NotFound />} />
-							</Routes>
-						</BrowserRouter>
+						<DragDropProvider>
+							<Toaster />
+							<Sonner />
+							<BrowserRouter>
+								<Routes>
+									<Route path="/" element={<Index />} />
+									{/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+									<Route path="*" element={<NotFound />} />
+								</Routes>
+							</BrowserRouter>
+						</DragDropProvider>
 					</PanelSettingsProvider>
 				</TibiaDataProvider>
 			</TooltipProvider>

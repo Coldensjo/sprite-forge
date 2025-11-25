@@ -16,8 +16,13 @@ interface TibiaDataContextType {
 	openedSpriteId: null | number;
 	selectedCategory: ThingCategory;
 	notifySpritesLoaded: () => void;
+	hasModifiedItems: () => boolean;
 	highlightedItemId: null | number;
 	spriteReader: null | SpriteReader;
+	compileFiles: () => Promise<void>;
+	clearModifiedTracking: () => void;
+	highlightedSpriteId: null | number;
+	modifiedSprites: Map<number, Sprite>;
 	setError: (error: null | string) => void;
 	getSprite: (id: number) => null | Sprite;
 	openedItemCategory: null | ThingCategory;
@@ -26,17 +31,21 @@ interface TibiaDataContextType {
 	getEffect: (id: number) => null | ThingType;
 	getMissile: (id: number) => null | ThingType;
 	setOpenedSpriteId: (id: null | number) => void;
+	notifyDataChanged: (spriteIds?: number[]) => void;
 	setHighlightedItemId: (id: null | number) => void;
+	setHighlightedSpriteId: (id: null | number) => void;
 	setSelectedCategory: (category: ThingCategory) => void;
-	setData: (data: TibiaData, reader: SpriteReader) => void;
 	removeOpenedItem: (id: number, category: ThingCategory) => void;
 	getThing: (id: number, category: ThingCategory) => null | ThingType;
 	hasUnsavedChanges: (id: number, category: ThingCategory) => boolean;
 	setOpenedItemId: (id: null | number, category?: ThingCategory) => void;
 	loadingProgress: null | { stage: string; total: number; current: number };
 	setSelectedCategoryAndItem: (category: ThingCategory, itemId: number) => void;
+	setData: (data: TibiaData, reader: SpriteReader, skipBackendSync?: boolean) => void;
 	markUnsavedChanges: (id: number, category: ThingCategory, hasChanges: boolean) => void;
 	updateThing: (id: number, category: ThingCategory, updates: Partial<ThingType>) => void;
+	// Compile tracking
+	modifiedSinceCompile: Map<string, { id: number; data: ThingType; category: ThingCategory }>;
 	setLoading: (loading: boolean, progress?: { stage: string; total: number; current: number }) => void;
 }
 
@@ -77,10 +86,16 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 	const hasRestoredRef = React.useRef(false);
 	const hasPreloadedRef = React.useRef(false);
 	const [openedSpriteId, setOpenedSpriteId] = useState<null | number>(null);
+	const [highlightedSpriteId, setHighlightedSpriteId] = useState<null | number>(null);
 	const [spriteLoadVersion, setSpriteLoadVersion] = useState(0);
 	const [unsavedChanges, setUnsavedChanges] = useState<Set<string>>(new Set());
+	// Compile tracking
+	const [modifiedSinceCompile, setModifiedSinceCompile] = useState<
+		Map<string, { id: number; data: ThingType; category: ThingCategory }>
+	>(new Map());
+	const [modifiedSprites, setModifiedSprites] = useState<Map<number, Sprite>>(new Map());
 
-	// Save opened items state to localStorage
+	// Save opened items state to localStorage whenever it changes
 	const saveOpenedItemsState = useCallback(
 		(items: ThingType[], openedId: null | number, openedCategory: null | ThingCategory) => {
 			try {
@@ -113,11 +128,19 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 				setOpenedItemIdState(null);
 				setOpenedItemCategoryState(null);
 			}
+
+			// Clear unsaved changes flag since the draft is lost
+			const key = `${category}-${id}`;
+			setUnsavedChanges((prev) => {
+				const next = new Set(prev);
+				next.delete(key);
+				return next;
+			});
 		},
 		[openedItemId, openedItemCategory]
 	);
 
-	const setData = useCallback((newData: TibiaData, reader: SpriteReader) => {
+	const setData = useCallback(async (newData: TibiaData, reader: SpriteReader, skipBackendSync = false) => {
 		// Clear localStorage FIRST (before setting new data)
 		try {
 			if (typeof window !== 'undefined') {
@@ -150,6 +173,42 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 		setDataState(newData);
 		setSpriteReader(reader);
 		setError(null);
+
+		// Store DAT data in Rust backend for cross-window access (e.g., Find window)
+		if (newData.datPath && !skipBackendSync) {
+			try {
+				// Store DAT path in localStorage for Find window to access
+				if (typeof window !== 'undefined') {
+					localStorage.setItem('sprite-forge-dat-path', newData.datPath);
+					if (newData.sprPath) {
+						localStorage.setItem('sprite-forge-spr-path', newData.sprPath);
+					}
+					localStorage.setItem('sprite-forge-transparency', String(newData.transparency));
+					localStorage.setItem('sprite-forge-sprites-count', String(newData.spritesCount));
+				}
+
+				const { invoke } = await import('@tauri-apps/api/core');
+
+				// Convert Maps to arrays for Rust
+				const items = Array.from(newData.items.values());
+				const outfits = Array.from(newData.outfits.values());
+				const effects = Array.from(newData.effects.values());
+				const missiles = Array.from(newData.missiles.values());
+
+				await invoke('store_dat_data', {
+					items,
+					outfits,
+					effects,
+					missiles,
+					path: newData.datPath
+				});
+
+				console.log('DAT data stored in Rust backend for cross-window access');
+			} catch (e) {
+				console.error('Failed to store DAT data in Rust backend:', e);
+				// Non-fatal - continue execution
+			}
+		}
 	}, []);
 
 	const setLoading = useCallback((loading: boolean, progress?: { stage: string; total: number; current: number }) => {
@@ -157,7 +216,9 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 		setLoadingProgress(progress || null);
 	}, []);
 
-	const clearData = useCallback(() => {
+	const clearData = useCallback(async () => {
+		const currentDatPath = data?.datPath;
+
 		setDataState(null);
 		setSpriteReader(null);
 		setError(null);
@@ -172,6 +233,7 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 		try {
 			if (typeof window !== 'undefined') {
 				localStorage.removeItem('sprite-forge-opened-items');
+				localStorage.removeItem('sprite-forge-dat-path');
 				// Clear all item property states
 				const keysToRemove: string[] = [];
 				for (let i = 0; i < localStorage.length; i++) {
@@ -185,7 +247,22 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 		} catch (e) {
 			console.error('Failed to clear localStorage:', e);
 		}
-	}, []);
+
+		// Clear DAT data in Rust backend
+		if (currentDatPath) {
+			try {
+				const { invoke } = await import('@tauri-apps/api/core');
+				const { emit } = await import('@tauri-apps/api/event');
+
+				await invoke('clear_dat_data', { path: currentDatPath });
+				await emit('data_cleared');
+				console.log('DAT data cleared from Rust backend and event emitted');
+			} catch (e) {
+				console.error('Failed to clear DAT data from Rust backend:', e);
+				// Non-fatal
+			}
+		}
+	}, [data]);
 
 	const getItem = useCallback(
 		(id: number): null | ThingType => {
@@ -349,10 +426,22 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 			if (collection && collection.has(id)) {
 				const thing = collection.get(id)!;
 				Object.assign(thing, updates);
+
+				// Track as modified since last compile
+				const key = `${category}-${id}`;
+				setModifiedSinceCompile((prev) => {
+					const next = new Map(prev);
+					next.set(key, {
+						id,
+						category,
+						data: { ...thing } // Deep clone
+					});
+					return next;
+				});
+
 				// Force re-render by incrementing counter
 				setUpdateCounter((prev) => prev + 1);
 				// Clear unsaved changes when saved
-				const key = `${category}-${id}`;
 				setUnsavedChanges((prev) => {
 					const next = new Set(prev);
 					next.delete(key);
@@ -388,12 +477,54 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 		setSpriteLoadVersion((v) => {
 			try {
 				logger.log(EventCode.CTX_LOAD_END, { v: v + 1 });
-			} catch (e) {
+			} catch {
 				// Ignore logger errors
 			}
 			return v + 1;
 		});
 	}, []);
+
+	const notifyDataChanged = useCallback(
+		(spriteIds?: number[]) => {
+			setUpdateCounter((c) => c + 1);
+
+			// If sprite IDs are provided, track them as modified
+			if (spriteIds && spriteIds.length > 0 && data) {
+				setModifiedSprites((prev) => {
+					const next = new Map(prev);
+					for (const spriteId of spriteIds) {
+						const sprite = data.sprites.get(spriteId);
+						if (sprite) {
+							next.set(spriteId, sprite);
+						} else {
+							// Sprite was deleted (removed from map)
+							// We need to track it so compiler knows to update it (e.g. mark as empty or handle count reduction)
+							next.set(spriteId, {
+								id: spriteId,
+								isEmpty: true,
+								transparent: data.transparency,
+								compressedPixels: new Uint8Array(0)
+							} as Sprite);
+						}
+					}
+					return next;
+				});
+			}
+
+			// Also mark items as changed for compilation tracking (for button enabling)
+			setModifiedSinceCompile((prev) => {
+				const next = new Map(prev);
+				// Add a sentinel value to indicate sprite changes
+				next.set('sprite-changed', {
+					id: 0,
+					data: {} as ThingType,
+					category: 'item' as ThingCategory
+				});
+				return next;
+			});
+		},
+		[data]
+	);
 
 	const getSprite = useCallback(
 		(id: number): null | Sprite => {
@@ -401,7 +532,7 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
 			try {
 				logger.log(EventCode.CTX_SPRITE_REQ, { id });
-			} catch (e) {
+			} catch {
 				// Ignore logger errors
 			}
 
@@ -409,7 +540,7 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 			if (data.sprites.has(id)) {
 				try {
 					logger.log(EventCode.CTX_SPRITE_HIT, { id });
-				} catch (e) {
+				} catch {
 					// Ignore logger errors
 				}
 				return data.sprites.get(id)!;
@@ -418,13 +549,48 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 			// Sprite not in cache - will be loaded when user navigates to that page
 			try {
 				logger.log(EventCode.CTX_SPRITE_MISS, { id, v: spriteLoadVersion, sz: data.sprites.size });
-			} catch (e) {
+			} catch {
 				// Ignore logger errors
 			}
 			return null;
 		},
 		[data, spriteLoadVersion] // Include version to re-run when sprites load
 	);
+
+	// Compile tracking methods
+	const hasModifiedItems = useCallback(() => {
+		return modifiedSinceCompile.size > 0;
+	}, [modifiedSinceCompile]);
+
+	const clearModifiedTracking = useCallback(() => {
+		setModifiedSinceCompile(new Map());
+		setModifiedSprites(new Map());
+	}, []);
+
+	const compileFiles = useCallback(async () => {
+		if (!data || !data.datPath || !data.sprPath) {
+			throw new Error('No data or file paths available for compilation');
+		}
+
+		if (modifiedSinceCompile.size === 0) {
+			console.log('No modifications to compile');
+			return;
+		}
+
+		// Import compiler dynamically
+		const { compileFiles: doCompile } = await import('@/lib/tibia/compiler');
+
+		// Execute compile
+		await doCompile(data, data.datPath, data.sprPath, modifiedSinceCompile, modifiedSprites, (stage, current, total) => {
+			setLoading(true, { stage, total, current });
+		});
+
+		// Clear modified tracking after successful compile
+		clearModifiedTracking();
+
+		// Done
+		setLoading(false);
+	}, [data, modifiedSinceCompile, clearModifiedTracking]);
 
 	// Global Preloading Effect
 	useEffect(() => {
@@ -495,7 +661,7 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 						);
 
 						notifySpritesLoaded();
-					} catch (e) {
+					} catch {
 						console.error('Preload failed', e);
 					}
 				}
@@ -529,21 +695,30 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 				openedItems,
 				spriteReader,
 				openedItemId,
+				compileFiles,
 				updateCounter,
 				openedSpriteId,
 				loadingProgress,
 				setOpenedItemId,
+				modifiedSprites,
 				removeOpenedItem,
 				selectedCategory,
+				hasModifiedItems,
 				highlightedItemId,
 				setOpenedSpriteId,
 				spriteLoadVersion,
 				hasUnsavedChanges,
+				notifyDataChanged,
 				openedItemCategory,
 				markUnsavedChanges,
 				setSelectedCategory,
 				notifySpritesLoaded,
+				highlightedSpriteId,
 				setHighlightedItemId,
+				// Compile tracking
+				modifiedSinceCompile,
+				clearModifiedTracking,
+				setHighlightedSpriteId,
 				setSelectedCategoryAndItem
 			}}
 		>

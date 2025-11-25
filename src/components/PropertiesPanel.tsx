@@ -1,11 +1,14 @@
+import { cn } from '@/lib/utils';
 import { ThingCategory } from '@/lib/tibia';
 import { MarketCategory } from '@/lib/tibia';
-import { useRef, useState, useEffect } from 'react';
 import { useTibiaData } from '@/contexts/TibiaDataContext';
+import { useRef, useState, useEffect, useCallback } from 'react';
 import {
 	X,
 	Play,
+	Move,
 	Pause,
+	Undo2,
 	ZoomIn,
 	ZoomOut,
 	ArrowUp,
@@ -35,6 +38,7 @@ import { Separator } from './ui/separator';
 import { ScrollArea } from './ui/scroll-area';
 import { SpriteCanvas } from './SpriteCanvas';
 import { CheckerBoard } from './CheckerBoard';
+import { NumberInput } from './ui/number-input';
 import { TibiaColorPicker } from './TibiaColorPicker';
 import { EightBitColorPicker } from './EightBitColorPicker';
 import { Select, SelectItem, SelectValue, SelectContent, SelectTrigger } from './ui/select';
@@ -115,7 +119,8 @@ export const PropertiesPanel = () => {
 		selectedCategory,
 		openedItemCategory,
 		markUnsavedChanges,
-		notifySpritesLoaded
+		notifySpritesLoaded,
+		setHighlightedSpriteId
 	} = useTibiaData();
 	const item = openedItemId && openedItemCategory ? getThing(openedItemId, openedItemCategory) : null;
 
@@ -136,19 +141,22 @@ export const PropertiesPanel = () => {
 		}
 	}, [item, openedItemId, openedItemCategory, updateCounter, markUnsavedChanges]);
 
-	const handlePropertyChange = (property: string, value: any) => {
-		if (!draftItem || !openedItemId || !openedItemCategory) return;
+	const handlePropertyChange = useCallback(
+		(property: string, value: any) => {
+			if (!draftItem || !openedItemId || !openedItemCategory) return;
 
-		// Handle numeric conversions
-		let finalValue = value;
-		if (typeof (draftItem as any)[property] === 'number' && typeof value === 'string') {
-			finalValue = Number(value);
-		}
+			// Handle numeric conversions
+			let finalValue = value;
+			if (typeof (draftItem as any)[property] === 'number' && typeof value === 'string') {
+				finalValue = Number(value);
+			}
 
-		setDraftItem({ ...draftItem, [property]: finalValue });
-		setHasChanges(true);
-		markUnsavedChanges(openedItemId, openedItemCategory, true);
-	};
+			setDraftItem((prev) => (prev ? { ...prev, [property]: finalValue } : null));
+			setHasChanges(true);
+			markUnsavedChanges(openedItemId, openedItemCategory, true);
+		},
+		[draftItem, openedItemId, openedItemCategory, markUnsavedChanges]
+	);
 
 	const handleSave = () => {
 		if (!draftItem || !openedItemId || !hasChanges || !openedItemCategory) return;
@@ -162,6 +170,14 @@ export const PropertiesPanel = () => {
 		});
 
 		updateThing(openedItemId, openedItemCategory, updates);
+		setHasChanges(false);
+		markUnsavedChanges(openedItemId, openedItemCategory, false);
+	};
+
+	const handleDiscardChanges = () => {
+		if (!item || !openedItemId || !openedItemCategory) return;
+
+		setDraftItem({ ...item });
 		setHasChanges(false);
 		markUnsavedChanges(openedItemId, openedItemCategory, false);
 	};
@@ -205,7 +221,6 @@ export const PropertiesPanel = () => {
 	const itemCategory = openedItemCategory || selectedCategory;
 	const isItem = itemCategory === ThingCategory.ITEM;
 	const isOutfit = itemCategory === ThingCategory.OUTFIT;
-	const isEffect = itemCategory === ThingCategory.EFFECT;
 	const isMissile = itemCategory === ThingCategory.MISSILE;
 
 	// Version-specific visibility checks
@@ -238,14 +253,12 @@ export const PropertiesPanel = () => {
 	const showHooks = isItem;
 	const showAnimateAlways = isOutfit;
 
-	const [offsetEnabled, setOffsetEnabled] = useState(item?.hasOffset || false);
-	const [lightEnabled, setLightEnabled] = useState(item?.hasLight || false);
-	const [lightIntensity, setLightIntensity] = useState(item?.lightLevel || 0);
 	const [zoom, setZoom] = useState(1);
 	const [panX, setPanX] = useState(0);
 	const [panY, setPanY] = useState(0);
 	const [showExactSize, setShowExactSize] = useState(false);
 	const [showGrid, setShowGrid] = useState(false);
+	const [isPanEnabled, setIsPanEnabled] = useState(false);
 
 	// Pattern and frame state for rendering
 	const [patternX, setPatternX] = useState(0);
@@ -263,6 +276,71 @@ export const PropertiesPanel = () => {
 		feet: 0,
 		addons: [false, false] // [addon1, addon2]
 	});
+
+	const zoomLevels = [1, 2, 4, 8];
+
+	const handleZoomIn = () => {
+		const currentIndex = zoomLevels.indexOf(zoom);
+		if (currentIndex < zoomLevels.length - 1) {
+			setZoom(zoomLevels[currentIndex + 1]);
+		}
+	};
+
+	const handleZoomOut = () => {
+		const currentIndex = zoomLevels.indexOf(zoom);
+		if (currentIndex > 0) {
+			setZoom(zoomLevels[currentIndex - 1]);
+		}
+	};
+
+	const handleResetPan = () => {
+		setPanX(0);
+		setPanY(0);
+	};
+
+	const handleResetSprites = () => {
+		if (item && draftItem) {
+			handlePropertyChange('spriteIndex', [...item.spriteIndex]);
+		}
+	};
+
+	const [hoveredSpriteId, setHoveredSpriteId] = useState<null | number>(null);
+
+	const handleSpriteDoubleClick = useCallback(
+		(spriteId: number) => {
+			setHighlightedSpriteId(spriteId);
+		},
+		[setHighlightedSpriteId]
+	);
+
+	const handleSpriteDrop = useCallback(
+		(index: number, spriteId: number | number[]) => {
+			if (draftItem && draftItem.spriteIndex) {
+				const newSpriteIndex = [...draftItem.spriteIndex];
+
+				if (Array.isArray(spriteId)) {
+					// Multi-drop: fill sequentially
+					for (let i = 0; i < spriteId.length; i++) {
+						const targetIndex = index + i;
+						if (targetIndex < newSpriteIndex.length) {
+							newSpriteIndex[targetIndex] = spriteId[i];
+						}
+					}
+				} else {
+					// Single drop
+					if (index >= 0 && index < newSpriteIndex.length) {
+						newSpriteIndex[index] = spriteId;
+					}
+				}
+
+				handlePropertyChange('spriteIndex', newSpriteIndex);
+			}
+		},
+		[draftItem, handlePropertyChange]
+	);
+	const handleSpriteHover = (spriteId: null | number) => {
+		setHoveredSpriteId(spriteId);
+	};
 
 	// Track if we've loaded state for current item
 	const hasLoadedStateRef = useRef(false);
@@ -356,27 +434,6 @@ export const PropertiesPanel = () => {
 			if (timeoutId) clearTimeout(timeoutId);
 		};
 	}, [isPlaying, item, currentFrame, isOutfit, draftItem]);
-
-	const zoomLevels = [1, 2, 4, 8];
-
-	const handleZoomIn = () => {
-		const currentIndex = zoomLevels.indexOf(zoom);
-		if (currentIndex < zoomLevels.length - 1) {
-			setZoom(zoomLevels[currentIndex + 1]);
-		}
-	};
-
-	const handleZoomOut = () => {
-		const currentIndex = zoomLevels.indexOf(zoom);
-		if (currentIndex > 0) {
-			setZoom(zoomLevels[currentIndex - 1]);
-		}
-	};
-
-	const handleResetPan = () => {
-		setPanX(0);
-		setPanY(0);
-	};
 
 	// Direction handlers for outfits
 	// Arrow buttons control direction (patternX):
@@ -579,11 +636,6 @@ export const PropertiesPanel = () => {
 			setOutfitData(outfitDataValue);
 			stateRefs.current.outfitData = { ...outfitDataValue };
 
-			// Always update these from item
-			setOffsetEnabled(draftItem.hasOffset);
-			setLightEnabled(draftItem.hasLight);
-			setLightIntensity(draftItem.lightLevel);
-
 			// Update previous item ref immediately after loading completes
 			previousItemRef.current = { id: openedItemId, category: openedItemCategory };
 			hasLoadedStateRef.current = true;
@@ -715,7 +767,7 @@ export const PropertiesPanel = () => {
 		);
 	}
 
-	const firstSpriteId = item && item.spriteIndex && item.spriteIndex.length > 0 ? item.spriteIndex[0] : 0;
+	const firstSpriteId = draftItem && draftItem.spriteIndex && draftItem.spriteIndex.length > 0 ? draftItem.spriteIndex[0] : 0;
 
 	// Wait for draft to be initialized
 	if (!draftItem) {
@@ -783,6 +835,13 @@ export const PropertiesPanel = () => {
 									<div className="absolute top-2 left-2 z-10 bg-secondary/90 backdrop-blur-sm px-2 py-0.5 rounded text-[10px] text-muted-foreground font-mono border border-border/50 shadow-lg">
 										{draftItem.width * draftItem.exactSize}x{draftItem.height * draftItem.exactSize}
 									</div>
+
+									{/* Hovered Sprite ID Badge */}
+									{hoveredSpriteId !== null && (
+										<div className="absolute top-2 left-24 z-10 bg-secondary/90 backdrop-blur-sm px-2 py-0.5 rounded text-[10px] text-muted-foreground font-mono border border-border/50 shadow-lg">
+											Sprite: {hoveredSpriteId}
+										</div>
+									)}
 
 									{/* Pattern controls - Top Center (Outfits only) */}
 									{itemCategory === ThingCategory.OUTFIT && (
@@ -960,7 +1019,8 @@ export const PropertiesPanel = () => {
 												<ZoomOut className="h-3 w-3 text-muted-foreground" />
 											</Button>
 										</div>
-										<div className="bg-secondary/90 backdrop-blur-sm rounded-md px-1 py-0.5 border border-border/50 shadow-lg">
+
+										<div className="flex flex-col gap-1 bg-secondary/90 backdrop-blur-sm rounded-md px-1 py-0.5 border border-border/50 shadow-lg">
 											<Button
 												size="icon"
 												variant="ghost"
@@ -969,6 +1029,30 @@ export const PropertiesPanel = () => {
 												className="h-6 w-6 hover:bg-secondary/50 p-0"
 											>
 												<RotateCcw className="h-3 w-3 text-muted-foreground" />
+											</Button>
+											<Button
+												size="icon"
+												variant={isPanEnabled ? 'secondary' : 'ghost'}
+												onClick={() => setIsPanEnabled(!isPanEnabled)}
+												title={isPanEnabled ? 'Disable Pan' : 'Enable Pan'}
+												className={cn(
+													'h-6 w-6 p-0',
+													isPanEnabled ? 'bg-primary/20 text-primary hover:bg-primary/30' : 'hover:bg-secondary/50'
+												)}
+											>
+												<Move className="h-3 w-3" />
+											</Button>
+										</div>
+
+										<div className="flex flex-col gap-1 bg-secondary/90 backdrop-blur-sm rounded-md px-1 py-0.5 border border-border/50 shadow-lg">
+											<Button
+												size="icon"
+												variant="ghost"
+												title="Reset Sprites"
+												onClick={handleResetSprites}
+												className="h-6 w-6 hover:bg-secondary/50 p-0"
+											>
+												<Undo2 className="h-3 w-3 text-muted-foreground" />
 											</Button>
 										</div>
 									</div>
@@ -980,8 +1064,8 @@ export const PropertiesPanel = () => {
 												showEmpty
 												panX={panX}
 												panY={panY}
-												thing={item}
 												scale={zoom}
+												thing={draftItem}
 												patternX={patternX}
 												patternY={patternY}
 												patternZ={patternZ}
@@ -989,15 +1073,18 @@ export const PropertiesPanel = () => {
 												frame={currentFrame}
 												layer={currentLayer}
 												showExactSize={showExactSize}
+												onSpriteDrop={handleSpriteDrop}
+												onSpriteHover={handleSpriteHover}
+												onSpriteDoubleClick={handleSpriteDoubleClick}
 												outfitData={isOutfit ? outfitData : undefined}
-												onPanChange={(x, y) => {
-													setPanX(x);
-													setPanY(y);
-												}}
-												renderMode={
-													openedItemCategory === ThingCategory.MISSILE || openedItemCategory === ThingCategory.OUTFIT
-														? 'preview'
-														: 'full'
+												renderMode={isMissile || isOutfit ? 'preview' : 'full'}
+												onPanChange={
+													isPanEnabled
+														? (x, y) => {
+															setPanX(x);
+															setPanY(y);
+														}
+														: undefined
 												}
 											/>
 										) : (
@@ -1077,54 +1164,50 @@ export const PropertiesPanel = () => {
 										<Label htmlFor="width" className="text-xs whitespace-nowrap text-muted-foreground">
 											Width
 										</Label>
-										<Input
-											min="1"
-											max="128"
+										<NumberInput
+											min={1}
+											max={128}
 											id="width"
-											type="number"
 											value={draftItem.width}
-											onChange={(e) => handlePropertyChange('width', e.target.value)}
-											className="h-7 w-16 text-xs font-mono text-right bg-background/50 shadow-sm hover:bg-background/80 transition-colors"
+											className="h-7 w-16 text-right"
+											onChange={(val) => handlePropertyChange('width', val)}
 										/>
 									</div>
 									<div className="flex items-center justify-between gap-2">
 										<Label htmlFor="height" className="text-xs whitespace-nowrap text-muted-foreground">
 											Height
 										</Label>
-										<Input
-											min="1"
-											max="128"
+										<NumberInput
+											min={1}
+											max={128}
 											id="height"
-											type="number"
 											value={draftItem.height}
-											onChange={(e) => handlePropertyChange('height', e.target.value)}
-											className="h-7 w-16 text-xs font-mono text-right bg-background/50 shadow-sm hover:bg-background/80 transition-colors"
+											className="h-7 w-16 text-right"
+											onChange={(val) => handlePropertyChange('height', val)}
 										/>
 									</div>
 									<div className="flex items-center justify-between gap-2">
 										<Label htmlFor="crop-size" className="text-xs whitespace-nowrap text-muted-foreground">
 											Exact Size
 										</Label>
-										<Input
-											min="1"
-											max="128"
-											type="number"
+										<NumberInput
+											min={1}
+											max={128}
 											id="crop-size"
 											value={draftItem.exactSize}
-											onChange={(e) => handlePropertyChange('exactSize', e.target.value)}
-											className="h-7 w-16 text-xs font-mono text-right bg-background/50 shadow-sm hover:bg-background/80 transition-colors"
+											className="h-7 w-16 text-right"
+											onChange={(val) => handlePropertyChange('exactSize', val)}
 										/>
 									</div>
 									<div className="flex items-center justify-between gap-2">
 										<Label htmlFor="frames" className="text-xs whitespace-nowrap text-muted-foreground">
 											Frames
 										</Label>
-										<Input
+										<NumberInput
 											id="frames"
-											type="number"
 											value={draftItem.frames}
-											onChange={(e) => handlePropertyChange('frames', e.target.value)}
-											className="h-7 w-16 text-xs font-mono text-right bg-background/50 shadow-sm hover:bg-background/80 transition-colors"
+											className="h-7 w-16 text-right"
+											onChange={(val) => handlePropertyChange('frames', val)}
 										/>
 									</div>
 								</div>
@@ -1140,24 +1223,22 @@ export const PropertiesPanel = () => {
 										<Label htmlFor="pattern-x" className="text-xs whitespace-nowrap text-muted-foreground">
 											Pattern X
 										</Label>
-										<Input
-											type="number"
+										<NumberInput
 											id="pattern-x"
 											value={draftItem.patternX}
-											onChange={(e) => handlePropertyChange('patternX', e.target.value)}
-											className="h-7 w-16 text-xs font-mono text-center bg-background/50 shadow-sm hover:bg-background/80 transition-colors"
+											className="h-7 w-16 text-center"
+											onChange={(val) => handlePropertyChange('patternX', val)}
 										/>
 									</div>
 									<div className="flex items-center justify-between gap-2">
 										<Label htmlFor="pattern-y" className="text-xs whitespace-nowrap text-muted-foreground">
 											Pattern Y
 										</Label>
-										<Input
-											type="number"
+										<NumberInput
 											id="pattern-y"
 											value={draftItem.patternY}
-											onChange={(e) => handlePropertyChange('patternY', e.target.value)}
-											className="h-7 w-16 text-xs font-mono text-center bg-background/50 shadow-sm hover:bg-background/80 transition-colors"
+											className="h-7 w-16 text-center"
+											onChange={(val) => handlePropertyChange('patternY', val)}
 										/>
 									</div>
 									{showPatternZ && (
@@ -1165,12 +1246,11 @@ export const PropertiesPanel = () => {
 											<Label htmlFor="pattern-z" className="text-xs whitespace-nowrap text-muted-foreground">
 												Pattern Z
 											</Label>
-											<Input
-												type="number"
+											<NumberInput
 												id="pattern-z"
 												value={draftItem.patternZ}
-												onChange={(e) => handlePropertyChange('patternZ', e.target.value)}
-												className="h-7 w-16 text-xs font-mono text-center bg-background/50 shadow-sm hover:bg-background/80 transition-colors"
+												className="h-7 w-16 text-center"
+												onChange={(val) => handlePropertyChange('patternZ', val)}
 											/>
 										</div>
 									)}
@@ -1178,14 +1258,13 @@ export const PropertiesPanel = () => {
 										<Label htmlFor="layers" className="text-xs whitespace-nowrap text-muted-foreground">
 											Layers
 										</Label>
-										<Input
-											min="1"
-											max="128"
+										<NumberInput
+											min={1}
+											max={128}
 											id="layers"
-											type="number"
 											value={draftItem.layers}
-											onChange={(e) => handlePropertyChange('layers', e.target.value)}
-											className="h-7 w-16 text-xs font-mono text-right bg-background/50 shadow-sm hover:bg-background/80 transition-colors"
+											className="h-7 w-16 text-right"
+											onChange={(val) => handlePropertyChange('layers', val)}
 										/>
 									</div>
 								</div>
@@ -1244,11 +1323,11 @@ export const PropertiesPanel = () => {
 													</div>
 													<div className="flex flex-col gap-1">
 														<Label className="text-[10px] text-muted-foreground">Intensity</Label>
-														<Input
+														<NumberInput
 															disabled={!draftItem.hasLight}
 															value={draftItem.lightLevel || 0}
-															onChange={(e) => handlePropertyChange('lightLevel', e.target.value)}
-															className="h-7 w-full text-xs font-mono text-right bg-background/50 shadow-sm hover:bg-background/80 transition-colors"
+															className="h-7 w-full text-right"
+															onChange={(val) => handlePropertyChange('lightLevel', val)}
 														/>
 													</div>
 												</div>
@@ -1270,20 +1349,20 @@ export const PropertiesPanel = () => {
 													<div className="grid grid-cols-2 gap-2 pl-2 border-l-2 border-border/30">
 														<div className="flex items-center gap-2">
 															<Label className="text-[10px] text-muted-foreground">X:</Label>
-															<Input
+															<NumberInput
 																value={draftItem.offsetX || 0}
 																disabled={!draftItem.hasOffset}
-																onChange={(e) => handlePropertyChange('offsetX', e.target.value)}
-																className="h-7 w-full text-xs font-mono text-right bg-background/50 shadow-sm hover:bg-background/80 transition-colors"
+																className="h-7 w-full text-right"
+																onChange={(val) => handlePropertyChange('offsetX', val)}
 															/>
 														</div>
 														<div className="flex items-center gap-2">
 															<Label className="text-[10px] text-muted-foreground">Y:</Label>
-															<Input
+															<NumberInput
 																value={draftItem.offsetY || 0}
 																disabled={!draftItem.hasOffset}
-																onChange={(e) => handlePropertyChange('offsetY', e.target.value)}
-																className="h-7 w-full text-xs font-mono text-right bg-background/50 shadow-sm hover:bg-background/80 transition-colors"
+																className="h-7 w-full text-right"
+																onChange={(val) => handlePropertyChange('offsetY', val)}
 															/>
 														</div>
 													</div>
@@ -1291,11 +1370,11 @@ export const PropertiesPanel = () => {
 														<div className="flex items-center justify-between">
 															<Label className="text-xs text-muted-foreground">Elevation</Label>
 															<div className="flex items-center gap-2">
-																<Input
+																<NumberInput
+																	className="h-7 w-16 text-right"
 																	value={draftItem.elevation || 0}
 																	disabled={!draftItem.hasElevation}
-																	onChange={(e) => handlePropertyChange('elevation', e.target.value)}
-																	className="h-7 w-16 text-xs font-mono text-right bg-background/50 shadow-sm hover:bg-background/80 transition-colors px-1"
+																	onChange={(val) => handlePropertyChange('elevation', val)}
 																/>
 																<Switch
 																	checked={draftItem.hasElevation}
@@ -1446,13 +1525,12 @@ export const PropertiesPanel = () => {
 											<div className="flex items-center justify-between">
 												<Label className="text-xs text-muted-foreground">Is Ground</Label>
 												<div className="flex items-center gap-2">
-													<Input
-														type="number"
+													<NumberInput
 														placeholder="Speed"
 														disabled={!draftItem.isGround}
+														className="h-7 w-16 text-right"
 														value={draftItem.groundSpeed || 0}
-														onChange={(e) => handlePropertyChange('groundSpeed', e.target.value)}
-														className="h-7 w-16 text-xs font-mono text-right bg-background/50 shadow-sm hover:bg-background/80 transition-colors px-1"
+														onChange={(val) => handlePropertyChange('groundSpeed', val)}
 													/>
 													<Switch
 														checked={draftItem.isGround}
@@ -1519,11 +1597,11 @@ export const PropertiesPanel = () => {
 												<div className="flex items-center justify-between">
 													<Label className="text-xs text-muted-foreground">Lens Help</Label>
 													<div className="flex items-center gap-2">
-														<Input
+														<NumberInput
 															value={draftItem.lensHelp || 0}
+															className="h-7 w-16 text-right"
 															disabled={!draftItem.isLensHelp}
-															onChange={(e) => handlePropertyChange('lensHelp', e.target.value)}
-															className="h-7 w-16 text-xs font-mono text-right bg-background/50 shadow-sm hover:bg-background/80 transition-colors px-1"
+															onChange={(val) => handlePropertyChange('lensHelp', val)}
 														/>
 														<Switch
 															checked={draftItem.isLensHelp}
@@ -1588,11 +1666,11 @@ export const PropertiesPanel = () => {
 											</div>
 											<div className="flex flex-col gap-1">
 												<Label className="text-[10px] text-muted-foreground">Intensity</Label>
-												<Input
+												<NumberInput
 													disabled={!draftItem.hasLight}
 													value={draftItem.lightLevel || 0}
-													onChange={(e) => handlePropertyChange('lightLevel', e.target.value)}
-													className="h-7 w-full text-xs font-mono text-right bg-background/50 shadow-sm hover:bg-background/80 transition-colors"
+													className="h-7 w-full text-right"
+													onChange={(val) => handlePropertyChange('lightLevel', val)}
 												/>
 											</div>
 										</div>
@@ -1759,11 +1837,11 @@ export const PropertiesPanel = () => {
 											</div>
 											<div className="flex items-center justify-between pl-2 border-l-2 border-border/30">
 												<Label className="text-[10px] text-muted-foreground">Action</Label>
-												<Input
+												<NumberInput
+													className="h-7 w-16 text-right"
 													value={draftItem.defaultAction || 0}
 													disabled={!draftItem.hasDefaultAction}
-													onChange={(e) => handlePropertyChange('defaultAction', e.target.value)}
-													className="h-7 w-16 text-xs font-mono text-right bg-background/50 shadow-sm hover:bg-background/80 transition-colors"
+													onChange={(val) => handlePropertyChange('defaultAction', val)}
 												/>
 											</div>
 										</div>
@@ -1783,11 +1861,11 @@ export const PropertiesPanel = () => {
 											</div>
 											<div className="flex items-center justify-between pl-2 border-l-2 border-border/30">
 												<Label className="text-[10px] text-muted-foreground">Slot</Label>
-												<Input
+												<NumberInput
 													disabled={!draftItem.cloth}
+													className="h-7 w-16 text-right"
 													value={draftItem.clothSlot || 0}
-													onChange={(e) => handlePropertyChange('clothSlot', e.target.value)}
-													className="h-7 w-16 text-xs font-mono text-right bg-background/50 shadow-sm hover:bg-background/80 transition-colors"
+													onChange={(val) => handlePropertyChange('clothSlot', val)}
 												/>
 											</div>
 										</div>
@@ -1811,20 +1889,20 @@ export const PropertiesPanel = () => {
 											<div className="grid grid-cols-2 gap-2 pl-2 border-l-2 border-border/30">
 												<div className="flex items-center gap-2">
 													<Label className="text-[10px] text-muted-foreground">X:</Label>
-													<Input
+													<NumberInput
 														value={draftItem.offsetX || 0}
 														disabled={!draftItem.hasOffset}
-														onChange={(e) => handlePropertyChange('offsetX', e.target.value)}
-														className="h-7 w-full text-xs font-mono text-right bg-background/50 shadow-sm hover:bg-background/80 transition-colors"
+														className="h-7 w-full text-right"
+														onChange={(val) => handlePropertyChange('offsetX', val)}
 													/>
 												</div>
 												<div className="flex items-center gap-2">
 													<Label className="text-[10px] text-muted-foreground">Y:</Label>
-													<Input
+													<NumberInput
 														value={draftItem.offsetY || 0}
 														disabled={!draftItem.hasOffset}
-														onChange={(e) => handlePropertyChange('offsetY', e.target.value)}
-														className="h-7 w-full text-xs font-mono text-right bg-background/50 shadow-sm hover:bg-background/80 transition-colors"
+														className="h-7 w-full text-right"
+														onChange={(val) => handlePropertyChange('offsetY', val)}
 													/>
 												</div>
 											</div>
@@ -1832,11 +1910,11 @@ export const PropertiesPanel = () => {
 												<div className="flex items-center justify-between">
 													<Label className="text-xs text-muted-foreground">Elevation</Label>
 													<div className="flex items-center gap-2">
-														<Input
+														<NumberInput
+															className="h-7 w-16 text-right"
 															value={draftItem.elevation || 0}
 															disabled={!draftItem.hasElevation}
-															onChange={(e) => handlePropertyChange('elevation', e.target.value)}
-															className="h-7 w-16 text-xs font-mono text-right bg-background/50 shadow-sm hover:bg-background/80 transition-colors px-1"
+															onChange={(val) => handlePropertyChange('elevation', val)}
 														/>
 														<Switch
 															checked={draftItem.hasElevation}
@@ -1983,11 +2061,11 @@ export const PropertiesPanel = () => {
 											</div>
 											<div className="flex items-center justify-between pl-2 border-l-2 border-border/30">
 												<Label className="text-[10px] text-muted-foreground">Max Chars</Label>
-												<Input
+												<NumberInput
+													className="h-7 w-16 text-right"
 													value={draftItem.maxTextLength || 0}
 													disabled={!draftItem.writable && !draftItem.writableOnce}
-													onChange={(e) => handlePropertyChange('maxTextLength', e.target.value)}
-													className="h-7 w-16 text-xs font-mono text-right bg-background/50 shadow-sm hover:bg-background/80 transition-colors"
+													onChange={(val) => handlePropertyChange('maxTextLength', val)}
 												/>
 											</div>
 										</div>
@@ -2081,18 +2159,18 @@ export const PropertiesPanel = () => {
 											</div>
 											<div className="flex items-center justify-between pl-2 border-l-2 border-border/30">
 												<Label className="text-[10px] text-muted-foreground">Loop Count</Label>
-												<Input
+												<NumberInput
+													className="h-7 w-16 text-right"
 													value={draftItem.loopCount || 0}
-													onChange={(e) => handlePropertyChange('loopCount', e.target.value)}
-													className="h-7 w-16 text-xs font-mono text-right bg-background/50 shadow-sm hover:bg-background/80 transition-colors"
+													onChange={(val) => handlePropertyChange('loopCount', val)}
 												/>
 											</div>
 											<div className="flex items-center justify-between pl-2 border-l-2 border-border/30">
 												<Label className="text-[10px] text-muted-foreground">Start Frame</Label>
-												<Input
+												<NumberInput
+													className="h-7 w-16 text-right"
 													value={draftItem.startFrame || 0}
-													onChange={(e) => handlePropertyChange('startFrame', e.target.value)}
-													className="h-7 w-16 text-xs font-mono text-right bg-background/50 shadow-sm hover:bg-background/80 transition-colors"
+													onChange={(val) => handlePropertyChange('startFrame', val)}
 												/>
 											</div>
 										</div>
@@ -2147,41 +2225,41 @@ export const PropertiesPanel = () => {
 													</div>
 													<div className="flex flex-col gap-1">
 														<Label className="text-[10px] text-muted-foreground">Trade As</Label>
-														<Input
+														<NumberInput
+															className="h-7 w-full text-right"
 															disabled={!draftItem.isMarketItem}
 															value={draftItem.marketTradeAs || 0}
-															onChange={(e) => handlePropertyChange('marketTradeAs', e.target.value)}
-															className="h-7 w-full text-xs font-mono text-right bg-background/50 shadow-sm hover:bg-background/80 transition-colors"
+															onChange={(val) => handlePropertyChange('marketTradeAs', val)}
 														/>
 													</div>
 												</div>
 												<div className="grid grid-cols-2 gap-2">
 													<div className="flex flex-col gap-1">
 														<Label className="text-[10px] text-muted-foreground">Show As</Label>
-														<Input
+														<NumberInput
+															className="h-7 w-full text-right"
 															disabled={!draftItem.isMarketItem}
 															value={draftItem.marketShowAs || 0}
-															onChange={(e) => handlePropertyChange('marketShowAs', e.target.value)}
-															className="h-7 w-full text-xs font-mono text-right bg-background/50 shadow-sm hover:bg-background/80 transition-colors"
+															onChange={(val) => handlePropertyChange('marketShowAs', val)}
 														/>
 													</div>
 													<div className="flex flex-col gap-1">
 														<Label className="text-[10px] text-muted-foreground">Profession</Label>
-														<Input
+														<NumberInput
+															className="h-7 w-full text-right"
 															disabled={!draftItem.isMarketItem}
 															value={draftItem.marketRestrictProfession || 0}
-															onChange={(e) => handlePropertyChange('marketRestrictProfession', e.target.value)}
-															className="h-7 w-full text-xs font-mono text-right bg-background/50 shadow-sm hover:bg-background/80 transition-colors"
+															onChange={(val) => handlePropertyChange('marketRestrictProfession', val)}
 														/>
 													</div>
 												</div>
 												<div className="flex flex-col gap-1">
 													<Label className="text-[10px] text-muted-foreground">Level</Label>
-													<Input
+													<NumberInput
+														className="h-7 w-full text-right"
 														disabled={!draftItem.isMarketItem}
 														value={draftItem.marketRestrictLevel || 0}
-														onChange={(e) => handlePropertyChange('marketRestrictLevel', e.target.value)}
-														className="h-7 w-full text-xs font-mono text-right bg-background/50 shadow-sm hover:bg-background/80 transition-colors"
+														onChange={(val) => handlePropertyChange('marketRestrictLevel', val)}
 													/>
 												</div>
 											</div>
@@ -2246,14 +2324,20 @@ export const PropertiesPanel = () => {
 			</ScrollArea>
 
 			{/* Footer with action buttons */}
-			<div className="border-t border-border/50 bg-secondary/30 p-2 flex items-center gap-2 justify-end h-[45px]">
-				<Button size="sm" className="h-7" variant="outline" onClick={handleClose}>
-					<X className="h-3.5 w-3.5 mr-1" />
-					Close
+			<div className="border-t border-border/50 bg-secondary/30 p-2 flex items-center gap-2 justify-between h-[45px]">
+				<Button size="sm" className="h-7" variant="outline" onClick={handleDiscardChanges} disabled={!hasChanges}>
+					<RotateCcw className="h-3.5 w-3.5 mr-1" />
+					Discard Changes
 				</Button>
-				<Button size="sm" className="h-7" onClick={handleSave} disabled={!hasChanges}>
-					Save Changes
-				</Button>
+				<div className="flex items-center gap-2">
+					<Button size="sm" className="h-7" variant="outline" onClick={handleClose}>
+						<X className="h-3.5 w-3.5 mr-1" />
+						Close
+					</Button>
+					<Button size="sm" className="h-7" onClick={handleSave} disabled={!hasChanges}>
+						Save Changes
+					</Button>
+				</div>
 			</div>
 
 			{/* Confirmation dialog for closing with unsaved changes */}

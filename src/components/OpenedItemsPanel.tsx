@@ -12,7 +12,7 @@ export const OpenedItemsPanel = () => {
 
 	if (!data) {
 		return (
-			<div className="w-[216px] max-h-[200px] bg-card rounded-lg shadow-island flex flex-col overflow-hidden flex-shrink-0">
+			<div className="w-[216px] h-[72px] bg-card rounded-lg shadow-island flex flex-col overflow-hidden flex-shrink-0">
 				<div className="h-8 px-3 flex items-center border-b border-border/50 bg-secondary/80 flex-shrink-0">
 					<h2 className="text-xs font-semibold text-foreground uppercase tracking-wide">Opened Objects</h2>
 				</div>
@@ -46,17 +46,24 @@ export const OpenedItemsPanel = () => {
 	};
 
 	return (
-		<div className="w-[216px] max-h-[200px] bg-card rounded-lg shadow-island flex flex-col overflow-hidden flex-shrink-0">
+		<div
+			className={cn(
+				'w-[216px] bg-card rounded-lg shadow-island flex flex-col overflow-hidden flex-shrink-0',
+				openedItems.length === 0 ? 'h-[72px]' : 'min-h-[72px] max-h-[200px]'
+			)}
+		>
 			<div className="h-8 px-3 flex items-center border-b border-border/50 bg-secondary/80 flex-shrink-0">
 				<h2 className="text-xs font-semibold text-foreground uppercase tracking-wide">Opened Objects</h2>
 				{openedItems.length > 0 && <span className="ml-auto text-xs text-muted-foreground font-mono">{openedItems.length}</span>}
 			</div>
-			<ScrollArea className="flex-1 min-h-0">
-				<div className="p-2 space-y-0.5">
-					{openedItems.length === 0 ? (
-						<div className="text-center text-muted-foreground text-xs py-8">No opened objects</div>
-					) : (
-						openedItems.map((item) => (
+			{openedItems.length === 0 ? (
+				<div className="flex-1 flex items-center justify-center">
+					<div className="text-center text-muted-foreground text-xs">No opened objects</div>
+				</div>
+			) : (
+				<ScrollArea className="flex-1 min-h-0">
+					<div className="space-y-0.5 p-2">
+						{openedItems.map((item) => (
 							<div
 								key={`${item.category}-${item.id}`}
 								onClick={() => handleItemClick(item)}
@@ -85,10 +92,10 @@ export const OpenedItemsPanel = () => {
 									<X className="h-3 w-3" />
 								</Button>
 							</div>
-						))
-					)}
-				</div>
-			</ScrollArea>
+						))}
+					</div>
+				</ScrollArea>
+			)}
 		</div>
 	);
 };

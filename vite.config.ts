@@ -29,6 +29,12 @@ export default defineConfig(async ({ mode }) => ({
     target: process.env.TAURI_PLATFORM == "windows" ? "chrome105" : "safari13",
     minify: !process.env.TAURI_DEBUG ? "esbuild" : false,
     sourcemap: !!process.env.TAURI_DEBUG,
+    rollupOptions: {
+      input: {
+        main: path.resolve(__dirname, "index.html"),
+        find: path.resolve(__dirname, "find.html"),
+      },
+    },
   },
   resolve: {
     alias: {

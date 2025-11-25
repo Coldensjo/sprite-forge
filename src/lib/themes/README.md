@@ -140,3 +140,12 @@ Themes are automatically saved to localStorage:
 
 The selected theme and dark mode preference persist across application restarts.
 
+
+
+
+
+
+
+
+
+

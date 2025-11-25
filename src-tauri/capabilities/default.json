@@ -2,7 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Capability for the main window",
-  "windows": ["main"],
+  "windows": ["main", "find"],
   "permissions": [
     "core:default",
     "opener:default",
@@ -14,7 +14,13 @@
     "core:window:allow-maximize",
     "core:window:allow-toggle-maximize",
     "core:window:allow-close",
-    "core:window:allow-start-dragging"
+    "core:window:allow-start-dragging",
+    "core:window:allow-show",
+    "core:window:allow-hide",
+    "core:window:allow-create",
+    "core:window:allow-set-focus",
+    "core:webview:allow-create-webview-window",
+    "core:webview:allow-create-webview"
   ]
 }
 

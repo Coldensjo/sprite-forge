@@ -1,0 +1,234 @@
+import { useState, useEffect } from 'react';
+import { useToast } from '@/hooks/use-toast';
+import { getCommitHistory, cleanOldVersions } from '@/lib/versionControl';
+import type { CommitLog } from '@/lib/versionControl';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog';
+import { Button } from './ui/button';
+import { Input } from './ui/input';
+import { Label } from './ui/label';
+import { ScrollArea } from './ui/scroll-area';
+import { Trash2, Clock, Package } from 'lucide-react';
+
+interface VersionHistoryDialogProps {
+	open: boolean;
+	onOpenChange: (open: boolean) => void;
+}
+
+export const VersionHistoryDialog = ({ open, onOpenChange }: VersionHistoryDialogProps) => {
+	const { toast } = useToast();
+	const [commitLog, setCommitLog] = useState<CommitLog | null>(null);
+	const [loading, setLoading] = useState(false);
+	const [cleanupDays, setCleanupDays] = useState('30');
+	const [cleanupCount, setCleanupCount] = useState('10');
+
+	// Load commit history when dialog opens
+	useEffect(() => {
+		if (open) {
+			loadCommitHistory();
+		}
+	}, [open]);
+
+	const loadCommitHistory = async () => {
+		setLoading(true);
+		try {
+			const history = await getCommitHistory();
+			setCommitLog(history);
+		} catch (err) {
+			console.error('Failed to load commit history:', err);
+			toast({
+				variant: 'destructive',
+				title: 'Failed to load history',
+				description: err instanceof Error ? err.message : 'Unknown error'
+			});
+		} finally {
+			setLoading(false);
+		}
+	};
+
+	const handleCleanupByDays = async () => {
+		const days = parseInt(cleanupDays, 10);
+		if (isNaN(days) || days < 1) {
+			toast({
+				variant: 'destructive',
+				title: 'Invalid input',
+				description: 'Please enter a valid number of days'
+			});
+			return;
+		}
+
+		try {
+			const deleted = await cleanOldVersions({ olderThanDays: days });
+
+			toast({
+				title: 'Cleanup complete',
+				description: `Deleted ${deleted} old version${deleted !== 1 ? 's' : ''}`
+			});
+
+			// Reload history
+			await loadCommitHistory();
+		} catch (err) {
+			toast({
+				variant: 'destructive',
+				title: 'Cleanup failed',
+				description: err instanceof Error ? err.message : 'Unknown error'
+			});
+		}
+	};
+
+	const handleCleanupByCount = async () => {
+		const count = parseInt(cleanupCount, 10);
+		if (isNaN(count) || count < 1) {
+			toast({
+				variant: 'destructive',
+				title: 'Invalid input',
+				description: 'Please enter a valid number'
+			});
+			return;
+		}
+
+		try {
+			const deleted = await cleanOldVersions({ keepLast: count });
+
+			toast({
+				title: 'Cleanup complete',
+				description: `Deleted ${deleted} old version${deleted !== 1 ? 's' : ''}`
+			});
+
+			// Reload history
+			await loadCommitHistory();
+		} catch (err) {
+			toast({
+				variant: 'destructive',
+				title: 'Cleanup failed',
+				description: err instanceof Error ? err.message : 'Unknown error'
+			});
+		}
+	};
+
+	const formatDate = (timestamp: number) => {
+		const date = new Date(timestamp);
+		return date.toLocaleString();
+	};
+
+	const formatRelativeTime = (timestamp: number) => {
+		const now = Date.now();
+		const diff = now - timestamp;
+		const seconds = Math.floor(diff / 1000);
+		const minutes = Math.floor(seconds / 60);
+		const hours = Math.floor(minutes / 60);
+		const days = Math.floor(hours / 24);
+
+		if (days > 0) return `${days} day${days !== 1 ? 's' : ''} ago`;
+		if (hours > 0) return `${hours} hour${hours !== 1 ? 's' : ''} ago`;
+		if (minutes > 0) return `${minutes} minute${minutes !== 1 ? 's' : ''} ago`;
+		return 'Just now';
+	};
+
+	return (
+		<Dialog open={open} onOpenChange={onOpenChange}>
+			<DialogContent className="max-w-3xl max-h-[80vh] flex flex-col">
+				<DialogHeader>
+					<DialogTitle>Version History</DialogTitle>
+					<DialogDescription>View and manage compilation history with version control</DialogDescription>
+				</DialogHeader>
+
+				<div className="flex-1 flex flex-col gap-4 overflow-hidden">
+					{/* Commit History */}
+					<div className="flex-1 flex flex-col overflow-hidden">
+						<h3 className="text-sm font-medium mb-2">Commits</h3>
+						{loading ? (
+							<div className="flex items-center justify-center h-32 text-sm text-muted-foreground">Loading...</div>
+						) : commitLog && commitLog.commits.length > 0 ? (
+							<ScrollArea className="flex-1 border rounded-md">
+								<div className="p-3 space-y-2">
+									{commitLog.commits.map((commit) => (
+										<div
+											key={commit.hash}
+											className="p-3 rounded-md bg-secondary/30 border border-border/50 hover:bg-secondary/50 transition-colors"
+										>
+											<div className="flex items-start justify-between gap-3">
+												<div className="flex-1 min-w-0">
+													<div className="flex items-center gap-2 mb-1">
+														<Clock className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+														<span className="text-xs text-muted-foreground">{formatRelativeTime(commit.timestamp)}</span>
+														<span className="text-xs text-muted-foreground">•</span>
+														<span className="text-xs text-muted-foreground font-mono">{formatDate(commit.timestamp)}</span>
+													</div>
+													<p className="text-sm font-medium mb-2">{commit.message}</p>
+													<div className="flex items-center gap-3 text-xs text-muted-foreground">
+														<div className="flex items-center gap-1">
+															<Package className="h-3 w-3" />
+															<span>{commit.itemCount} item{commit.itemCount !== 1 ? 's' : ''}</span>
+														</div>
+														<div className="flex items-center gap-1">
+															<Package className="h-3 w-3" />
+															<span>{commit.spriteCount} sprite{commit.spriteCount !== 1 ? 's' : ''}</span>
+														</div>
+													</div>
+												</div>
+												<div className="flex-shrink-0">
+													<code className="text-xs bg-background px-2 py-0.5 rounded border font-mono">
+														{commit.hash.substring(0, 8)}
+													</code>
+												</div>
+											</div>
+										</div>
+									))}
+								</div>
+							</ScrollArea>
+						) : (
+							<div className="flex items-center justify-center h-32 text-sm text-muted-foreground border rounded-md">
+								No commits yet. Make changes and compile to create your first version.
+							</div>
+						)}
+					</div>
+
+					{/* Cleanup Section */}
+					<div className="border-t pt-4">
+						<h3 className="text-sm font-medium mb-3">Version Cleanup</h3>
+						<div className="grid grid-cols-2 gap-3">
+							<div className="space-y-2">
+								<Label htmlFor="cleanup-days" className="text-xs">
+									Delete versions older than (days)
+								</Label>
+								<div className="flex gap-2">
+									<Input
+										id="cleanup-days"
+										type="number"
+										min="1"
+										value={cleanupDays}
+										onChange={(e) => setCleanupDays(e.target.value)}
+										className="h-8 text-sm"
+									/>
+									<Button size="sm" variant="outline" onClick={handleCleanupByDays} className="h-8 text-xs">
+										<Trash2 className="h-3 w-3 mr-1" />
+										Clean
+									</Button>
+								</div>
+							</div>
+							<div className="space-y-2">
+								<Label htmlFor="cleanup-count" className="text-xs">
+									Keep only last N versions
+								</Label>
+								<div className="flex gap-2">
+									<Input
+										id="cleanup-count"
+										type="number"
+										min="1"
+										value={cleanupCount}
+										onChange={(e) => setCleanupCount(e.target.value)}
+										className="h-8 text-sm"
+									/>
+									<Button size="sm" variant="outline" onClick={handleCleanupByCount} className="h-8 text-xs">
+										<Trash2 className="h-3 w-3 mr-1" />
+										Clean
+									</Button>
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
+			</DialogContent>
+		</Dialog>
+	);
+};

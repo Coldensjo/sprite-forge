@@ -230,6 +230,7 @@ export interface ClientVersion {
  * Loaded Tibia client data
  */
 export interface TibiaData {
+	datPath?: string; // Path to DAT file
 	sprPath?: string; // Path to SPR file for streaming from Rust
 	extended: boolean;
 	itemsCount: number;

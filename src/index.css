@@ -124,4 +124,34 @@ All colors MUST be HSL.
 	.font-mono {
 		font-family: 'JetBrains Mono', 'Consolas', 'Monaco', monospace;
 	}
+
+	/* Custom Scrollbar */
+	::-webkit-scrollbar {
+		width: 10px;
+		height: 10px;
+	}
+
+	::-webkit-scrollbar-track {
+		background: transparent;
+	}
+
+	::-webkit-scrollbar-thumb {
+		background: hsl(var(--border));
+		border-radius: 5px;
+		border: 2px solid hsl(var(--background)); /* Creates padding effect */
+	}
+
+	::-webkit-scrollbar-thumb:hover {
+		background: hsl(var(--muted-foreground));
+	}
+
+	::-webkit-scrollbar-corner {
+		background: transparent;
+	}
+
+	input[type='number']::-webkit-inner-spin-button,
+	input[type='number']::-webkit-outer-spin-button {
+		-webkit-appearance: none;
+		margin: 0;
+	}
 }

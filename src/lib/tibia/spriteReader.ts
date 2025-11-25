@@ -283,6 +283,92 @@ export function compressPixels(pixels: Uint8Array, transparent: boolean): Uint8A
 }
 
 /**
+ * Check if sprite pixels are completely empty (all transparent)
+ *
+ * @param pixels - ARGB pixel data (4096 bytes)
+ * @returns True if all pixels are transparent
+ */
+export function isEmptyPixels(pixels: Uint8Array): boolean {
+	if (pixels.length !== SPRITE_DATA_SIZE) {
+		return true;
+	}
+
+	// Check alpha channel of all pixels
+	for (let i = 0; i < SPRITE_PIXELS; i++) {
+		if (pixels[i * 4] !== 0) {
+			return false;
+		}
+	}
+
+	return true;
+}
+
+/**
+ * Convert RGBA ImageData to ARGB format used by sprites
+ *
+ * @param imageData - Canvas ImageData (RGBA format)
+ * @returns ARGB pixel data (4096 bytes)
+ */
+export function imageDataToARGB(imageData: ImageData): Uint8Array {
+	if (imageData.width !== 32 || imageData.height !== 32) {
+		throw new Error('ImageData must be 32x32 pixels');
+	}
+
+	const argb = new Uint8Array(SPRITE_DATA_SIZE);
+	const rgba = imageData.data;
+
+	for (let i = 0; i < SPRITE_PIXELS; i++) {
+		const rgbaOffset = i * 4;
+		const argbOffset = i * 4;
+
+		// Convert RGBA to ARGB
+		argb[argbOffset] = rgba[rgbaOffset + 3];     // A
+		argb[argbOffset + 1] = rgba[rgbaOffset];     // R
+		argb[argbOffset + 2] = rgba[rgbaOffset + 1]; // G
+		argb[argbOffset + 3] = rgba[rgbaOffset + 2]; // B
+	}
+
+	return argb;
+}
+
+/**
+ * Convert ARGB pixel data to RGBA ImageData for canvas rendering
+ *
+ * @param argb - ARGB pixel data (4096 bytes)
+ * @returns Canvas ImageData (RGBA format)
+ */
+export function argbToImageData(argb: Uint8Array): ImageData {
+	if (argb.length !== SPRITE_DATA_SIZE) {
+		throw new Error(`Invalid ARGB data size: expected ${SPRITE_DATA_SIZE}, got ${argb.length}`);
+	}
+
+	const imageData = new ImageData(32, 32);
+	const rgba = imageData.data;
+
+	for (let i = 0; i < SPRITE_PIXELS; i++) {
+		const argbOffset = i * 4;
+		const rgbaOffset = i * 4;
+
+		// Convert ARGB to RGBA
+		rgba[rgbaOffset] = argb[argbOffset + 1];     // R
+		rgba[rgbaOffset + 1] = argb[argbOffset + 2]; // G
+		rgba[rgbaOffset + 2] = argb[argbOffset + 3]; // B
+		rgba[rgbaOffset + 3] = argb[argbOffset];     // A
+	}
+
+	return imageData;
+}
+
+/**
+ * Create blank ARGB pixel data (all transparent)
+ *
+ * @returns Blank ARGB pixel data (4096 bytes)
+ */
+export function createBlankPixels(): Uint8Array {
+	return new Uint8Array(SPRITE_DATA_SIZE);
+}
+
+/**
  * Convert decompressed sprite pixels to an ImageData object for canvas rendering
  */
 export function spriteToImageData(sprite: Sprite): ImageData {

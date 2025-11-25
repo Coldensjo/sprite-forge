@@ -221,6 +221,7 @@ export async function loadTibiaData(
 
 	return {
 		sprites,
+		datPath,
 		items: datData.items,
 		sprPath: sprData.path,
 		version: detectedVersion,
