@@ -3,9 +3,11 @@
  * Handles writing modified data back to files with version control
  */
 
+import type { Sprite, TibiaData, ThingType } from './types';
+
 import { invoke } from '@tauri-apps/api/core';
+
 import { ThingCategory } from './types';
-import type { TibiaData, ThingType, Sprite } from './types';
 import { createCommit } from '../versionControl';
 
 /**
@@ -16,7 +18,7 @@ import { createCommit } from '../versionControl';
 function collectThings(
 	map: Map<number, ThingType>,
 	category: ThingCategory
-): { things: ThingType[]; maxId: number; minId: number } {
+): { maxId: number; minId: number; things: ThingType[] } {
 	// Determine ID range based on category
 	const minId = category === 'item' ? 100 : 1;
 
@@ -33,7 +35,7 @@ function collectThings(
 		}
 	}
 
-	return { things, maxId, minId };
+	return { maxId, minId, things };
 }
 
 /**
@@ -41,7 +43,7 @@ function collectThings(
  */
 function collectModifiedSprites(
 	data: TibiaData,
-	modifiedItems: Map<string, { id: number; category: ThingCategory; data: ThingType }>
+	modifiedItems: Map<string, { id: number; data: ThingType; category: ThingCategory }>
 ): Map<number, Sprite> {
 	const modifiedSprites = new Map<number, Sprite>();
 
@@ -71,17 +73,12 @@ function collectModifiedSprites(
  * - TODO: Encode to binary buffer using DataView for 10-100x performance improvement
  * - See CLAUDE.md "RULE #1: NEVER USE JSON FOR TAURI IPC" for implementation guide
  */
-export async function compileDatFile(
-	path: string,
-	data: TibiaData
-): Promise<void> {
+export async function compileDatFile(path: string, data: TibiaData): Promise<void> {
 	// Collect all items from each category
 	const itemsData = collectThings(data.items, ThingCategory.ITEM);
 	const outfitsData = collectThings(data.outfits, ThingCategory.OUTFIT);
 	const effectsData = collectThings(data.effects, ThingCategory.EFFECT);
 	const missilesData = collectThings(data.missiles, ThingCategory.MISSILE);
-
-
 
 	// Check for corrupt data in items
 	for (let i = 0; i < itemsData.things.length; i++) {
@@ -91,15 +88,15 @@ export async function compileDatFile(
 			if (total > 4096 || total === 0) {
 				console.error(`CORRUPT ITEM at index ${i}:`, {
 					id: item.id,
-					category: item.category,
 					width: item.width,
 					height: item.height,
-					patternX: item.patternX,
-					patternY: item.patternY,
-					patternZ: item.patternZ,
 					frames: item.frames,
 					layers: item.layers,
 					totalSprites: total,
+					category: item.category,
+					patternX: item.patternX,
+					patternY: item.patternY,
+					patternZ: item.patternZ,
 					spriteIndexLength: item.spriteIndex?.length || 0
 				});
 			}
@@ -110,19 +107,20 @@ export async function compileDatFile(
 	for (let i = 0; i < outfitsData.things.length; i++) {
 		const outfit = outfitsData.things[i];
 		if (outfit) {
-			const total = outfit.width * outfit.height * outfit.patternX * outfit.patternY * outfit.patternZ * outfit.frames * outfit.layers;
+			const total =
+				outfit.width * outfit.height * outfit.patternX * outfit.patternY * outfit.patternZ * outfit.frames * outfit.layers;
 			if (total > 4096 || total === 0) {
 				console.error(`CORRUPT OUTFIT at index ${i}:`, {
 					id: outfit.id,
-					category: outfit.category,
 					width: outfit.width,
+					totalSprites: total,
 					height: outfit.height,
+					frames: outfit.frames,
+					layers: outfit.layers,
+					category: outfit.category,
 					patternX: outfit.patternX,
 					patternY: outfit.patternY,
 					patternZ: outfit.patternZ,
-					frames: outfit.frames,
-					layers: outfit.layers,
-					totalSprites: total,
 					spriteIndexLength: outfit.spriteIndex?.length || 0
 				});
 			}
@@ -134,22 +132,22 @@ export async function compileDatFile(
 	// PERFORMANCE: Only send non-null things, Rust fills in the gaps
 	await invoke('write_dat', {
 		path,
-		signature: data.version.datSignature,
-		version: data.version.value,
 		extended: data.extended,
-		frameDurations: data.version.supportsFrameDurations,
+		items: itemsData.things,
+		version: data.version.value,
 		itemsMinId: itemsData.minId,
 		itemsMaxId: itemsData.maxId,
+		outfits: outfitsData.things,
+		effects: effectsData.things,
+		missiles: missilesData.things,
 		outfitsMinId: outfitsData.minId,
 		outfitsMaxId: outfitsData.maxId,
 		effectsMinId: effectsData.minId,
 		effectsMaxId: effectsData.maxId,
 		missilesMinId: missilesData.minId,
 		missilesMaxId: missilesData.maxId,
-		items: itemsData.things,
-		outfits: outfitsData.things,
-		effects: effectsData.things,
-		missiles: missilesData.things
+		signature: data.version.datSignature,
+		frameDurations: data.version.supportsFrameDurations
 	});
 }
 
@@ -180,9 +178,9 @@ export async function compileSprFile(path: string, data: TibiaData): Promise<voi
 	// Invoke Rust command to write SPR file
 	await invoke('write_spr', {
 		path,
-		signature: data.version.sprSignature,
+		sprites,
 		extended: data.extended,
-		sprites
+		signature: data.version.sprSignature
 	});
 }
 
@@ -219,9 +217,9 @@ export async function updateSpritesInSpr(
 	// Invoke Rust command to update specific sprites
 	await invoke('update_spr_sprites', {
 		path,
-		extended: data.extended,
 		sprites,
-		spritesCount
+		spritesCount,
+		extended: data.extended
 	});
 }
 
@@ -232,7 +230,7 @@ export async function compileFiles(
 	data: TibiaData,
 	datPath: string,
 	sprPath: string,
-	modifiedItems: Map<string, { id: number; category: ThingCategory; data: ThingType }>,
+	modifiedItems: Map<string, { id: number; data: ThingType; category: ThingCategory }>,
 	directlyModifiedSprites: Map<number, Sprite>,
 	onProgress?: (stage: string, current: number, total: number) => void
 ): Promise<void> {
@@ -266,9 +264,7 @@ export async function compileFiles(
 		if (onProgress) onProgress('Compile complete', 4, 4);
 
 		const duration = Date.now() - startTime;
-		console.log(
-			`Compile complete in ${duration}ms: ${modifiedItems.size} items, ${modifiedSprites.size} sprites`
-		);
+		console.log(`Compile complete in ${duration}ms: ${modifiedItems.size} items, ${modifiedSprites.size} sprites`);
 	} catch (error) {
 		console.error('Compile failed:', error);
 		throw error;

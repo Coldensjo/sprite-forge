@@ -1,13 +1,15 @@
+import type { CommitLog } from '@/lib/versionControl';
+
 import { useState, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
+import { Clock, Trash2, Package } from 'lucide-react';
 import { getCommitHistory, cleanOldVersions } from '@/lib/versionControl';
-import type { CommitLog } from '@/lib/versionControl';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog';
-import { Button } from './ui/button';
+
 import { Input } from './ui/input';
 import { Label } from './ui/label';
+import { Button } from './ui/button';
 import { ScrollArea } from './ui/scroll-area';
-import { Trash2, Clock, Package } from 'lucide-react';
+import { Dialog, DialogTitle, DialogHeader, DialogContent, DialogDescription } from './ui/dialog';
 
 interface VersionHistoryDialogProps {
 	open: boolean;
@@ -16,7 +18,7 @@ interface VersionHistoryDialogProps {
 
 export const VersionHistoryDialog = ({ open, onOpenChange }: VersionHistoryDialogProps) => {
 	const { toast } = useToast();
-	const [commitLog, setCommitLog] = useState<CommitLog | null>(null);
+	const [commitLog, setCommitLog] = useState<null | CommitLog>(null);
 	const [loading, setLoading] = useState(false);
 	const [cleanupDays, setCleanupDays] = useState('30');
 	const [cleanupCount, setCleanupCount] = useState('10');
@@ -158,11 +160,15 @@ export const VersionHistoryDialog = ({ open, onOpenChange }: VersionHistoryDialo
 													<div className="flex items-center gap-3 text-xs text-muted-foreground">
 														<div className="flex items-center gap-1">
 															<Package className="h-3 w-3" />
-															<span>{commit.itemCount} item{commit.itemCount !== 1 ? 's' : ''}</span>
+															<span>
+																{commit.itemCount} item{commit.itemCount !== 1 ? 's' : ''}
+															</span>
 														</div>
 														<div className="flex items-center gap-1">
 															<Package className="h-3 w-3" />
-															<span>{commit.spriteCount} sprite{commit.spriteCount !== 1 ? 's' : ''}</span>
+															<span>
+																{commit.spriteCount} sprite{commit.spriteCount !== 1 ? 's' : ''}
+															</span>
 														</div>
 													</div>
 												</div>
@@ -188,38 +194,38 @@ export const VersionHistoryDialog = ({ open, onOpenChange }: VersionHistoryDialo
 						<h3 className="text-sm font-medium mb-3">Version Cleanup</h3>
 						<div className="grid grid-cols-2 gap-3">
 							<div className="space-y-2">
-								<Label htmlFor="cleanup-days" className="text-xs">
+								<Label className="text-xs" htmlFor="cleanup-days">
 									Delete versions older than (days)
 								</Label>
 								<div className="flex gap-2">
 									<Input
-										id="cleanup-days"
-										type="number"
 										min="1"
+										type="number"
+										id="cleanup-days"
 										value={cleanupDays}
-										onChange={(e) => setCleanupDays(e.target.value)}
 										className="h-8 text-sm"
+										onChange={(e) => setCleanupDays(e.target.value)}
 									/>
-									<Button size="sm" variant="outline" onClick={handleCleanupByDays} className="h-8 text-xs">
+									<Button size="sm" variant="outline" className="h-8 text-xs" onClick={handleCleanupByDays}>
 										<Trash2 className="h-3 w-3 mr-1" />
 										Clean
 									</Button>
 								</div>
 							</div>
 							<div className="space-y-2">
-								<Label htmlFor="cleanup-count" className="text-xs">
+								<Label className="text-xs" htmlFor="cleanup-count">
 									Keep only last N versions
 								</Label>
 								<div className="flex gap-2">
 									<Input
-										id="cleanup-count"
-										type="number"
 										min="1"
+										type="number"
+										id="cleanup-count"
 										value={cleanupCount}
-										onChange={(e) => setCleanupCount(e.target.value)}
 										className="h-8 text-sm"
+										onChange={(e) => setCleanupCount(e.target.value)}
 									/>
-									<Button size="sm" variant="outline" onClick={handleCleanupByCount} className="h-8 text-xs">
+									<Button size="sm" variant="outline" className="h-8 text-xs" onClick={handleCleanupByCount}>
 										<Trash2 className="h-3 w-3 mr-1" />
 										Clean
 									</Button>

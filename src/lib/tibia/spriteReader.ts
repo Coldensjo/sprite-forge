@@ -322,8 +322,8 @@ export function imageDataToARGB(imageData: ImageData): Uint8Array {
 		const argbOffset = i * 4;
 
 		// Convert RGBA to ARGB
-		argb[argbOffset] = rgba[rgbaOffset + 3];     // A
-		argb[argbOffset + 1] = rgba[rgbaOffset];     // R
+		argb[argbOffset] = rgba[rgbaOffset + 3]; // A
+		argb[argbOffset + 1] = rgba[rgbaOffset]; // R
 		argb[argbOffset + 2] = rgba[rgbaOffset + 1]; // G
 		argb[argbOffset + 3] = rgba[rgbaOffset + 2]; // B
 	}
@@ -350,10 +350,10 @@ export function argbToImageData(argb: Uint8Array): ImageData {
 		const rgbaOffset = i * 4;
 
 		// Convert ARGB to RGBA
-		rgba[rgbaOffset] = argb[argbOffset + 1];     // R
+		rgba[rgbaOffset] = argb[argbOffset + 1]; // R
 		rgba[rgbaOffset + 1] = argb[argbOffset + 2]; // G
 		rgba[rgbaOffset + 2] = argb[argbOffset + 3]; // B
-		rgba[rgbaOffset + 3] = argb[argbOffset];     // A
+		rgba[rgbaOffset + 3] = argb[argbOffset]; // A
 	}
 
 	return imageData;

@@ -60,8 +60,8 @@ export type PropertyFlag = (typeof PROPERTY_FLAGS)[number];
  * Search criteria structure
  */
 export interface SearchCriteria {
-	category: ThingCategory | null; // null = all categories
 	name: string; // Market name search (case-insensitive partial match)
+	category: null | ThingCategory; // null = all categories
 	properties: Record<string, boolean>; // Property name -> enabled (true = must have, false = ignored)
 }
 
@@ -146,7 +146,7 @@ export function unpackSearchCriteria(buffer: Uint8Array): SearchCriteria {
 	// Category
 	const categoryValue = buffer[offset];
 	offset += 1;
-	const category: ThingCategory | null =
+	const category: null | ThingCategory =
 		categoryValue === 0
 			? null
 			: categoryValue === 1
@@ -180,7 +180,7 @@ export function unpackSearchCriteria(buffer: Uint8Array): SearchCriteria {
 		}
 	}
 
-	return { category, name, properties };
+	return { name, category, properties };
 }
 
 /**
@@ -255,4 +255,3 @@ export function unpackSearchResults(buffer: Uint8Array): Array<{ id: number; cat
 
 	return results;
 }
-

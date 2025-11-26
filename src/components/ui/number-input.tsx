@@ -1,14 +1,14 @@
 import * as React from 'react';
-import { ChevronUp, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { ChevronUp, ChevronDown } from 'lucide-react';
 
 export interface NumberInputProps extends Omit<React.ComponentProps<'input'>, 'type' | 'onChange'> {
-	onChange?: (value: number | string) => void;
 	step?: number;
+	onChange?: (value: number | string) => void;
 }
 
 const NumberInput = React.forwardRef<HTMLInputElement, NumberInputProps>(
-	({ className, onChange, step = 1, min, max, value, disabled, ...props }, ref) => {
+	({ min, max, value, onChange, step = 1, disabled, className, ...props }, ref) => {
 		const [internalValue, setInternalValue] = React.useState<string>(String(value ?? ''));
 
 		React.useEffect(() => {
@@ -50,23 +50,23 @@ const NumberInput = React.forwardRef<HTMLInputElement, NumberInputProps>(
 			<div className="relative flex items-center">
 				<input
 					ref={ref}
-					type="number"
-					value={internalValue}
-					onChange={handleChange}
 					min={min}
 					max={max}
 					step={step}
+					type="number"
 					disabled={disabled}
+					value={internalValue}
+					onChange={handleChange}
+					style={{
+						...props.style,
+						paddingRight: '1.1rem',
+						WebkitAppearance: 'none',
+						MozAppearance: 'textfield'
+					}}
 					className={cn(
 						'flex h-7 w-full rounded-md border border-input bg-background/50 px-2 py-1 text-xs font-mono ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-50',
 						className
 					)}
-					style={{
-						...props.style,
-						MozAppearance: 'textfield',
-						WebkitAppearance: 'none',
-						paddingRight: '1.1rem'
-					}}
 					{...props}
 				/>
 				<div className="absolute right-0.5 top-1 bottom-1 flex flex-col items-center justify-center gap-[1px]">
@@ -94,4 +94,3 @@ const NumberInput = React.forwardRef<HTMLInputElement, NumberInputProps>(
 NumberInput.displayName = 'NumberInput';
 
 export { NumberInput };
-

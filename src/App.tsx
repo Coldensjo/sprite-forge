@@ -2,10 +2,10 @@ import { Toaster } from '@/components/ui/toaster';
 import { ThemeProvider } from '@/contexts/ThemeContext';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { Toaster as Sonner } from '@/components/ui/sonner';
+import { DragDropProvider } from '@/contexts/DragDropContext';
 import { Route, Routes, BrowserRouter } from 'react-router-dom';
 import { TibiaDataProvider } from '@/contexts/TibiaDataContext';
 import { PanelSettingsProvider } from '@/contexts/PanelSettingsContext';
-import { DragDropProvider } from '@/contexts/DragDropContext';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import Index from './pages/Index';

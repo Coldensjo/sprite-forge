@@ -6,15 +6,16 @@
  */
 
 import type { Sprite, TibiaData } from './types';
-import { compressPixels, isEmptyPixels } from './spriteReader';
+
+import { isEmptyPixels, compressPixels } from './spriteReader';
 
 /**
  * Result of a sprite operation
  */
 export interface SpriteOperationResult {
 	success: boolean;
-	spriteId?: number;
 	message?: string;
+	spriteId?: number;
 }
 
 /**
@@ -53,9 +54,9 @@ export function addSprite(data: TibiaData, pixels: Uint8Array): SpriteOperationR
 		// Create sprite object
 		const sprite: Sprite = {
 			id: newId,
+			compressedPixels: compressed,
 			isEmpty: isEmptyPixels(pixels),
-			transparent: data.transparency,
-			compressedPixels: compressed
+			transparent: data.transparency
 		};
 
 		// Add to cache
@@ -109,9 +110,9 @@ export function replaceSprite(data: TibiaData, id: number, pixels: Uint8Array): 
 		// Create updated sprite
 		const sprite: Sprite = {
 			id,
+			compressedPixels: compressed,
 			isEmpty: isEmptyPixels(pixels),
-			transparent: data.transparency,
-			compressedPixels: compressed
+			transparent: data.transparency
 		};
 
 		// Update in cache
@@ -120,8 +121,8 @@ export function replaceSprite(data: TibiaData, id: number, pixels: Uint8Array): 
 		console.log(`Replaced sprite ${id} (compressed: ${compressed.length} bytes, empty: ${sprite.isEmpty})`);
 
 		return {
-			success: true,
-			spriteId: id
+			spriteId: id,
+			success: true
 		};
 	} catch (error) {
 		return {
@@ -169,8 +170,8 @@ export function removeSprite(data: TibiaData, id: number): SpriteOperationResult
 			console.log(`Removed last sprite ${id}, new count: ${data.spritesCount}`);
 
 			return {
-				success: true,
-				spriteId: id
+				spriteId: id,
+				success: true
 			};
 		}
 
@@ -181,8 +182,8 @@ export function removeSprite(data: TibiaData, id: number): SpriteOperationResult
 		const blankSprite: Sprite = {
 			id,
 			isEmpty: true,
-			transparent: data.transparency,
-			compressedPixels: compressed
+			compressedPixels: compressed,
+			transparent: data.transparency
 		};
 
 		data.sprites.set(id, blankSprite);
@@ -190,8 +191,8 @@ export function removeSprite(data: TibiaData, id: number): SpriteOperationResult
 		console.log(`Replaced sprite ${id} with blank sprite (not last sprite)`);
 
 		return {
-			success: true,
-			spriteId: id
+			spriteId: id,
+			success: true
 		};
 	} catch (error) {
 		return {

@@ -3,9 +3,10 @@
  * Uses binary IPC protocol for communication
  */
 
-import { ThingType, TibiaData, ThingCategory } from './types';
-import { packSearchCriteria, packSearchResults } from './searchProtocol';
 import type { SearchCriteria } from './searchProtocol';
+
+import { ThingType, TibiaData, ThingCategory } from './types';
+import { packSearchResults, packSearchCriteria } from './searchProtocol';
 
 /**
  * Search ThingTypes based on criteria
@@ -36,15 +37,11 @@ export async function searchThingTypes(
  * Perform search on ThingTypes
  * Matches Object Builder's search behavior
  */
-function performSearch(
-	data: TibiaData,
-	criteria: SearchCriteria,
-	limit: number
-): Array<{ id: number; category: ThingCategory }> {
+function performSearch(data: TibiaData, criteria: SearchCriteria, limit: number): Array<{ id: number; category: ThingCategory }> {
 	const results: Array<{ id: number; category: ThingCategory }> = [];
 
 	// Determine which collections to search (matching Object Builder's category selection)
-	const collections: Array<{ map: Map<number, ThingType>; category: ThingCategory }> = [];
+	const collections: Array<{ category: ThingCategory; map: Map<number, ThingType> }> = [];
 
 	if (!criteria.category) {
 		// Search all categories if no specific category selected
@@ -74,7 +71,7 @@ function performSearch(
 	for (const { map, category } of collections) {
 		for (const thing of map.values()) {
 			if (matchesCriteria(thing, criteria)) {
-				results.push({ id: thing.id, category });
+				results.push({ category, id: thing.id });
 				if (limit > 0 && results.length >= limit) {
 					return results;
 				}
@@ -125,4 +122,3 @@ function matchesCriteria(thing: ThingType, criteria: SearchCriteria): boolean {
 	// If no criteria specified (no name, no properties), match all items in the category
 	return true;
 }
-

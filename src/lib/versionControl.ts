@@ -3,25 +3,26 @@
  * Tracks changes to items and sprites with git-like commits
  */
 
-import { ThingType, ThingCategory, Sprite } from './tibia/types';
 import { invoke } from '@tauri-apps/api/core';
+
+import { Sprite, ThingType, ThingCategory } from './tibia/types';
 
 /**
  * Represents a single commit with all changes
  */
 export interface Commit {
 	hash: string;
-	timestamp: number;
 	message: string;
+	timestamp: number;
 	changedItems: Array<{
 		id: number;
-		category: ThingCategory;
 		data: ThingType;
+		category: ThingCategory;
 	}>;
 	changedSprites: Array<{
 		id: number;
-		compressedPixels: string; // base64-encoded
 		transparent: boolean;
+		compressedPixels: string; // base64-encoded
 	}>;
 }
 
@@ -31,8 +32,8 @@ export interface Commit {
 export interface CommitLog {
 	commits: Array<{
 		hash: string;
-		timestamp: number;
 		message: string;
+		timestamp: number;
 		itemCount: number;
 		spriteCount: number;
 	}>;
@@ -99,7 +100,7 @@ async function getCommitPath(hash: string): Promise<string> {
  */
 export async function createCommit(
 	message: string,
-	changedItems: Map<string, { id: number; category: ThingCategory; data: ThingType }>,
+	changedItems: Map<string, { id: number; data: ThingType; category: ThingCategory }>,
 	changedSprites: Map<number, Sprite>
 ): Promise<Commit> {
 	const hash = generateCommitHash();
@@ -115,14 +116,14 @@ export async function createCommit(
 	// Convert changed sprites map to array with base64-encoded pixels
 	const spritesArray = Array.from(changedSprites.values()).map((sprite) => ({
 		id: sprite.id,
-		compressedPixels: encodeBase64(sprite.compressedPixels),
-		transparent: sprite.transparent
+		transparent: sprite.transparent,
+		compressedPixels: encodeBase64(sprite.compressedPixels)
 	}));
 
 	const commit: Commit = {
 		hash,
-		timestamp,
 		message,
+		timestamp,
 		changedItems: itemsArray,
 		changedSprites: spritesArray
 	};
@@ -167,8 +168,8 @@ async function updateCommitLog(
 	// Add new commit to the beginning (newest first)
 	log.commits.unshift({
 		hash,
-		timestamp,
 		message,
+		timestamp,
 		itemCount,
 		spriteCount
 	});
@@ -198,7 +199,7 @@ export async function getCommitHistory(): Promise<CommitLog> {
 /**
  * Get a specific commit's full state
  */
-export async function getCommitState(hash: string): Promise<Commit | null> {
+export async function getCommitState(hash: string): Promise<null | Commit> {
 	const commitPath = await getCommitPath(hash);
 
 	try {
@@ -220,10 +221,7 @@ export async function getCommitState(hash: string): Promise<Commit | null> {
  * @param options.keepLast - Number of recent commits to keep
  * @param options.olderThanDays - Delete commits older than this many days
  */
-export async function cleanOldVersions(options: {
-	keepLast?: number;
-	olderThanDays?: number;
-}): Promise<number> {
+export async function cleanOldVersions(options: { keepLast?: number; olderThanDays?: number }): Promise<number> {
 	const log = await getCommitHistory();
 	const commitsToDelete: string[] = [];
 
