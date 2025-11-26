@@ -24,6 +24,14 @@ jobs:
         with:
           bun-version: latest
 
+      - name: Cache Bun dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('**/bun.lockb') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
       - name: Install dependencies (frontend)
         run: bun install
 
@@ -32,6 +40,11 @@ jobs:
         with:
           # Those targets are usually included on windows-latest but it's good to be safe
           targets: x86_64-pc-windows-msvc
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
 
       - name: Tauri Action
         uses: tauri-apps/tauri-action@v0
