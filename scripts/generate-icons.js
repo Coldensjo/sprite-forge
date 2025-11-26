@@ -26,6 +26,16 @@ const generateIcons = async () => {
     .png()
     .toFile(join(iconDir, '128x128@2x.png'));
   
+  await sharp(sourceImage)
+    .resize(256, 256, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+    .png()
+    .toFile(join(iconDir, '256x256.png'));
+  
+  await sharp(sourceImage)
+    .resize(512, 512, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+    .png()
+    .toFile(join(iconDir, '512x512.png'));
+  
   const png16 = await sharp(sourceImage)
     .resize(16, 16, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
     .png()
@@ -41,12 +51,17 @@ const generateIcons = async () => {
     .png()
     .toBuffer();
   
+  const png128 = await sharp(sourceImage)
+    .resize(128, 128, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+    .png()
+    .toBuffer();
+  
   const png256 = await sharp(sourceImage)
     .resize(256, 256, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
     .png()
     .toBuffer();
   
-  const icoBuffer = await toIco([png16, png32, png48, png256]);
+  const icoBuffer = await toIco([png16, png32, png48, png128, png256]);
   writeFileSync(join(iconDir, 'icon.ico'), icoBuffer);
   
   const icnsBuffer = await sharp(sourceImage)
