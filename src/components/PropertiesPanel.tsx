@@ -3,6 +3,7 @@ import { ThingCategory } from '@/lib/tibia';
 import { MarketCategory } from '@/lib/tibia';
 import { useTibiaData } from '@/contexts/TibiaDataContext';
 import { useRef, useState, useEffect, useCallback } from 'react';
+import type React from 'react';
 import {
 	X,
 	Play,
@@ -27,7 +28,8 @@ import {
 	FileQuestion,
 	ArrowUpRight,
 	ArrowDownLeft,
-	ArrowDownRight
+	ArrowDownRight,
+	Save
 } from 'lucide-react';
 
 import { Label } from './ui/label';
@@ -128,14 +130,17 @@ export const PropertiesPanel = () => {
 	const [draftItem, setDraftItem] = useState<typeof item>(null);
 	const [hasChanges, setHasChanges] = useState(false);
 	const [showCloseConfirm, setShowCloseConfirm] = useState(false);
+	const originalItemRef = useRef<typeof item>(null);
 
 	// Initialize draft when item changes
 	useEffect(() => {
 		if (item && openedItemId && openedItemCategory) {
+			originalItemRef.current = { ...item };
 			setDraftItem({ ...item });
 			setHasChanges(false);
 			markUnsavedChanges(openedItemId, openedItemCategory, false);
 		} else {
+			originalItemRef.current = null;
 			setDraftItem(null);
 			setHasChanges(false);
 		}
@@ -177,9 +182,72 @@ export const PropertiesPanel = () => {
 	const handleDiscardChanges = () => {
 		if (!item || !openedItemId || !openedItemCategory) return;
 
+		originalItemRef.current = { ...item };
 		setDraftItem({ ...item });
 		setHasChanges(false);
 		markUnsavedChanges(openedItemId, openedItemCategory, false);
+	};
+
+	const hasPropertyChanged = (property: string): boolean => {
+		if (!originalItemRef.current || !draftItem) return false;
+		const original = (originalItemRef.current as any)[property];
+		const current = (draftItem as any)[property];
+		
+		// Handle array comparison (like spriteIndex)
+		if (Array.isArray(original) && Array.isArray(current)) {
+			return JSON.stringify(original) !== JSON.stringify(current);
+		}
+		
+		return original !== current;
+	};
+
+	const handleUndoProperty = (property: string) => {
+		if (!originalItemRef.current || !draftItem || !openedItemId || !openedItemCategory) return;
+
+		const originalValue = (originalItemRef.current as any)[property];
+		setDraftItem((prev) => {
+			if (!prev) return null;
+			const updated = { ...prev, [property]: originalValue };
+			
+			// Check if there are any remaining changes after this update
+			const stillHasChanges = Object.keys(updated).some((key) => {
+				if (key === property) return false;
+				const orig = (originalItemRef.current as any)?.[key];
+				const curr = (updated as any)[key];
+				
+				// Handle array comparison
+				if (Array.isArray(orig) && Array.isArray(curr)) {
+					return JSON.stringify(orig) !== JSON.stringify(curr);
+				}
+				
+				return orig !== curr;
+			});
+			
+			setHasChanges(stillHasChanges);
+			markUnsavedChanges(openedItemId, openedItemCategory, stillHasChanges);
+			
+			return updated;
+		});
+	};
+
+	const PropertyWithUndo = ({ property, children }: { property: string; children: React.ReactNode }) => {
+		const hasChanged = hasPropertyChanged(property);
+		return (
+			<div className="flex items-center gap-1">
+				{hasChanged && (
+					<Button
+						size="icon"
+						variant="ghost"
+						className="h-5 w-5 p-0 hover:bg-primary/20 hover:text-primary"
+						onClick={() => handleUndoProperty(property)}
+						title="Undo to original"
+					>
+						<Undo2 className="h-2 w-2" />
+					</Button>
+				)}
+				{children}
+			</div>
+		);
 	};
 
 	const handleClose = () => {
@@ -1164,51 +1232,59 @@ export const PropertiesPanel = () => {
 										<Label htmlFor="width" className="text-xs whitespace-nowrap text-muted-foreground">
 											Width
 										</Label>
-										<NumberInput
-											min={1}
-											max={128}
-											id="width"
-											value={draftItem.width}
-											className="h-7 w-16 text-right"
-											onChange={(val) => handlePropertyChange('width', val)}
-										/>
+										<PropertyWithUndo property="width">
+											<NumberInput
+												min={1}
+												max={128}
+												id="width"
+												value={draftItem.width}
+												className="h-7 w-16 text-right"
+												onChange={(val) => handlePropertyChange('width', val)}
+											/>
+										</PropertyWithUndo>
 									</div>
 									<div className="flex items-center justify-between gap-2">
 										<Label htmlFor="height" className="text-xs whitespace-nowrap text-muted-foreground">
 											Height
 										</Label>
-										<NumberInput
-											min={1}
-											max={128}
-											id="height"
-											value={draftItem.height}
-											className="h-7 w-16 text-right"
-											onChange={(val) => handlePropertyChange('height', val)}
-										/>
+										<PropertyWithUndo property="height">
+											<NumberInput
+												min={1}
+												max={128}
+												id="height"
+												value={draftItem.height}
+												className="h-7 w-16 text-right"
+												onChange={(val) => handlePropertyChange('height', val)}
+											/>
+										</PropertyWithUndo>
 									</div>
 									<div className="flex items-center justify-between gap-2">
 										<Label htmlFor="crop-size" className="text-xs whitespace-nowrap text-muted-foreground">
 											Exact Size
 										</Label>
-										<NumberInput
-											min={1}
-											max={128}
-											id="crop-size"
-											value={draftItem.exactSize}
-											className="h-7 w-16 text-right"
-											onChange={(val) => handlePropertyChange('exactSize', val)}
-										/>
+										<PropertyWithUndo property="exactSize">
+											<NumberInput
+												min={1}
+												max={128}
+												id="crop-size"
+												value={draftItem.exactSize}
+												className="h-7 w-16 text-right"
+												onChange={(val) => handlePropertyChange('exactSize', val)}
+											/>
+										</PropertyWithUndo>
 									</div>
 									<div className="flex items-center justify-between gap-2">
 										<Label htmlFor="frames" className="text-xs whitespace-nowrap text-muted-foreground">
 											Frames
 										</Label>
-										<NumberInput
-											id="frames"
-											value={draftItem.frames}
-											className="h-7 w-16 text-right"
-											onChange={(val) => handlePropertyChange('frames', val)}
-										/>
+										<PropertyWithUndo property="frames">
+											<NumberInput
+												id="frames"
+												value={draftItem.frames}
+												className="h-7 w-16 text-right"
+												onChange={(val) => handlePropertyChange('frames', val)}
+											/>
+										</PropertyWithUndo>
 									</div>
 								</div>
 							</div>
@@ -1223,49 +1299,57 @@ export const PropertiesPanel = () => {
 										<Label htmlFor="pattern-x" className="text-xs whitespace-nowrap text-muted-foreground">
 											Pattern X
 										</Label>
-										<NumberInput
-											id="pattern-x"
-											value={draftItem.patternX}
-											className="h-7 w-16 text-center"
-											onChange={(val) => handlePropertyChange('patternX', val)}
-										/>
+										<PropertyWithUndo property="patternX">
+											<NumberInput
+												id="pattern-x"
+												value={draftItem.patternX}
+												className="h-7 w-16 text-right"
+												onChange={(val) => handlePropertyChange('patternX', val)}
+											/>
+										</PropertyWithUndo>
 									</div>
 									<div className="flex items-center justify-between gap-2">
 										<Label htmlFor="pattern-y" className="text-xs whitespace-nowrap text-muted-foreground">
 											Pattern Y
 										</Label>
-										<NumberInput
-											id="pattern-y"
-											value={draftItem.patternY}
-											className="h-7 w-16 text-center"
-											onChange={(val) => handlePropertyChange('patternY', val)}
-										/>
+										<PropertyWithUndo property="patternY">
+											<NumberInput
+												id="pattern-y"
+												value={draftItem.patternY}
+												className="h-7 w-16 text-right"
+												onChange={(val) => handlePropertyChange('patternY', val)}
+											/>
+										</PropertyWithUndo>
 									</div>
 									{showPatternZ && (
 										<div className="flex items-center justify-between gap-2">
 											<Label htmlFor="pattern-z" className="text-xs whitespace-nowrap text-muted-foreground">
 												Pattern Z
 											</Label>
-											<NumberInput
-												id="pattern-z"
-												value={draftItem.patternZ}
-												className="h-7 w-16 text-center"
-												onChange={(val) => handlePropertyChange('patternZ', val)}
-											/>
+											<PropertyWithUndo property="patternZ">
+												<NumberInput
+													id="pattern-z"
+													value={draftItem.patternZ}
+													className="h-7 w-16 text-right"
+													onChange={(val) => handlePropertyChange('patternZ', val)}
+												/>
+											</PropertyWithUndo>
 										</div>
 									)}
 									<div className="flex items-center justify-between gap-2">
 										<Label htmlFor="layers" className="text-xs whitespace-nowrap text-muted-foreground">
 											Layers
 										</Label>
-										<NumberInput
-											min={1}
-											max={128}
-											id="layers"
-											value={draftItem.layers}
-											className="h-7 w-16 text-right"
-											onChange={(val) => handlePropertyChange('layers', val)}
-										/>
+										<PropertyWithUndo property="layers">
+											<NumberInput
+												min={1}
+												max={128}
+												id="layers"
+												value={draftItem.layers}
+												className="h-7 w-16 text-right"
+												onChange={(val) => handlePropertyChange('layers', val)}
+											/>
+										</PropertyWithUndo>
 									</div>
 								</div>
 							</div>
@@ -1323,12 +1407,14 @@ export const PropertiesPanel = () => {
 													</div>
 													<div className="flex flex-col gap-1">
 														<Label className="text-[10px] text-muted-foreground">Intensity</Label>
-														<NumberInput
-															disabled={!draftItem.hasLight}
-															value={draftItem.lightLevel || 0}
-															className="h-7 w-full text-right"
-															onChange={(val) => handlePropertyChange('lightLevel', val)}
-														/>
+														<PropertyWithUndo property="lightLevel">
+															<NumberInput
+																disabled={!draftItem.hasLight}
+																value={draftItem.lightLevel || 0}
+																className="h-7 w-full text-right"
+																onChange={(val) => handlePropertyChange('lightLevel', val)}
+															/>
+														</PropertyWithUndo>
 													</div>
 												</div>
 											</div>
@@ -1341,45 +1427,55 @@ export const PropertiesPanel = () => {
 												<div className="space-y-2 pl-1">
 													<div className="flex items-center justify-between">
 														<Label className="text-xs text-muted-foreground">Has Offset</Label>
-														<Switch
-															checked={draftItem.hasOffset}
-															onCheckedChange={(checked) => handlePropertyChange('hasOffset', checked)}
-														/>
+														<PropertyWithUndo property="hasOffset">
+															<Switch
+																checked={draftItem.hasOffset}
+																onCheckedChange={(checked) => handlePropertyChange('hasOffset', checked)}
+															/>
+														</PropertyWithUndo>
 													</div>
 													<div className="grid grid-cols-2 gap-2 pl-2 border-l-2 border-border/30">
-														<div className="flex items-center gap-2">
+														<div className="flex items-center gap-1">
 															<Label className="text-[10px] text-muted-foreground">X:</Label>
-															<NumberInput
-																value={draftItem.offsetX || 0}
-																disabled={!draftItem.hasOffset}
-																className="h-7 w-full text-right"
-																onChange={(val) => handlePropertyChange('offsetX', val)}
-															/>
+															<PropertyWithUndo property="offsetX">
+																<NumberInput
+																	value={draftItem.offsetX || 0}
+																	disabled={!draftItem.hasOffset}
+																	className="h-7 w-full text-right"
+																	onChange={(val) => handlePropertyChange('offsetX', val)}
+																/>
+															</PropertyWithUndo>
 														</div>
-														<div className="flex items-center gap-2">
+														<div className="flex items-center gap-1">
 															<Label className="text-[10px] text-muted-foreground">Y:</Label>
-															<NumberInput
-																value={draftItem.offsetY || 0}
-																disabled={!draftItem.hasOffset}
-																className="h-7 w-full text-right"
-																onChange={(val) => handlePropertyChange('offsetY', val)}
-															/>
+															<PropertyWithUndo property="offsetY">
+																<NumberInput
+																	value={draftItem.offsetY || 0}
+																	disabled={!draftItem.hasOffset}
+																	className="h-7 w-full text-right"
+																	onChange={(val) => handlePropertyChange('offsetY', val)}
+																/>
+															</PropertyWithUndo>
 														</div>
 													</div>
 													{showDisplacementElevation && (
 														<div className="flex items-center justify-between">
 															<Label className="text-xs text-muted-foreground">Elevation</Label>
 															<div className="flex items-center gap-2">
-																<NumberInput
-																	className="h-7 w-16 text-right"
-																	value={draftItem.elevation || 0}
-																	disabled={!draftItem.hasElevation}
-																	onChange={(val) => handlePropertyChange('elevation', val)}
-																/>
-																<Switch
-																	checked={draftItem.hasElevation}
-																	onCheckedChange={(checked) => handlePropertyChange('hasElevation', checked)}
-																/>
+																<PropertyWithUndo property="elevation">
+																	<NumberInput
+																		className="h-7 w-16 text-right"
+																		value={draftItem.elevation || 0}
+																		disabled={!draftItem.hasElevation}
+																		onChange={(val) => handlePropertyChange('elevation', val)}
+																	/>
+																</PropertyWithUndo>
+																<PropertyWithUndo property="hasElevation">
+																	<Switch
+																		checked={draftItem.hasElevation}
+																		onCheckedChange={(checked) => handlePropertyChange('hasElevation', checked)}
+																	/>
+																</PropertyWithUndo>
 															</div>
 														</div>
 													)}
@@ -1394,10 +1490,12 @@ export const PropertiesPanel = () => {
 												<div className="space-y-2 pl-1">
 													<div className="flex items-center justify-between">
 														<Label className="text-xs text-muted-foreground">Show on Minimap</Label>
-														<Switch
-															checked={draftItem.miniMap}
-															onCheckedChange={(checked) => handlePropertyChange('miniMap', checked)}
-														/>
+														<PropertyWithUndo property="miniMap">
+															<Switch
+																checked={draftItem.miniMap}
+																onCheckedChange={(checked) => handlePropertyChange('miniMap', checked)}
+															/>
+														</PropertyWithUndo>
 													</div>
 													<div className="flex items-center justify-between pl-2 border-l-2 border-border/30">
 														<Label className="text-[10px] text-muted-foreground">Color</Label>
@@ -1525,62 +1623,78 @@ export const PropertiesPanel = () => {
 											<div className="flex items-center justify-between">
 												<Label className="text-xs text-muted-foreground">Is Ground</Label>
 												<div className="flex items-center gap-2">
-													<NumberInput
-														placeholder="Speed"
-														disabled={!draftItem.isGround}
-														className="h-7 w-16 text-right"
-														value={draftItem.groundSpeed || 0}
-														onChange={(val) => handlePropertyChange('groundSpeed', val)}
-													/>
-													<Switch
-														checked={draftItem.isGround}
-														onCheckedChange={(checked) => handlePropertyChange('isGround', checked)}
-													/>
+													<PropertyWithUndo property="groundSpeed">
+														<NumberInput
+															placeholder="Speed"
+															disabled={!draftItem.isGround}
+															className="h-7 w-16 text-right"
+															value={draftItem.groundSpeed || 0}
+															onChange={(val) => handlePropertyChange('groundSpeed', val)}
+														/>
+													</PropertyWithUndo>
+													<PropertyWithUndo property="isGround">
+														<Switch
+															checked={draftItem.isGround}
+															onCheckedChange={(checked) => handlePropertyChange('isGround', checked)}
+														/>
+													</PropertyWithUndo>
 												</div>
 											</div>
 											<div className="flex items-center justify-between">
 												<Label className="text-xs text-muted-foreground">Unpassable</Label>
-												<Switch
-													checked={draftItem.isUnpassable}
-													onCheckedChange={(checked) => handlePropertyChange('isUnpassable', checked)}
-												/>
+												<PropertyWithUndo property="isUnpassable">
+													<Switch
+														checked={draftItem.isUnpassable}
+														onCheckedChange={(checked) => handlePropertyChange('isUnpassable', checked)}
+													/>
+												</PropertyWithUndo>
 											</div>
 											<div className="flex items-center justify-between">
 												<Label className="text-xs text-muted-foreground">Unmoveable</Label>
-												<Switch
-													checked={draftItem.isUnmoveable}
-													onCheckedChange={(checked) => handlePropertyChange('isUnmoveable', checked)}
-												/>
+												<PropertyWithUndo property="isUnmoveable">
+													<Switch
+														checked={draftItem.isUnmoveable}
+														onCheckedChange={(checked) => handlePropertyChange('isUnmoveable', checked)}
+													/>
+												</PropertyWithUndo>
 											</div>
 											{showNoMoveAnimation && (
 												<div className="flex items-center justify-between">
 													<Label className="text-xs text-muted-foreground">No Move Animation</Label>
-													<Switch
-														checked={draftItem.noMoveAnimation}
-														onCheckedChange={(checked) => handlePropertyChange('noMoveAnimation', checked)}
-													/>
+													<PropertyWithUndo property="noMoveAnimation">
+														<Switch
+															checked={draftItem.noMoveAnimation}
+															onCheckedChange={(checked) => handlePropertyChange('noMoveAnimation', checked)}
+														/>
+													</PropertyWithUndo>
 												</div>
 											)}
 											<div className="flex items-center justify-between">
 												<Label className="text-xs text-muted-foreground">Block Pathfind</Label>
-												<Switch
-													checked={draftItem.blockPathfind}
-													onCheckedChange={(checked) => handlePropertyChange('blockPathfind', checked)}
-												/>
+												<PropertyWithUndo property="blockPathfind">
+													<Switch
+														checked={draftItem.blockPathfind}
+														onCheckedChange={(checked) => handlePropertyChange('blockPathfind', checked)}
+													/>
+												</PropertyWithUndo>
 											</div>
 											<div className="flex items-center justify-between">
 												<Label className="text-xs text-muted-foreground">Block Missiles</Label>
-												<Switch
-													checked={draftItem.blockMissile}
-													onCheckedChange={(checked) => handlePropertyChange('blockMissile', checked)}
-												/>
+												<PropertyWithUndo property="blockMissile">
+													<Switch
+														checked={draftItem.blockMissile}
+														onCheckedChange={(checked) => handlePropertyChange('blockMissile', checked)}
+													/>
+												</PropertyWithUndo>
 											</div>
 											<div className="flex items-center justify-between">
 												<Label className="text-xs text-muted-foreground">Full Ground</Label>
-												<Switch
-													checked={draftItem.isFullGround}
-													onCheckedChange={(checked) => handlePropertyChange('isFullGround', checked)}
-												/>
+												<PropertyWithUndo property="isFullGround">
+													<Switch
+														checked={draftItem.isFullGround}
+														onCheckedChange={(checked) => handlePropertyChange('isFullGround', checked)}
+													/>
+												</PropertyWithUndo>
 											</div>
 										</div>
 									</div>
@@ -1597,44 +1711,54 @@ export const PropertiesPanel = () => {
 												<div className="flex items-center justify-between">
 													<Label className="text-xs text-muted-foreground">Lens Help</Label>
 													<div className="flex items-center gap-2">
-														<NumberInput
-															value={draftItem.lensHelp || 0}
-															className="h-7 w-16 text-right"
-															disabled={!draftItem.isLensHelp}
-															onChange={(val) => handlePropertyChange('lensHelp', val)}
-														/>
-														<Switch
-															checked={draftItem.isLensHelp}
-															onCheckedChange={(checked) => handlePropertyChange('isLensHelp', checked)}
-														/>
+														<PropertyWithUndo property="lensHelp">
+															<NumberInput
+																value={draftItem.lensHelp || 0}
+																className="h-7 w-16 text-right"
+																disabled={!draftItem.isLensHelp}
+																onChange={(val) => handlePropertyChange('lensHelp', val)}
+															/>
+														</PropertyWithUndo>
+														<PropertyWithUndo property="isLensHelp">
+															<Switch
+																checked={draftItem.isLensHelp}
+																onCheckedChange={(checked) => handlePropertyChange('isLensHelp', checked)}
+															/>
+														</PropertyWithUndo>
 													</div>
 												</div>
 											)}
 											{showTranslucent && (
 												<div className="flex items-center justify-between">
 													<Label className="text-xs text-muted-foreground">Translucent</Label>
-													<Switch
-														checked={draftItem.isTranslucent}
-														onCheckedChange={(checked) => handlePropertyChange('isTranslucent', checked)}
-													/>
+													<PropertyWithUndo property="isTranslucent">
+														<Switch
+															checked={draftItem.isTranslucent}
+															onCheckedChange={(checked) => handlePropertyChange('isTranslucent', checked)}
+														/>
+													</PropertyWithUndo>
 												</div>
 											)}
 											{showDontHide && (
 												<div className="flex items-center justify-between">
 													<Label className="text-xs text-muted-foreground">Don't Hide</Label>
-													<Switch
-														checked={draftItem.dontHide}
-														onCheckedChange={(checked) => handlePropertyChange('dontHide', checked)}
-													/>
+													<PropertyWithUndo property="dontHide">
+														<Switch
+															checked={draftItem.dontHide}
+															onCheckedChange={(checked) => handlePropertyChange('dontHide', checked)}
+														/>
+													</PropertyWithUndo>
 												</div>
 											)}
 											{showIgnoreLook && (
 												<div className="flex items-center justify-between">
 													<Label className="text-xs text-muted-foreground">Ignore Look</Label>
-													<Switch
-														checked={draftItem.ignoreLook}
-														onCheckedChange={(checked) => handlePropertyChange('ignoreLook', checked)}
-													/>
+													<PropertyWithUndo property="ignoreLook">
+														<Switch
+															checked={draftItem.ignoreLook}
+															onCheckedChange={(checked) => handlePropertyChange('ignoreLook', checked)}
+														/>
+													</PropertyWithUndo>
 												</div>
 											)}
 										</div>
@@ -1649,10 +1773,12 @@ export const PropertiesPanel = () => {
 									<div className="space-y-2 pl-1">
 										<div className="flex items-center justify-between">
 											<Label className="text-xs text-muted-foreground">Has Light</Label>
-											<Switch
-												checked={draftItem.hasLight}
-												onCheckedChange={(checked) => handlePropertyChange('hasLight', checked)}
-											/>
+											<PropertyWithUndo property="hasLight">
+												<Switch
+													checked={draftItem.hasLight}
+													onCheckedChange={(checked) => handlePropertyChange('hasLight', checked)}
+												/>
+											</PropertyWithUndo>
 										</div>
 										<div className="grid grid-cols-2 gap-2 pl-2 border-l-2 border-border/30">
 											<div className="flex flex-col gap-1">
@@ -1666,12 +1792,14 @@ export const PropertiesPanel = () => {
 											</div>
 											<div className="flex flex-col gap-1">
 												<Label className="text-[10px] text-muted-foreground">Intensity</Label>
-												<NumberInput
-													disabled={!draftItem.hasLight}
-													value={draftItem.lightLevel || 0}
-													className="h-7 w-full text-right"
-													onChange={(val) => handlePropertyChange('lightLevel', val)}
-												/>
+												<PropertyWithUndo property="lightLevel">
+													<NumberInput
+														disabled={!draftItem.hasLight}
+														value={draftItem.lightLevel || 0}
+														className="h-7 w-full text-right"
+														onChange={(val) => handlePropertyChange('lightLevel', val)}
+													/>
+												</PropertyWithUndo>
 											</div>
 										</div>
 									</div>
@@ -1707,79 +1835,99 @@ export const PropertiesPanel = () => {
 										<div className="space-y-3 pl-1">
 											<div className="flex items-center justify-between">
 												<Label className="text-xs text-muted-foreground">Pickupable</Label>
-												<Switch
-													checked={draftItem.pickupable}
-													onCheckedChange={(checked) => handlePropertyChange('pickupable', checked)}
-												/>
+												<PropertyWithUndo property="pickupable">
+													<Switch
+														checked={draftItem.pickupable}
+														onCheckedChange={(checked) => handlePropertyChange('pickupable', checked)}
+													/>
+												</PropertyWithUndo>
 											</div>
 											<div className="flex items-center justify-between">
 												<Label className="text-xs text-muted-foreground">Stackable</Label>
-												<Switch
-													checked={draftItem.stackable}
-													onCheckedChange={(checked) => handlePropertyChange('stackable', checked)}
-												/>
+												<PropertyWithUndo property="stackable">
+													<Switch
+														checked={draftItem.stackable}
+														onCheckedChange={(checked) => handlePropertyChange('stackable', checked)}
+													/>
+												</PropertyWithUndo>
 											</div>
 											{showHasCharges && (
 												<div className="flex items-center justify-between">
 													<Label className="text-xs text-muted-foreground">Has Charges</Label>
-													<Switch
-														checked={draftItem.hasCharges}
-														onCheckedChange={(checked) => handlePropertyChange('hasCharges', checked)}
-													/>
+													<PropertyWithUndo property="hasCharges">
+														<Switch
+															checked={draftItem.hasCharges}
+															onCheckedChange={(checked) => handlePropertyChange('hasCharges', checked)}
+														/>
+													</PropertyWithUndo>
 												</div>
 											)}
 											<div className="flex items-center justify-between">
 												<Label className="text-xs text-muted-foreground">Container</Label>
-												<Switch
-													checked={draftItem.isContainer}
-													onCheckedChange={(checked) => handlePropertyChange('isContainer', checked)}
-												/>
+												<PropertyWithUndo property="isContainer">
+													<Switch
+														checked={draftItem.isContainer}
+														onCheckedChange={(checked) => handlePropertyChange('isContainer', checked)}
+													/>
+												</PropertyWithUndo>
 											</div>
 											<div className="flex items-center justify-between">
 												<Label className="text-xs text-muted-foreground">Rotatable</Label>
-												<Switch
-													checked={draftItem.rotatable}
-													onCheckedChange={(checked) => handlePropertyChange('rotatable', checked)}
-												/>
+												<PropertyWithUndo property="rotatable">
+													<Switch
+														checked={draftItem.rotatable}
+														onCheckedChange={(checked) => handlePropertyChange('rotatable', checked)}
+													/>
+												</PropertyWithUndo>
 											</div>
 											<div className="flex items-center justify-between">
 												<Label className="text-xs text-muted-foreground">Multi Use</Label>
-												<Switch
-													checked={draftItem.multiUse}
-													onCheckedChange={(checked) => handlePropertyChange('multiUse', checked)}
-												/>
+												<PropertyWithUndo property="multiUse">
+													<Switch
+														checked={draftItem.multiUse}
+														onCheckedChange={(checked) => handlePropertyChange('multiUse', checked)}
+													/>
+												</PropertyWithUndo>
 											</div>
 											<div className="flex items-center justify-between">
 												<Label className="text-xs text-muted-foreground">Force Use</Label>
-												<Switch
-													checked={draftItem.forceUse}
-													onCheckedChange={(checked) => handlePropertyChange('forceUse', checked)}
-												/>
+												<PropertyWithUndo property="forceUse">
+													<Switch
+														checked={draftItem.forceUse}
+														onCheckedChange={(checked) => handlePropertyChange('forceUse', checked)}
+													/>
+												</PropertyWithUndo>
 											</div>
 											{showUsable && (
 												<div className="flex items-center justify-between">
 													<Label className="text-xs text-muted-foreground">Usable</Label>
-													<Switch
-														checked={draftItem.usable}
-														onCheckedChange={(checked) => handlePropertyChange('usable', checked)}
-													/>
+													<PropertyWithUndo property="usable">
+														<Switch
+															checked={draftItem.usable}
+															onCheckedChange={(checked) => handlePropertyChange('usable', checked)}
+														/>
+													</PropertyWithUndo>
 												</div>
 											)}
 											{showWrappable && (
 												<>
 													<div className="flex items-center justify-between">
 														<Label className="text-xs text-muted-foreground">Wrappable</Label>
-														<Switch
-															checked={draftItem.wrappable}
-															onCheckedChange={(checked) => handlePropertyChange('wrappable', checked)}
-														/>
+														<PropertyWithUndo property="wrappable">
+															<Switch
+																checked={draftItem.wrappable}
+																onCheckedChange={(checked) => handlePropertyChange('wrappable', checked)}
+															/>
+														</PropertyWithUndo>
 													</div>
 													<div className="flex items-center justify-between">
 														<Label className="text-xs text-muted-foreground">Unwrappable</Label>
-														<Switch
-															checked={draftItem.unwrappable}
-															onCheckedChange={(checked) => handlePropertyChange('unwrappable', checked)}
-														/>
+														<PropertyWithUndo property="unwrappable">
+															<Switch
+																checked={draftItem.unwrappable}
+																onCheckedChange={(checked) => handlePropertyChange('unwrappable', checked)}
+															/>
+														</PropertyWithUndo>
 													</div>
 												</>
 											)}
@@ -1797,25 +1945,31 @@ export const PropertiesPanel = () => {
 											{showHangable && (
 												<div className="flex items-center justify-between">
 													<Label className="text-xs text-muted-foreground">Hangable</Label>
-													<Switch
-														checked={draftItem.hangable}
-														onCheckedChange={(checked) => handlePropertyChange('hangable', checked)}
-													/>
+													<PropertyWithUndo property="hangable">
+														<Switch
+															checked={draftItem.hangable}
+															onCheckedChange={(checked) => handlePropertyChange('hangable', checked)}
+														/>
+													</PropertyWithUndo>
 												</div>
 											)}
 											<div className="flex items-center justify-between">
 												<Label className="text-xs text-muted-foreground">Horizontal Hook</Label>
-												<Switch
-													checked={draftItem.isHorizontal}
-													onCheckedChange={(checked) => handlePropertyChange('isHorizontal', checked)}
-												/>
+												<PropertyWithUndo property="isHorizontal">
+													<Switch
+														checked={draftItem.isHorizontal}
+														onCheckedChange={(checked) => handlePropertyChange('isHorizontal', checked)}
+													/>
+												</PropertyWithUndo>
 											</div>
 											<div className="flex items-center justify-between">
 												<Label className="text-xs text-muted-foreground">Vertical Hook</Label>
-												<Switch
-													checked={draftItem.isVertical}
-													onCheckedChange={(checked) => handlePropertyChange('isVertical', checked)}
-												/>
+												<PropertyWithUndo property="isVertical">
+													<Switch
+														checked={draftItem.isVertical}
+														onCheckedChange={(checked) => handlePropertyChange('isVertical', checked)}
+													/>
+												</PropertyWithUndo>
 											</div>
 										</div>
 									</div>
@@ -1830,19 +1984,23 @@ export const PropertiesPanel = () => {
 										<div className="space-y-2 pl-1">
 											<div className="flex items-center justify-between">
 												<Label className="text-xs text-muted-foreground">Has Default Action</Label>
-												<Switch
-													checked={draftItem.hasDefaultAction}
-													onCheckedChange={(checked) => handlePropertyChange('hasDefaultAction', checked)}
-												/>
+												<PropertyWithUndo property="hasDefaultAction">
+													<Switch
+														checked={draftItem.hasDefaultAction}
+														onCheckedChange={(checked) => handlePropertyChange('hasDefaultAction', checked)}
+													/>
+												</PropertyWithUndo>
 											</div>
 											<div className="flex items-center justify-between pl-2 border-l-2 border-border/30">
 												<Label className="text-[10px] text-muted-foreground">Action</Label>
-												<NumberInput
-													className="h-7 w-16 text-right"
-													value={draftItem.defaultAction || 0}
-													disabled={!draftItem.hasDefaultAction}
-													onChange={(val) => handlePropertyChange('defaultAction', val)}
-												/>
+												<PropertyWithUndo property="defaultAction">
+													<NumberInput
+														className="h-7 w-16 text-right"
+														value={draftItem.defaultAction || 0}
+														disabled={!draftItem.hasDefaultAction}
+														onChange={(val) => handlePropertyChange('defaultAction', val)}
+													/>
+												</PropertyWithUndo>
 											</div>
 										</div>
 									</div>
@@ -1857,16 +2015,20 @@ export const PropertiesPanel = () => {
 										<div className="space-y-2 pl-1">
 											<div className="flex items-center justify-between">
 												<Label className="text-xs text-muted-foreground">Is Cloth</Label>
-												<Switch checked={draftItem.cloth} onCheckedChange={(checked) => handlePropertyChange('cloth', checked)} />
+												<PropertyWithUndo property="cloth">
+													<Switch checked={draftItem.cloth} onCheckedChange={(checked) => handlePropertyChange('cloth', checked)} />
+												</PropertyWithUndo>
 											</div>
 											<div className="flex items-center justify-between pl-2 border-l-2 border-border/30">
 												<Label className="text-[10px] text-muted-foreground">Slot</Label>
-												<NumberInput
-													disabled={!draftItem.cloth}
-													className="h-7 w-16 text-right"
-													value={draftItem.clothSlot || 0}
-													onChange={(val) => handlePropertyChange('clothSlot', val)}
-												/>
+												<PropertyWithUndo property="clothSlot">
+													<NumberInput
+														disabled={!draftItem.cloth}
+														className="h-7 w-16 text-right"
+														value={draftItem.clothSlot || 0}
+														onChange={(val) => handlePropertyChange('clothSlot', val)}
+													/>
+												</PropertyWithUndo>
 											</div>
 										</div>
 									</div>
@@ -1881,45 +2043,55 @@ export const PropertiesPanel = () => {
 										<div className="space-y-2 pl-1">
 											<div className="flex items-center justify-between">
 												<Label className="text-xs text-muted-foreground">Has Offset</Label>
-												<Switch
-													checked={draftItem.hasOffset}
-													onCheckedChange={(checked) => handlePropertyChange('hasOffset', checked)}
-												/>
+												<PropertyWithUndo property="hasOffset">
+													<Switch
+														checked={draftItem.hasOffset}
+														onCheckedChange={(checked) => handlePropertyChange('hasOffset', checked)}
+													/>
+												</PropertyWithUndo>
 											</div>
 											<div className="grid grid-cols-2 gap-2 pl-2 border-l-2 border-border/30">
-												<div className="flex items-center gap-2">
+												<div className="flex items-center gap-1">
 													<Label className="text-[10px] text-muted-foreground">X:</Label>
-													<NumberInput
-														value={draftItem.offsetX || 0}
-														disabled={!draftItem.hasOffset}
-														className="h-7 w-full text-right"
-														onChange={(val) => handlePropertyChange('offsetX', val)}
-													/>
+													<PropertyWithUndo property="offsetX">
+														<NumberInput
+															value={draftItem.offsetX || 0}
+															disabled={!draftItem.hasOffset}
+															className="h-7 w-full text-right"
+															onChange={(val) => handlePropertyChange('offsetX', val)}
+														/>
+													</PropertyWithUndo>
 												</div>
-												<div className="flex items-center gap-2">
+												<div className="flex items-center gap-1">
 													<Label className="text-[10px] text-muted-foreground">Y:</Label>
-													<NumberInput
-														value={draftItem.offsetY || 0}
-														disabled={!draftItem.hasOffset}
-														className="h-7 w-full text-right"
-														onChange={(val) => handlePropertyChange('offsetY', val)}
-													/>
+													<PropertyWithUndo property="offsetY">
+														<NumberInput
+															value={draftItem.offsetY || 0}
+															disabled={!draftItem.hasOffset}
+															className="h-7 w-full text-right"
+															onChange={(val) => handlePropertyChange('offsetY', val)}
+														/>
+													</PropertyWithUndo>
 												</div>
 											</div>
 											{showDisplacementElevation && (
 												<div className="flex items-center justify-between">
 													<Label className="text-xs text-muted-foreground">Elevation</Label>
 													<div className="flex items-center gap-2">
-														<NumberInput
-															className="h-7 w-16 text-right"
-															value={draftItem.elevation || 0}
-															disabled={!draftItem.hasElevation}
-															onChange={(val) => handlePropertyChange('elevation', val)}
-														/>
-														<Switch
-															checked={draftItem.hasElevation}
-															onCheckedChange={(checked) => handlePropertyChange('hasElevation', checked)}
-														/>
+														<PropertyWithUndo property="elevation">
+															<NumberInput
+																className="h-7 w-16 text-right"
+																value={draftItem.elevation || 0}
+																disabled={!draftItem.hasElevation}
+																onChange={(val) => handlePropertyChange('elevation', val)}
+															/>
+														</PropertyWithUndo>
+														<PropertyWithUndo property="hasElevation">
+															<Switch
+																checked={draftItem.hasElevation}
+																onCheckedChange={(checked) => handlePropertyChange('hasElevation', checked)}
+															/>
+														</PropertyWithUndo>
 													</div>
 												</div>
 											)}
@@ -2047,26 +2219,32 @@ export const PropertiesPanel = () => {
 										<div className="space-y-2 pl-1">
 											<div className="flex items-center justify-between">
 												<Label className="text-xs text-muted-foreground">Writable</Label>
-												<Switch
-													checked={draftItem.writable}
-													onCheckedChange={(checked) => handlePropertyChange('writable', checked)}
-												/>
+												<PropertyWithUndo property="writable">
+													<Switch
+														checked={draftItem.writable}
+														onCheckedChange={(checked) => handlePropertyChange('writable', checked)}
+													/>
+												</PropertyWithUndo>
 											</div>
 											<div className="flex items-center justify-between">
 												<Label className="text-xs text-muted-foreground">Writable Once</Label>
-												<Switch
-													checked={draftItem.writableOnce}
-													onCheckedChange={(checked) => handlePropertyChange('writableOnce', checked)}
-												/>
+												<PropertyWithUndo property="writableOnce">
+													<Switch
+														checked={draftItem.writableOnce}
+														onCheckedChange={(checked) => handlePropertyChange('writableOnce', checked)}
+													/>
+												</PropertyWithUndo>
 											</div>
 											<div className="flex items-center justify-between pl-2 border-l-2 border-border/30">
 												<Label className="text-[10px] text-muted-foreground">Max Chars</Label>
-												<NumberInput
-													className="h-7 w-16 text-right"
-													value={draftItem.maxTextLength || 0}
-													disabled={!draftItem.writable && !draftItem.writableOnce}
-													onChange={(val) => handlePropertyChange('maxTextLength', val)}
-												/>
+												<PropertyWithUndo property="maxTextLength">
+													<NumberInput
+														className="h-7 w-16 text-right"
+														value={draftItem.maxTextLength || 0}
+														disabled={!draftItem.writable && !draftItem.writableOnce}
+														onChange={(val) => handlePropertyChange('maxTextLength', val)}
+													/>
+												</PropertyWithUndo>
 											</div>
 										</div>
 									</div>
@@ -2081,50 +2259,62 @@ export const PropertiesPanel = () => {
 										<div className="space-y-2 pl-1">
 											<div className="flex items-center justify-between">
 												<Label className="text-xs text-muted-foreground">Lying Object</Label>
-												<Switch
-													checked={draftItem.isLyingObject}
-													onCheckedChange={(checked) => handlePropertyChange('isLyingObject', checked)}
-												/>
+												<PropertyWithUndo property="isLyingObject">
+													<Switch
+														checked={draftItem.isLyingObject}
+														onCheckedChange={(checked) => handlePropertyChange('isLyingObject', checked)}
+													/>
+												</PropertyWithUndo>
 											</div>
 											<div className="flex items-center justify-between">
 												<Label className="text-xs text-muted-foreground">Always On Top</Label>
-												<Switch
-													checked={draftItem.isOnTop}
-													onCheckedChange={(checked) => handlePropertyChange('isOnTop', checked)}
-												/>
+												<PropertyWithUndo property="isOnTop">
+													<Switch
+														checked={draftItem.isOnTop}
+														onCheckedChange={(checked) => handlePropertyChange('isOnTop', checked)}
+													/>
+												</PropertyWithUndo>
 											</div>
 											{showTopEffect && (
 												<div className="flex items-center justify-between">
 													<Label className="text-xs text-muted-foreground">Top Effect</Label>
-													<Switch
-														checked={draftItem.topEffect}
-														onCheckedChange={(checked) => handlePropertyChange('topEffect', checked)}
-													/>
+													<PropertyWithUndo property="topEffect">
+														<Switch
+															checked={draftItem.topEffect}
+															onCheckedChange={(checked) => handlePropertyChange('topEffect', checked)}
+														/>
+													</PropertyWithUndo>
 												</div>
 											)}
 											<div className="flex items-center justify-between">
 												<Label className="text-xs text-muted-foreground">Always On Bottom</Label>
-												<Switch
-													checked={draftItem.isOnBottom}
-													onCheckedChange={(checked) => handlePropertyChange('isOnBottom', checked)}
-												/>
+												<PropertyWithUndo property="isOnBottom">
+													<Switch
+														checked={draftItem.isOnBottom}
+														onCheckedChange={(checked) => handlePropertyChange('isOnBottom', checked)}
+													/>
+												</PropertyWithUndo>
 											</div>
 											{showGroundBorder && (
 												<div className="flex items-center justify-between">
 													<Label className="text-xs text-muted-foreground">Ground Border</Label>
-													<Switch
-														checked={draftItem.isGroundBorder}
-														onCheckedChange={(checked) => handlePropertyChange('isGroundBorder', checked)}
-													/>
+													<PropertyWithUndo property="isGroundBorder">
+														<Switch
+															checked={draftItem.isGroundBorder}
+															onCheckedChange={(checked) => handlePropertyChange('isGroundBorder', checked)}
+														/>
+													</PropertyWithUndo>
 												</div>
 											)}
 											{showFloorChange && (
 												<div className="flex items-center justify-between">
 													<Label className="text-xs text-muted-foreground">Floor Change</Label>
-													<Switch
-														checked={draftItem.floorChange}
-														onCheckedChange={(checked) => handlePropertyChange('floorChange', checked)}
-													/>
+													<PropertyWithUndo property="floorChange">
+														<Switch
+															checked={draftItem.floorChange}
+															onCheckedChange={(checked) => handlePropertyChange('floorChange', checked)}
+														/>
+													</PropertyWithUndo>
 												</div>
 											)}
 										</div>
@@ -2140,10 +2330,12 @@ export const PropertiesPanel = () => {
 										<div className="space-y-2 pl-1">
 											<div className="flex items-center justify-between pl-2 border-l-2 border-border/30">
 												<Label className="text-[10px] text-muted-foreground">Is Animation</Label>
-												<Switch
-													checked={draftItem.isAnimation}
-													onCheckedChange={(checked) => handlePropertyChange('isAnimation', checked)}
-												/>
+												<PropertyWithUndo property="isAnimation">
+													<Switch
+														checked={draftItem.isAnimation}
+														onCheckedChange={(checked) => handlePropertyChange('isAnimation', checked)}
+													/>
+												</PropertyWithUndo>
 											</div>
 											<div className="flex items-center justify-between pl-2 border-l-2 border-border/30">
 												<Label className="text-[10px] text-muted-foreground">Mode</Label>
@@ -2151,27 +2343,33 @@ export const PropertiesPanel = () => {
 													<span className="text-[10px] text-muted-foreground">
 														{draftItem.animationMode === 0 ? 'Async' : 'Sync'}
 													</span>
-													<Switch
-														checked={draftItem.animationMode === 1}
-														onCheckedChange={(checked) => handlePropertyChange('animationMode', checked ? 1 : 0)}
-													/>
+													<PropertyWithUndo property="animationMode">
+														<Switch
+															checked={draftItem.animationMode === 1}
+															onCheckedChange={(checked) => handlePropertyChange('animationMode', checked ? 1 : 0)}
+														/>
+													</PropertyWithUndo>
 												</div>
 											</div>
 											<div className="flex items-center justify-between pl-2 border-l-2 border-border/30">
 												<Label className="text-[10px] text-muted-foreground">Loop Count</Label>
-												<NumberInput
-													className="h-7 w-16 text-right"
-													value={draftItem.loopCount || 0}
-													onChange={(val) => handlePropertyChange('loopCount', val)}
-												/>
+												<PropertyWithUndo property="loopCount">
+													<NumberInput
+														className="h-7 w-16 text-right"
+														value={draftItem.loopCount || 0}
+														onChange={(val) => handlePropertyChange('loopCount', val)}
+													/>
+												</PropertyWithUndo>
 											</div>
 											<div className="flex items-center justify-between pl-2 border-l-2 border-border/30">
 												<Label className="text-[10px] text-muted-foreground">Start Frame</Label>
-												<NumberInput
-													className="h-7 w-16 text-right"
-													value={draftItem.startFrame || 0}
-													onChange={(val) => handlePropertyChange('startFrame', val)}
-												/>
+												<PropertyWithUndo property="startFrame">
+													<NumberInput
+														className="h-7 w-16 text-right"
+														value={draftItem.startFrame || 0}
+														onChange={(val) => handlePropertyChange('startFrame', val)}
+													/>
+												</PropertyWithUndo>
 											</div>
 										</div>
 									</div>
@@ -2186,10 +2384,12 @@ export const PropertiesPanel = () => {
 										<div className="space-y-2 pl-1">
 											<div className="flex items-center justify-between">
 												<Label className="text-xs text-muted-foreground">Market Item</Label>
-												<Switch
-													checked={draftItem.isMarketItem}
-													onCheckedChange={(checked) => handlePropertyChange('isMarketItem', checked)}
-												/>
+												<PropertyWithUndo property="isMarketItem">
+													<Switch
+														checked={draftItem.isMarketItem}
+														onCheckedChange={(checked) => handlePropertyChange('isMarketItem', checked)}
+													/>
+												</PropertyWithUndo>
 											</div>
 											<div className="pl-2 border-l-2 border-border/30 space-y-2">
 												<div className="flex flex-col gap-1">
@@ -2276,17 +2476,21 @@ export const PropertiesPanel = () => {
 										<div className="space-y-3 pl-1">
 											<div className="flex items-center justify-between">
 												<Label className="text-xs text-muted-foreground">Fluid Container</Label>
-												<Switch
-													checked={draftItem.isFluidContainer}
-													onCheckedChange={(checked) => handlePropertyChange('isFluidContainer', checked)}
-												/>
+												<PropertyWithUndo property="isFluidContainer">
+													<Switch
+														checked={draftItem.isFluidContainer}
+														onCheckedChange={(checked) => handlePropertyChange('isFluidContainer', checked)}
+													/>
+												</PropertyWithUndo>
 											</div>
 											<div className="flex items-center justify-between">
 												<Label className="text-xs text-muted-foreground">Is Fluid</Label>
-												<Switch
-													checked={draftItem.isFluid}
-													onCheckedChange={(checked) => handlePropertyChange('isFluid', checked)}
-												/>
+												<PropertyWithUndo property="isFluid">
+													<Switch
+														checked={draftItem.isFluid}
+														onCheckedChange={(checked) => handlePropertyChange('isFluid', checked)}
+													/>
+												</PropertyWithUndo>
 											</div>
 										</div>
 									</div>
@@ -2301,10 +2505,12 @@ export const PropertiesPanel = () => {
 										<div className="space-y-2 pl-1">
 											<div className="flex items-center justify-between">
 												<Label className="text-xs text-muted-foreground">Show on Minimap</Label>
-												<Switch
-													checked={draftItem.miniMap}
-													onCheckedChange={(checked) => handlePropertyChange('miniMap', checked)}
-												/>
+												<PropertyWithUndo property="miniMap">
+													<Switch
+														checked={draftItem.miniMap}
+														onCheckedChange={(checked) => handlePropertyChange('miniMap', checked)}
+													/>
+												</PropertyWithUndo>
 											</div>
 											<div className="flex items-center justify-between pl-2 border-l-2 border-border/30">
 												<Label className="text-[10px] text-muted-foreground">Color</Label>
@@ -2335,6 +2541,7 @@ export const PropertiesPanel = () => {
 						Close
 					</Button>
 					<Button size="sm" className="h-7" onClick={handleSave} disabled={!hasChanges}>
+						<Save className="h-3.5 w-3.5 mr-1" />
 						Save Changes
 					</Button>
 				</div>
