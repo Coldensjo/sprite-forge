@@ -80,6 +80,9 @@ pub struct ThingType {
     pub has_default_action: bool,
     pub default_action: u16,
     pub usable: bool,
+    pub wrappable: bool,
+    pub unwrappable: bool,
+    pub top_effect: bool,
 
     // Animation
     pub is_animation: bool,
@@ -90,9 +93,9 @@ pub struct ThingType {
 }
 
 /// Metadata flags for different client versions
-struct MetadataFlags4;
+pub struct MetadataFlags4;
 impl MetadataFlags4 {
-    const GROUND: u8 = 0x00;
+    pub const GROUND: u8 = 0x00;
     const GROUND_BORDER: u8 = 0x01;
     const ON_BOTTOM: u8 = 0x02;
     const ON_TOP: u8 = 0x03;
@@ -128,9 +131,9 @@ impl MetadataFlags4 {
     const LAST_FLAG: u8 = 0xff;
 }
 
-struct MetadataFlags5;
+pub struct MetadataFlags5;
 impl MetadataFlags5 {
-    const GROUND: u8 = 0x00;
+    pub const GROUND: u8 = 0x00;
     const GROUND_BORDER: u8 = 0x01;
     const ON_BOTTOM: u8 = 0x02;
     const ON_TOP: u8 = 0x03;
@@ -167,9 +170,9 @@ impl MetadataFlags5 {
     const LAST_FLAG: u8 = 0xff;
 }
 
-struct MetadataFlags6;
+pub struct MetadataFlags6;
 impl MetadataFlags6 {
-    const GROUND: u8 = 0x00;
+    pub const GROUND: u8 = 0x00;
     const GROUND_BORDER: u8 = 0x01;
     const ON_BOTTOM: u8 = 0x02;
     const ON_TOP: u8 = 0x03;
@@ -205,6 +208,9 @@ impl MetadataFlags6 {
     const CLOTH: u8 = 0x21;
     const MARKET_ITEM: u8 = 0x22;
     const DEFAULT_ACTION: u8 = 0x23;
+    const WRAPPABLE: u8 = 0x24;
+    const UNWRAPPABLE: u8 = 0x25;
+    const TOP_EFFECT: u8 = 0x26;
     const USABLE: u8 = 0xfe;
     const LAST_FLAG: u8 = 0xff;
 }
@@ -214,15 +220,18 @@ pub struct DatWriter<W: Write> {
     version: u32, // Version value (e.g., 780, 860, 1010)
     extended: bool,
     frame_durations: bool,
+    frame_groups: bool, // Version >= 10.57 (1057) uses frame groups
 }
 
 impl<W: Write> DatWriter<W> {
     pub fn new(writer: W, version: u32, extended: bool, frame_durations: bool) -> Self {
+        let frame_groups = version >= 1057;
         Self {
             writer,
             version,
             extended,
             frame_durations,
+            frame_groups,
         }
     }
 
@@ -676,6 +685,15 @@ impl<W: Write> DatWriter<W> {
             self.write_u8(MetadataFlags6::DEFAULT_ACTION)?;
             self.write_u16_le(thing.default_action)?;
         }
+        if thing.wrappable {
+            self.write_u8(MetadataFlags6::WRAPPABLE)?;
+        }
+        if thing.unwrappable {
+            self.write_u8(MetadataFlags6::UNWRAPPABLE)?;
+        }
+        if thing.top_effect {
+            self.write_u8(MetadataFlags6::TOP_EFFECT)?;
+        }
         if thing.usable {
             self.write_u8(MetadataFlags6::USABLE)?;
         }
@@ -710,6 +728,15 @@ impl<W: Write> DatWriter<W> {
     }
 
     fn write_texture_patterns(&mut self, thing: &ThingType) -> io::Result<()> {
+        // For version >= 10.57 (1057) outfits use frame groups
+        if self.frame_groups && thing.category == "outfit" {
+            // Write group count (we only write 1 group - the DEFAULT)
+            self.write_u8(1)?;
+            // Write group type (0 = DEFAULT/IDLE)
+            self.write_u8(0)?;
+        }
+
+        // Write texture data
         self.write_u8(thing.width)?;
         self.write_u8(thing.height)?;
 
@@ -838,11 +865,7 @@ pub fn write_dat_file(
     effects: Vec<ThingType>,
     missiles: Vec<ThingType>,
 ) -> Result<(), String> {
-    eprintln!("=== WRITE_DAT PERFORMANCE OPTIMIZED ===");
-    eprintln!("Items: minId={}, maxId={}, count={}", items_min_id, items_max_id, items.len());
-    eprintln!("Outfits: minId={}, maxId={}, count={}", outfits_min_id, outfits_max_id, outfits.len());
-    eprintln!("Effects: minId={}, maxId={}, count={}", effects_min_id, effects_max_id, effects.len());
-    eprintln!("Missiles: minId={}, maxId={}, count={}", missiles_min_id, missiles_max_id, missiles.len());
+
 
     let file = File::create(path).map_err(|e| format!("Failed to create file: {}", e))?;
     let mut writer = DatWriter::new(file, version, extended, frame_durations);

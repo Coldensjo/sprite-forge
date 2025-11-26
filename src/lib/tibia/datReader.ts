@@ -95,10 +95,14 @@ const MetadataFlags6 = {
 	GROUND: 0x00,
 	ON_TOP: 0x03,
 	USABLE: 0xfe,
+	EXPIRE: 0x2a,
+	PODIUM: 0x2c,
 	WRITABLE: 0x08,
 	HANGABLE: 0x12,
 	VERTICAL: 0x13,
 	MINI_MAP: 0x1d,
+	WEAR_OUT: 0x28,
+	DECO_KIT: 0x2d,
 	ON_BOTTOM: 0x02,
 	CONTAINER: 0x04,
 	STACKABLE: 0x05,
@@ -109,15 +113,20 @@ const MetadataFlags6 = {
 	DONT_HIDE: 0x17,
 	LENS_HELP: 0x1e,
 	LAST_FLAG: 0xff,
+	WRAPPABLE: 0x24,
 	UNPASSABLE: 0x0c,
 	UNMOVEABLE: 0x0d,
 	PICKUPABLE: 0x11,
 	HORIZONTAL: 0x14,
 	HAS_OFFSET: 0x19,
+	TOP_EFFECT: 0x26,
+	EXPIRE_STOP: 0x2b,
 	TRANSLUCENT: 0x18,
 	FULL_GROUND: 0x1f,
 	IGNORE_LOOK: 0x20,
 	MARKET_ITEM: 0x22,
+	UNWRAPPABLE: 0x25,
+	CLOCK_EXPIRE: 0x29,
 	LYING_OBJECT: 0x1b,
 	GROUND_BORDER: 0x01,
 	WRITABLE_ONCE: 0x09,
@@ -127,7 +136,8 @@ const MetadataFlags6 = {
 	ANIMATE_ALWAYS: 0x1c,
 	DEFAULT_ACTION: 0x23,
 	FLUID_CONTAINER: 0x0a,
-	NO_MOVE_ANIMATION: 0x10
+	NO_MOVE_ANIMATION: 0x10,
+	UPGRADE_CLASSIFICATION: 0x27
 } as const;
 
 /**
@@ -231,12 +241,14 @@ export class DatReader {
 	private extended: boolean;
 	private frameDurations: boolean;
 	private metadataFlags: typeof MetadataFlags4 | typeof MetadataFlags5 | typeof MetadataFlags6;
+	private version: number;
 
 	constructor(buffer: Uint8Array | ArrayBuffer, extended: boolean, frameDurations: boolean, version?: ClientVersion) {
 		this.reader = new BinaryReader(buffer);
 		this.extended = extended;
 		this.frameDurations = frameDurations;
 		this.metadataFlags = getMetadataFlags(version);
+		this.version = version?.value ?? 1098; // Default to 10.98
 	}
 
 	/**
@@ -284,12 +296,12 @@ export class DatReader {
 	 */
 	readProperties(thing: ThingType): boolean {
 		let flag = 0;
-		let previousFlag = 0;
+
 		const MetadataFlags = this.metadataFlags;
 
 		while (flag < MetadataFlags.LAST_FLAG) {
-			previousFlag = flag;
 			flag = this.reader.readUInt8();
+			const origFlag = flag; // Keep for error reporting
 
 			if (flag === MetadataFlags.LAST_FLAG) {
 				return true;
@@ -487,10 +499,50 @@ export class DatReader {
 					}
 					break;
 
+				case (MetadataFlags as typeof MetadataFlags6).WRAPPABLE:
+					if ('WRAPPABLE' in MetadataFlags) {
+						thing.wrappable = true;
+					}
+					break;
+
+				case (MetadataFlags as typeof MetadataFlags6).UNWRAPPABLE:
+					if ('UNWRAPPABLE' in MetadataFlags) {
+						thing.unwrappable = true;
+					}
+					break;
+
+				case (MetadataFlags as typeof MetadataFlags6).TOP_EFFECT:
+					if ('TOP_EFFECT' in MetadataFlags) {
+						thing.topEffect = true;
+					}
+					break;
+
+				case (MetadataFlags as typeof MetadataFlags6).UPGRADE_CLASSIFICATION:
+					if ('UPGRADE_CLASSIFICATION' in MetadataFlags) {
+						thing.upgradeClassification = this.reader.readUInt16LE();
+					}
+					break;
+
+				case (MetadataFlags as typeof MetadataFlags6).WEAR_OUT:
+				case (MetadataFlags as typeof MetadataFlags6).CLOCK_EXPIRE:
+				case (MetadataFlags as typeof MetadataFlags6).EXPIRE:
+				case (MetadataFlags as typeof MetadataFlags6).EXPIRE_STOP:
+				case (MetadataFlags as typeof MetadataFlags6).PODIUM:
+				case (MetadataFlags as typeof MetadataFlags6).DECO_KIT:
+					// Boolean flags not stored in ThingType yet
+					break;
+
 				default:
-					throw new Error(
-						`Unknown flag 0x${flag.toString(16)} after 0x${previousFlag.toString(16)} for ${thing.category} id ${thing.id}`
+					// Unknown flag - log as warning but don't throw
+					// OTClient silently ignores unknown flags (they're treated as boolean flags with no data)
+					if (!thing.unknownFlags) {
+						thing.unknownFlags = [];
+					}
+					thing.unknownFlags.push({ orig: origFlag, remapped: flag });
+					console.warn(
+						`Unknown flag 0x${flag.toString(16)} (orig: 0x${origFlag.toString(16)}) for ${thing.category} id ${thing.id}`
 					);
+					break;
 			}
 		}
 
@@ -499,59 +551,136 @@ export class DatReader {
 
 	/**
 	 * Read texture patterns (sprite layout information)
+	 * For outfits in version 10.57+, this uses frame groups
 	 */
 	readTexturePatterns(thing: ThingType): boolean {
-		thing.width = this.reader.readUInt8();
-		thing.height = this.reader.readUInt8();
+		// Check if this is an outfit with frame groups (idle animations)
+		// Frame groups were introduced in version 10.57 (1057)
+		const hasFrameGroups = thing.category === ThingCategory.OUTFIT && this.version >= 1057;
+		const groupCount = hasFrameGroups ? this.reader.readUInt8() : 1;
 
-		if (thing.width > 1 || thing.height > 1) {
-			thing.exactSize = this.reader.readUInt8();
-		} else {
-			thing.exactSize = SPRITE_SIZE;
-		}
+		let totalSpritesCount = 0;
 
-		thing.layers = this.reader.readUInt8();
-		thing.patternX = this.reader.readUInt8();
-		thing.patternY = this.reader.readUInt8();
-		thing.patternZ = this.reader.readUInt8();
-		thing.frames = this.reader.readUInt8();
-
-		if (thing.frames > 1) {
-			thing.isAnimation = true;
-			thing.frameDurations = [];
-
-			if (this.frameDurations) {
-				thing.animationMode = this.reader.readUInt8();
-				thing.loopCount = this.reader.readInt32LE();
-				thing.startFrame = this.reader.readInt8();
-
-				for (let i = 0; i < thing.frames; i++) {
-					const minimum = this.reader.readUInt32LE();
-					const maximum = this.reader.readUInt32LE();
-					thing.frameDurations.push({ minimum, maximum });
+		for (let groupIndex = 0; groupIndex < groupCount; groupIndex++) {
+			// Read frame group type if this outfit has frame groups
+			if (hasFrameGroups) {
+				const frameGroupType = this.reader.readUInt8();
+				// Store frame group type for later use (0 = idle, 1 = moving)
+				if (!thing.frameGroups) {
+					thing.frameGroups = [];
 				}
+				thing.frameGroups.push(frameGroupType);
+			}
+
+			// Read dimensions
+			const width = this.reader.readUInt8();
+			const height = this.reader.readUInt8();
+
+			if (width === undefined || height === undefined) {
+				throw new Error(`EOF reached while reading texture patterns for ${thing.category} ${thing.id}`);
+			}
+
+			let exactSize = SPRITE_SIZE;
+			if (width > 1 || height > 1) {
+				exactSize = this.reader.readUInt8();
 			} else {
-				// Use default duration for older versions
-				const defaultDuration = getDefaultFrameDuration(thing.category);
-				for (let i = 0; i < thing.frames; i++) {
-					thing.frameDurations.push({ minimum: defaultDuration, maximum: defaultDuration });
+				exactSize = SPRITE_SIZE;
+			}
+
+			const layers = this.reader.readUInt8();
+			const patternX = this.reader.readUInt8();
+			const patternY = this.reader.readUInt8();
+			const patternZ = this.reader.readUInt8();
+			const frames = this.reader.readUInt8();
+
+			// Only update thing properties if this is the first group (Idle)
+			// This ensures we have consistent data for the first group, which is what Rust writes
+			if (groupIndex === 0) {
+				thing.width = width;
+				thing.height = height;
+				thing.exactSize = exactSize;
+				thing.layers = layers;
+				thing.patternX = patternX;
+				thing.patternY = patternY;
+				thing.patternZ = patternZ;
+				thing.frames = frames;
+			}
+
+			if (frames > 1) {
+				if (groupIndex === 0) {
+					thing.isAnimation = true;
+					thing.frameDurations = [];
+				}
+
+				if (this.frameDurations) {
+					const animationMode = this.reader.readUInt8();
+					const loopCount = this.reader.readInt32LE();
+					const startFrame = this.reader.readInt8();
+
+					if (groupIndex === 0) {
+						thing.animationMode = animationMode;
+						thing.loopCount = loopCount;
+						thing.startFrame = startFrame;
+					}
+
+					for (let i = 0; i < frames; i++) {
+						const minimum = this.reader.readUInt32LE();
+						const maximum = this.reader.readUInt32LE();
+						if (groupIndex === 0) {
+							thing.frameDurations.push({ minimum, maximum });
+						}
+					}
+				} else {
+					// Use default duration for older versions
+					if (groupIndex === 0) {
+						const defaultDuration = getDefaultFrameDuration(thing.category);
+						for (let i = 0; i < frames; i++) {
+							thing.frameDurations.push({ minimum: defaultDuration, maximum: defaultDuration });
+						}
+					}
 				}
 			}
-		}
 
-		// Read sprite indices
-		const totalSprites = getTotalSprites(thing);
-		if (totalSprites > 4096) {
-			throw new Error(`Thing ${thing.category} ${thing.id} has more than 4096 sprites`);
-		}
+			// Calculate sprites for this group
+			const groupTotalSprites = width * height * layers * patternX * patternY * patternZ * frames;
 
-		thing.spriteIndex = [];
-		for (let i = 0; i < totalSprites; i++) {
-			if (this.extended) {
-				thing.spriteIndex.push(this.reader.readUInt32LE());
-			} else {
-				thing.spriteIndex.push(this.reader.readUInt16LE());
+			if (totalSpritesCount + groupTotalSprites > 4096) {
+				console.error(
+					`${thing.category} ${thing.id} dimensions: width=${width}, height=${height}, layers=${layers}, ` +
+						`patternX=${patternX}, patternY=${patternY}, patternZ=${patternZ}, frames=${frames}, ` +
+						`groupTotal=${groupTotalSprites}, total=${totalSpritesCount + groupTotalSprites}`
+				);
+				if (thing.unknownFlags && thing.unknownFlags.length > 0) {
+					console.error(`${thing.category} ${thing.id} had unknown flags:`, thing.unknownFlags);
+				}
+				throw new Error(`Thing ${thing.category} ${thing.id} has more than 4096 sprites`);
 			}
+
+			// Initialize sprite index array if this is the first group
+			if (!thing.spriteIndex) {
+				thing.spriteIndex = [];
+			}
+
+			// Read sprite IDs for this group
+			// Object Builder uses extended (32-bit) sprite IDs when extended flag is set
+			// even for outfits with frame groups
+			const useExtendedSpriteIds = this.extended;
+
+			for (let i = 0; i < groupTotalSprites; i++) {
+				let spriteId: number;
+				if (useExtendedSpriteIds) {
+					spriteId = this.reader.readUInt32LE();
+				} else {
+					spriteId = this.reader.readUInt16LE();
+				}
+
+				// Only add sprites if this is the first group
+				if (groupIndex === 0) {
+					thing.spriteIndex.push(spriteId);
+				}
+			}
+
+			totalSpritesCount += groupTotalSprites;
 		}
 
 		return true;
@@ -587,13 +716,6 @@ export class DatReader {
 	get bytesAvailable(): number {
 		return this.reader.bytesAvailable;
 	}
-}
-
-/**
- * Calculate total sprites for a thing
- */
-function getTotalSprites(thing: ThingType): number {
-	return thing.width * thing.height * thing.patternX * thing.patternY * thing.patternZ * thing.frames * thing.layers;
 }
 
 /**

@@ -18,6 +18,9 @@ use spr_writer::{write_spr_file, update_sprites_in_spr, SpriteWrite};
 mod dat_manager;
 use dat_manager::{DatManager, DatManagerState};
 
+mod dat_reader;
+use dat_reader::DatReader;
+
 // Wrapper to use serde_bytes for efficient binary transfer
 #[derive(Serialize, Deserialize)]
 struct FileBytes(#[serde(with = "serde_bytes")] Vec<u8>);
@@ -637,6 +640,20 @@ fn store_dat_data(
 }
 
 #[tauri::command]
+fn load_dat_file(
+    path: String,
+    dat_state: tauri::State<DatManagerState>,
+) -> Result<u32, String> {
+    let mut reader = DatReader::open(&path)?;
+    let (signature, items, outfits, effects, missiles) = reader.read_dat()?;
+    
+    let mut manager = dat_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    manager.store_data(path, items, outfits, effects, missiles)?;
+    
+    Ok(signature)
+}
+
+#[tauri::command]
 fn search_things(
     path: String,
     category: Option<String>,
@@ -760,6 +777,7 @@ pub fn run() {
             write_spr,
             update_spr_sprites,
             store_dat_data,
+            load_dat_file,
             search_things,
             search_things_bin,
             clear_dat_data,

@@ -1,13 +1,14 @@
+import type React from 'react';
 import { cn } from '@/lib/utils';
 import { ThingCategory } from '@/lib/tibia';
 import { MarketCategory } from '@/lib/tibia';
 import { useTibiaData } from '@/contexts/TibiaDataContext';
 import { useRef, useState, useEffect, useCallback } from 'react';
-import type React from 'react';
 import {
 	X,
 	Play,
 	Move,
+	Save,
 	Pause,
 	Undo2,
 	ZoomIn,
@@ -28,8 +29,7 @@ import {
 	FileQuestion,
 	ArrowUpRight,
 	ArrowDownLeft,
-	ArrowDownRight,
-	Save
+	ArrowDownRight
 } from 'lucide-react';
 
 import { Label } from './ui/label';
@@ -192,12 +192,12 @@ export const PropertiesPanel = () => {
 		if (!originalItemRef.current || !draftItem) return false;
 		const original = (originalItemRef.current as any)[property];
 		const current = (draftItem as any)[property];
-		
+
 		// Handle array comparison (like spriteIndex)
 		if (Array.isArray(original) && Array.isArray(current)) {
 			return JSON.stringify(original) !== JSON.stringify(current);
 		}
-		
+
 		return original !== current;
 	};
 
@@ -208,24 +208,24 @@ export const PropertiesPanel = () => {
 		setDraftItem((prev) => {
 			if (!prev) return null;
 			const updated = { ...prev, [property]: originalValue };
-			
+
 			// Check if there are any remaining changes after this update
 			const stillHasChanges = Object.keys(updated).some((key) => {
 				if (key === property) return false;
 				const orig = (originalItemRef.current as any)?.[key];
 				const curr = (updated as any)[key];
-				
+
 				// Handle array comparison
 				if (Array.isArray(orig) && Array.isArray(curr)) {
 					return JSON.stringify(orig) !== JSON.stringify(curr);
 				}
-				
+
 				return orig !== curr;
 			});
-			
+
 			setHasChanges(stillHasChanges);
 			markUnsavedChanges(openedItemId, openedItemCategory, stillHasChanges);
-			
+
 			return updated;
 		});
 	};
@@ -238,9 +238,9 @@ export const PropertiesPanel = () => {
 					<Button
 						size="icon"
 						variant="ghost"
-						className="h-5 w-5 p-0 hover:bg-primary/20 hover:text-primary"
-						onClick={() => handleUndoProperty(property)}
 						title="Undo to original"
+						onClick={() => handleUndoProperty(property)}
+						className="h-5 w-5 p-0 hover:bg-primary/20 hover:text-primary"
 					>
 						<Undo2 className="h-2 w-2" />
 					</Button>
@@ -487,12 +487,28 @@ export const PropertiesPanel = () => {
 				});
 			};
 
-			// Determine duration for current frame
+			// Determine duration for current frame using correct animation timing
 			let duration = 200; // Default 200ms
-			if (draftItem.frameDurations && item.frameDurations[currentFrame]) {
+
+			if (isOutfit) {
+				// CRITICAL: Outfits use 1000/frames with OTClient clamping
+				// This matches our generateDefaultDurations() logic
+				duration = draftItem.frames > 0 ? Math.floor(1000 / draftItem.frames) : 333;
+				const maxDelay = draftItem.frames > 2 ? 80 : 205;
+				duration = Math.min(duration, maxDelay);
+			} else if (draftItem.frameDurations && item.frameDurations[currentFrame]) {
 				const fd = item.frameDurations[currentFrame];
 				// Use minimum duration if available, otherwise default
 				duration = fd.minimum > 0 ? fd.minimum : 200;
+			} else {
+				// Use category-specific defaults
+				if (item.category === 'effect') {
+					duration = 200;
+				} else if (item.category === 'missile') {
+					duration = 300;
+				} else {
+					duration = 500;
+				}
 			}
 
 			timeoutId = setTimeout(animate, duration);
@@ -1149,9 +1165,9 @@ export const PropertiesPanel = () => {
 												onPanChange={
 													isPanEnabled
 														? (x, y) => {
-															setPanX(x);
-															setPanY(y);
-														}
+																setPanX(x);
+																setPanY(y);
+															}
 														: undefined
 												}
 											/>
@@ -1822,6 +1838,98 @@ export const PropertiesPanel = () => {
 										</div>
 									</div>
 								)}
+
+								{/* Market */}
+								{showMarket && (
+									<div>
+										<div className="flex items-center gap-2 pb-1 mb-3 border-b border-border/30">
+											<h4 className="text-[11px] font-bold text-primary/80 uppercase tracking-wider">Market</h4>
+										</div>
+										<div className="space-y-2 pl-1">
+											<div className="flex items-center justify-between">
+												<Label className="text-xs text-muted-foreground">Market Item</Label>
+												<PropertyWithUndo property="isMarketItem">
+													<Switch
+														checked={draftItem.isMarketItem}
+														onCheckedChange={(checked) => handlePropertyChange('isMarketItem', checked)}
+													/>
+												</PropertyWithUndo>
+											</div>
+											<div className="pl-2 border-l-2 border-border/30 space-y-2">
+												<div className="flex flex-col gap-1">
+													<Label className="text-[10px] text-muted-foreground">Name</Label>
+													<Input
+														value={draftItem.marketName || ''}
+														disabled={!draftItem.isMarketItem}
+														onChange={(e) => handlePropertyChange('marketName', e.target.value)}
+														className="h-7 w-full text-xs bg-background/50 shadow-sm hover:bg-background/80 transition-colors"
+													/>
+												</div>
+												<div className="grid grid-cols-2 gap-2">
+													<div className="flex flex-col gap-1">
+														<Label className="text-[10px] text-muted-foreground">Category</Label>
+														<Select
+															disabled={!draftItem.isMarketItem}
+															value={String(draftItem.marketCategory || 1)}
+															onValueChange={(val) => handlePropertyChange('marketCategory', parseInt(val))}
+														>
+															<SelectTrigger className="h-7 w-full text-xs bg-background/50 shadow-sm hover:bg-background/80 transition-colors">
+																<SelectValue placeholder="Select category" />
+															</SelectTrigger>
+															<SelectContent>
+																{Object.entries(MarketCategory)
+																	.filter(([key]) => isNaN(Number(key)))
+																	.map(([key, value]) => (
+																		<SelectItem key={value} value={String(value)}>
+																			{key.replace(/_/g, ' ')}
+																		</SelectItem>
+																	))}
+															</SelectContent>
+														</Select>
+													</div>
+													<div className="flex flex-col gap-1">
+														<Label className="text-[10px] text-muted-foreground">Trade As</Label>
+														<NumberInput
+															className="h-7 w-full text-right"
+															disabled={!draftItem.isMarketItem}
+															value={draftItem.marketTradeAs || 0}
+															onChange={(val) => handlePropertyChange('marketTradeAs', val)}
+														/>
+													</div>
+												</div>
+												<div className="grid grid-cols-2 gap-2">
+													<div className="flex flex-col gap-1">
+														<Label className="text-[10px] text-muted-foreground">Show As</Label>
+														<NumberInput
+															className="h-7 w-full text-right"
+															disabled={!draftItem.isMarketItem}
+															value={draftItem.marketShowAs || 0}
+															onChange={(val) => handlePropertyChange('marketShowAs', val)}
+														/>
+													</div>
+													<div className="flex flex-col gap-1">
+														<Label className="text-[10px] text-muted-foreground">Profession</Label>
+														<NumberInput
+															className="h-7 w-full text-right"
+															disabled={!draftItem.isMarketItem}
+															value={draftItem.marketRestrictProfession || 0}
+															onChange={(val) => handlePropertyChange('marketRestrictProfession', val)}
+														/>
+													</div>
+												</div>
+												<div className="flex flex-col gap-1">
+													<Label className="text-[10px] text-muted-foreground">Level</Label>
+													<NumberInput
+														className="h-7 w-full text-right"
+														disabled={!draftItem.isMarketItem}
+														value={draftItem.marketRestrictLevel || 0}
+														onChange={(val) => handlePropertyChange('marketRestrictLevel', val)}
+													/>
+												</div>
+											</div>
+										</div>
+									</div>
+								)}
 							</div>
 
 							{/* Column 2 - Interaction & Gameplay */}
@@ -2016,7 +2124,10 @@ export const PropertiesPanel = () => {
 											<div className="flex items-center justify-between">
 												<Label className="text-xs text-muted-foreground">Is Cloth</Label>
 												<PropertyWithUndo property="cloth">
-													<Switch checked={draftItem.cloth} onCheckedChange={(checked) => handlePropertyChange('cloth', checked)} />
+													<Switch
+														checked={draftItem.cloth}
+														onCheckedChange={(checked) => handlePropertyChange('cloth', checked)}
+													/>
 												</PropertyWithUndo>
 											</div>
 											<div className="flex items-center justify-between pl-2 border-l-2 border-border/30">
@@ -2375,98 +2486,6 @@ export const PropertiesPanel = () => {
 									</div>
 								)}
 
-								{/* Market */}
-								{showMarket && (
-									<div>
-										<div className="flex items-center gap-2 pb-1 mb-3 border-b border-border/30">
-											<h4 className="text-[11px] font-bold text-primary/80 uppercase tracking-wider">Market</h4>
-										</div>
-										<div className="space-y-2 pl-1">
-											<div className="flex items-center justify-between">
-												<Label className="text-xs text-muted-foreground">Market Item</Label>
-												<PropertyWithUndo property="isMarketItem">
-													<Switch
-														checked={draftItem.isMarketItem}
-														onCheckedChange={(checked) => handlePropertyChange('isMarketItem', checked)}
-													/>
-												</PropertyWithUndo>
-											</div>
-											<div className="pl-2 border-l-2 border-border/30 space-y-2">
-												<div className="flex flex-col gap-1">
-													<Label className="text-[10px] text-muted-foreground">Name</Label>
-													<Input
-														value={draftItem.marketName || ''}
-														disabled={!draftItem.isMarketItem}
-														onChange={(e) => handlePropertyChange('marketName', e.target.value)}
-														className="h-7 w-full text-xs bg-background/50 shadow-sm hover:bg-background/80 transition-colors"
-													/>
-												</div>
-												<div className="grid grid-cols-2 gap-2">
-													<div className="flex flex-col gap-1">
-														<Label className="text-[10px] text-muted-foreground">Category</Label>
-														<Select
-															disabled={!draftItem.isMarketItem}
-															value={String(draftItem.marketCategory || 1)}
-															onValueChange={(val) => handlePropertyChange('marketCategory', parseInt(val))}
-														>
-															<SelectTrigger className="h-7 w-full text-xs bg-background/50 shadow-sm hover:bg-background/80 transition-colors">
-																<SelectValue placeholder="Select category" />
-															</SelectTrigger>
-															<SelectContent>
-																{Object.entries(MarketCategory)
-																	.filter(([key]) => isNaN(Number(key)))
-																	.map(([key, value]) => (
-																		<SelectItem key={value} value={String(value)}>
-																			{key.replace(/_/g, ' ')}
-																		</SelectItem>
-																	))}
-															</SelectContent>
-														</Select>
-													</div>
-													<div className="flex flex-col gap-1">
-														<Label className="text-[10px] text-muted-foreground">Trade As</Label>
-														<NumberInput
-															className="h-7 w-full text-right"
-															disabled={!draftItem.isMarketItem}
-															value={draftItem.marketTradeAs || 0}
-															onChange={(val) => handlePropertyChange('marketTradeAs', val)}
-														/>
-													</div>
-												</div>
-												<div className="grid grid-cols-2 gap-2">
-													<div className="flex flex-col gap-1">
-														<Label className="text-[10px] text-muted-foreground">Show As</Label>
-														<NumberInput
-															className="h-7 w-full text-right"
-															disabled={!draftItem.isMarketItem}
-															value={draftItem.marketShowAs || 0}
-															onChange={(val) => handlePropertyChange('marketShowAs', val)}
-														/>
-													</div>
-													<div className="flex flex-col gap-1">
-														<Label className="text-[10px] text-muted-foreground">Profession</Label>
-														<NumberInput
-															className="h-7 w-full text-right"
-															disabled={!draftItem.isMarketItem}
-															value={draftItem.marketRestrictProfession || 0}
-															onChange={(val) => handlePropertyChange('marketRestrictProfession', val)}
-														/>
-													</div>
-												</div>
-												<div className="flex flex-col gap-1">
-													<Label className="text-[10px] text-muted-foreground">Level</Label>
-													<NumberInput
-														className="h-7 w-full text-right"
-														disabled={!draftItem.isMarketItem}
-														value={draftItem.marketRestrictLevel || 0}
-														onChange={(val) => handlePropertyChange('marketRestrictLevel', val)}
-													/>
-												</div>
-											</div>
-										</div>
-									</div>
-								)}
-
 								{/* Fluids */}
 								{isItem && (
 									<div>
@@ -2531,7 +2550,7 @@ export const PropertiesPanel = () => {
 
 			{/* Footer with action buttons */}
 			<div className="border-t border-border/50 bg-secondary/30 p-2 flex items-center gap-2 justify-between h-[45px]">
-				<Button size="sm" className="h-7" variant="outline" onClick={handleDiscardChanges} disabled={!hasChanges}>
+				<Button size="sm" className="h-7" variant="outline" disabled={!hasChanges} onClick={handleDiscardChanges}>
 					<RotateCcw className="h-3.5 w-3.5 mr-1" />
 					Discard Changes
 				</Button>

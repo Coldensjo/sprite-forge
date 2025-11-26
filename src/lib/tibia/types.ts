@@ -80,7 +80,6 @@ export interface ThingType {
 	id: number;
 	// Texture/Sprite layout
 	width: number;
-
 	height: number;
 	layers: number;
 	frames: number;
@@ -90,62 +89,62 @@ export interface ThingType {
 	offsetY: number;
 	usable: boolean;
 	patternX: number;
-	patternY: number;
 
+	patternY: number;
 	patternZ: number;
 	isOnTop: boolean;
 	isFluid: boolean;
 	miniMap: boolean;
-	lensHelp: number;
 
+	lensHelp: number;
 	exactSize: number;
 	// Ground properties
 	isGround: boolean;
 	forceUse: boolean;
-	multiUse: boolean;
 
+	multiUse: boolean;
 	// Writing properties
 	writable: boolean;
 	// Positioning properties
 	hangable: boolean;
+
 	// Light properties
 	hasLight: boolean;
-
 	// Visual properties
 	dontHide: boolean;
 	elevation: number;
-
 	clothSlot: number;
+
 	loopCount: number;
 	stackable: boolean;
 	rotatable: boolean;
 	lightLevel: number;
 	lightColor: number;
-
 	// Offset properties
 	hasOffset: boolean;
+
 	marketName: string;
 	wrappable: boolean;
 	topEffect: boolean;
-
 	startFrame: number;
 	groundSpeed: number;
-	isOnBottom: boolean;
 
+	isOnBottom: boolean;
 	pickupable: boolean;
 	isVertical: boolean;
-	isLensHelp: boolean;
 
+	isLensHelp: boolean;
 	ignoreLook: boolean;
 	hasCharges: boolean;
+
 	// Container properties
 	isContainer: boolean;
-
 	floorChange: boolean;
 	miniMapColor: number;
 
 	marketShowAs: number;
 	unwrappable: boolean;
+
 	// Animation properties
 	isAnimation: boolean;
 	spriteIndex: number[];
@@ -154,36 +153,41 @@ export interface ThingType {
 	// Movement properties
 	isUnpassable: boolean;
 	isUnmoveable: boolean;
-
 	blockMissile: boolean;
 	isHorizontal: boolean;
 
 	// Elevation properties
 	hasElevation: boolean;
 	isFullGround: boolean;
+
 	// Market properties
 	isMarketItem: boolean;
 	marketTradeAs: number;
 	defaultAction: number;
 	animationMode: number;
 	blockPathfind: boolean;
-
 	isTranslucent: boolean;
 	// Misc properties
 	isLyingObject: boolean;
+
 	animateAlways: boolean;
 	marketCategory: number;
+	frameGroups?: number[]; // For outfits with idle animations (10.57+)
 	category: ThingCategory;
 	isGroundBorder: boolean;
 	noMoveAnimation: boolean;
-
 	// Fluid properties
 	isFluidContainer: boolean;
+
 	// Action properties
 	hasDefaultAction: boolean;
+	// Helper properties
+	texturePatterns?: number[];
 	marketRestrictLevel: number;
+	upgradeClassification?: number;
 	frameDurations: FrameDuration[];
 	marketRestrictProfession: number;
+	unknownFlags?: Array<{ orig: number; remapped: number }>; // For debugging
 }
 
 export enum MarketCategory {
@@ -745,6 +749,15 @@ export const CLIENT_VERSIONS: ClientVersion[] = [
 		supportsExtended: true,
 		datSignature: 0x542143b0,
 		sprSignature: 0x542143de,
+		supportsAlphaChannel: false,
+		supportsFrameDurations: true
+	},
+	{
+		value: 1098,
+		label: '10.98',
+		datSignature: 0x42a3,
+		supportsExtended: true,
+		sprSignature: 0x57bbd603,
 		supportsAlphaChannel: false,
 		supportsFrameDurations: true
 	}

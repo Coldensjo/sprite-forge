@@ -234,9 +234,9 @@ impl DatManager {
             "animateAlways" => thing.animate_always,
             "isFullGround" => thing.is_full_ground,
             "ignoreLook" => thing.ignore_look,
-            "wrappable" => false, // Not in struct - default to false
-            "unwrappable" => false, // Not in struct - default to false
-            "topEffect" => false, // Not in struct - default to false
+            "wrappable" => thing.wrappable,
+            "unwrappable" => thing.unwrappable,
+            "topEffect" => thing.top_effect,
             "usable" => thing.usable,
             "hasCharges" => thing.has_charges,
             "floorChange" => thing.floor_change,

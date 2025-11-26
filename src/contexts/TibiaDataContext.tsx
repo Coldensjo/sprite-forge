@@ -203,6 +203,10 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 					path: newData.datPath
 				});
 
+				if (outfits.length > 0) {
+					console.log('First outfit sample:', JSON.stringify(outfits[0], null, 2));
+				}
+
 				console.log('DAT data stored in Rust backend for cross-window access');
 			} catch (e) {
 				console.error('Failed to store DAT data in Rust backend:', e);
@@ -661,7 +665,7 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 						);
 
 						notifySpritesLoaded();
-					} catch {
+					} catch (e) {
 						console.error('Preload failed', e);
 					}
 				}

@@ -81,12 +81,7 @@ export async function compileDatFile(
 	const effectsData = collectThings(data.effects, ThingCategory.EFFECT);
 	const missilesData = collectThings(data.missiles, ThingCategory.MISSILE);
 
-	// DEBUG: Log all things being sent to Rust
-	console.log('=== COMPILE DAT DEBUG ===');
-	console.log(`Items: minId=${itemsData.minId}, maxId=${itemsData.maxId}, count=${itemsData.things.length}`);
-	console.log(`Outfits: minId=${outfitsData.minId}, maxId=${outfitsData.maxId}, count=${outfitsData.things.length}`);
-	console.log(`Effects: minId=${effectsData.minId}, maxId=${effectsData.maxId}, count=${effectsData.things.length}`);
-	console.log(`Missiles: minId=${missilesData.minId}, maxId=${missilesData.maxId}, count=${missilesData.things.length}`);
+
 
 	// Check for corrupt data in items
 	for (let i = 0; i < itemsData.things.length; i++) {
