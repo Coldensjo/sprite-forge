@@ -141,6 +141,27 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 	);
 
 	const setData = useCallback(async (newData: TibiaData, reader: SpriteReader, skipBackendSync = false) => {
+		// Clean up previous file resources in Rust backend FIRST
+		// This prevents resource leakage when loading new files (file handles + memory)
+		if (data?.sprPath) {
+			try {
+				const { invoke } = await import('@tauri-apps/api/core');
+				await invoke('close_spr_file', { path: data.sprPath });
+				console.log('Closed previous SPR file:', data.sprPath);
+			} catch (e) {
+				console.warn('Failed to close previous SPR file:', e);
+			}
+		}
+		if (data?.datPath) {
+			try {
+				const { invoke } = await import('@tauri-apps/api/core');
+				await invoke('clear_dat_data', { path: data.datPath });
+				console.log('Cleared previous DAT data:', data.datPath);
+			} catch (e) {
+				console.warn('Failed to clear previous DAT data:', e);
+			}
+		}
+
 		// Clear localStorage FIRST (before setting new data)
 		try {
 			if (typeof window !== 'undefined') {
@@ -193,7 +214,7 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 				// Non-fatal - continue execution
 			}
 		}
-	}, []);
+	}, [data]);
 
 	const setLoading = useCallback((loading: boolean, progress?: { stage: string; total: number; current: number }) => {
 		setIsLoading(loading);

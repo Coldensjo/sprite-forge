@@ -170,8 +170,9 @@ impl SprManager {
     }
 
     pub fn close_file(&mut self, path: &str) -> Result<(), String> {
-        self.readers.remove(path)
-            .ok_or_else(|| format!("SPR file not open: {}", path))?;
+        // Remove the reader if it exists, silently succeed if not
+        // This allows cleanup to be called safely even if file wasn't opened
+        self.readers.remove(path);
         Ok(())
     }
 
