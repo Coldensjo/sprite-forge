@@ -175,9 +175,21 @@ export function decompressPixels(compressedPixels: Uint8Array, transparent: bool
 		readPos += 2;
 
 		// Safety check: ensure we have enough bytes for colored pixel data
-		const bytesNeeded = coloredCount * channels;
+		let currentChannels = channels;
+		const bytesNeeded = coloredCount * currentChannels;
+
 		if (readPos + bytesNeeded > compressedPixels.length) {
-			break;
+			// If we are in transparent mode (4 channels) but don't have enough data,
+			// check if we have enough for 3 channels (RGB)
+			if (transparent && readPos + coloredCount * 3 <= compressedPixels.length) {
+				console.warn(
+					`[decompressPixels] Fallback to 3 channels for sprite. Expected ${bytesNeeded} bytes, have ${compressedPixels.length - readPos}. Colored count: ${coloredCount}`
+				);
+				currentChannels = 3;
+			} else {
+				console.error(`[decompressPixels] Not enough data. Needed ${bytesNeeded}, have ${compressedPixels.length - readPos}`);
+				break;
+			}
 		}
 
 		// Write transparent pixels (ARGB = 0x00000000)
@@ -193,7 +205,7 @@ export function decompressPixels(compressedPixels: Uint8Array, transparent: bool
 			const red = compressedPixels[readPos++];
 			const green = compressedPixels[readPos++];
 			const blue = compressedPixels[readPos++];
-			const alpha = transparent ? compressedPixels[readPos++] : 0xff;
+			const alpha = currentChannels === 4 ? compressedPixels[readPos++] : 0xff;
 
 			pixels[writePos++] = alpha; // Alpha
 			pixels[writePos++] = red; // Red

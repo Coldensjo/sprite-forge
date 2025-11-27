@@ -4,7 +4,9 @@ import { useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { selectDatFile, selectSprFile, loadTibiaData } from '@/lib/tibia';
 
+import { Label } from './ui/label';
 import { Button } from './ui/button';
+import { Checkbox } from './ui/checkbox';
 import { Alert, AlertDescription } from './ui/alert';
 import { Card, CardTitle, CardHeader, CardContent, CardDescription } from './ui/card';
 
@@ -14,6 +16,7 @@ export const FileLoader = () => {
 	const [progress, setProgress] = useState(0);
 	const [error, setError] = useState<null | string>(null);
 	const [data, setData] = useState<null | TibiaData>(null);
+	const [transparency, setTransparency] = useState(false);
 
 	const handleLoadFiles = async () => {
 		try {
@@ -36,10 +39,16 @@ export const FileLoader = () => {
 			}
 
 			// Load files
-			const tibiaData = await loadTibiaData(datPath, sprPath, undefined, (stage, current, total) => {
-				setLoadingStage(stage);
-				setProgress(Math.round((current / total) * 100));
-			});
+			const tibiaData = await loadTibiaData(
+				datPath,
+				sprPath,
+				undefined,
+				transparency ? true : undefined,
+				(stage, current, total) => {
+					setLoadingStage(stage);
+					setProgress(Math.round((current / total) * 100));
+				}
+			);
 
 			setData(tibiaData);
 			setLoading(false);
@@ -56,6 +65,21 @@ export const FileLoader = () => {
 				<CardDescription>Select Tibia.dat and Tibia.spr files to load sprites and objects</CardDescription>
 			</CardHeader>
 			<CardContent className="space-y-4">
+				<div className="flex items-center space-x-2">
+					<Checkbox
+						id="transparency"
+						disabled={loading}
+						checked={transparency}
+						onCheckedChange={(checked) => setTransparency(checked === true)}
+					/>
+					<Label
+						htmlFor="transparency"
+						className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+					>
+						Enable Alpha Channel (Transparency)
+					</Label>
+				</div>
+
 				<Button disabled={loading} onClick={handleLoadFiles}>
 					{loading ? (
 						<>

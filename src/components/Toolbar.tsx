@@ -24,7 +24,7 @@ export const Toolbar = () => {
 	const [themeDialogOpen, setThemeDialogOpen] = useState(false);
 	const [versionHistoryOpen, setVersionHistoryOpen] = useState(false);
 
-	const handleFolderSelect = async (selectedPath: string) => {
+	const handleFolderSelect = async (selectedPath: string, transparency: boolean) => {
 		try {
 			setLoading(true);
 			setError(null);
@@ -32,9 +32,15 @@ export const Toolbar = () => {
 			const datPath = `${selectedPath}\\Tibia.dat`;
 			const sprPath = `${selectedPath}\\Tibia.spr`;
 
-			const tibiaData = await loadTibiaData(datPath, sprPath, undefined, (stage, current, total) => {
-				setLoading(true, { stage, total, current });
-			});
+			const tibiaData = await loadTibiaData(
+				datPath,
+				sprPath,
+				undefined,
+				transparency ? true : undefined,
+				(stage, current, total) => {
+					setLoading(true, { stage, total, current });
+				}
+			);
 
 			setData(tibiaData, null as any);
 

@@ -4,7 +4,9 @@ import { X, Home, Star, Folder, ChevronLeft, ChevronRight, CheckCircle2 } from '
 
 import { Input } from './ui/input';
 import { Badge } from './ui/badge';
+import { Label } from './ui/label';
 import { Button } from './ui/button';
+import { Checkbox } from './ui/checkbox';
 import { ScrollArea } from './ui/scroll-area';
 import { Dialog, DialogTitle, DialogContent, DialogDescription } from './ui/dialog';
 
@@ -27,8 +29,8 @@ interface FavoriteFolder {
 interface FolderSelectDialogProps {
 	open: boolean;
 	title?: string;
-	onSelect: (path: string) => void;
 	onOpenChange: (open: boolean) => void;
+	onSelect: (path: string, transparency: boolean) => void;
 }
 
 export const FolderSelectDialog = ({ open, onSelect, onOpenChange, title = 'Select Folder' }: FolderSelectDialogProps) => {
@@ -43,6 +45,7 @@ export const FolderSelectDialog = ({ open, onSelect, onOpenChange, title = 'Sele
 	const [hasTibiaFiles, setHasTibiaFiles] = useState(false);
 	const [favorites, setFavorites] = useState<FavoriteFolder[]>([]);
 	const [isFavorite, setIsFavorite] = useState(false);
+	const [transparency, setTransparency] = useState(false);
 
 	const checkTibiaFiles = async (path: string) => {
 		try {
@@ -215,7 +218,7 @@ export const FolderSelectDialog = ({ open, onSelect, onOpenChange, title = 'Sele
 		} catch (err) {
 			console.error('Failed to save last folder:', err);
 		}
-		onSelect(currentPath);
+		onSelect(currentPath, transparency);
 		onOpenChange(false);
 	};
 
@@ -366,6 +369,15 @@ export const FolderSelectDialog = ({ open, onSelect, onOpenChange, title = 'Sele
 				</div>
 
 				<div className="border-t border-border px-4 py-3 flex items-center justify-end gap-2">
+					<div className="flex items-center gap-2 mr-2">
+						<Checkbox id="transparency" checked={transparency} onCheckedChange={(checked) => setTransparency(checked === true)} />
+						<Label
+							htmlFor="transparency"
+							className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+						>
+							Enable Alpha Channel
+						</Label>
+					</div>
 					<Button variant="outline" onClick={() => onOpenChange(false)}>
 						Cancel
 					</Button>

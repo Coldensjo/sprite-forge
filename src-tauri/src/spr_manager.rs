@@ -247,8 +247,8 @@ impl SprManager {
         // Heuristic: If the span covers less than 10MB, just read it all. 
         // Most sprite pages are dense.
         let span_size = if valid_sprites.len() > 0 {
-            // Estimate end of last sprite (address + 3 header + ~4KB max sprite size)
-            (max_pos + 4096) - min_pos
+            // Estimate end of last sprite (address + 3 header + ~8KB max sprite size safety margin)
+            (max_pos + 8192) - min_pos
         } else {
             0
         };
@@ -443,8 +443,8 @@ impl SprManager {
             let min_pos = valid_sprites.first().unwrap().1;
             let max_pos = valid_sprites.last().unwrap().1;
             
-            // Estimate span size (max_pos + ~4KB - min_pos)
-            let span_size = (max_pos + 4096) - min_pos;
+            // Estimate span size (max_pos + ~8KB - min_pos)
+            let span_size = (max_pos + 8192) - min_pos;
 
             // If span is reasonable (< 5MB) and density is high enough, read bulk
             // Density check: if we are reading > 20% of the span, it's worth reading the whole thing

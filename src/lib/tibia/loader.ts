@@ -81,10 +81,15 @@ interface SprHeader {
  */
 export async function loadTibiaSpr(
 	path: string,
-	version: ClientVersion
+	version: ClientVersion,
+	enableTransparency?: boolean
 ): Promise<{ path: string; header: SprHeader; transparency: boolean }> {
 	const extended = version.supportsExtended;
-	const transparency = version.supportsAlphaChannel;
+	// Use enableTransparency if provided, otherwise fallback to version's default
+	const transparency = enableTransparency ?? version.supportsAlphaChannel;
+	console.log(
+		`[loadTibiaSpr] Loading ${path} with version ${version.label}. Transparency: ${transparency} (Requested: ${enableTransparency}, Default: ${version.supportsAlphaChannel})`
+	);
 
 	// Open SPR file in Rust backend (keeps file handle open)
 	const header = await invoke<SprHeader>('open_spr_file', {
@@ -163,6 +168,7 @@ export async function loadTibiaData(
 	datPath: string,
 	sprPath: string,
 	version?: ClientVersion,
+	transparency?: boolean,
 	onProgress?: (stage: string, current: number, total: number) => void
 ): Promise<TibiaData> {
 	// Detect version from signature if not provided
@@ -172,51 +178,31 @@ export async function loadTibiaData(
 		const signature = await readDatSignature(datPath);
 		detectedVersion = detectVersionFromSignature(signature);
 		if (!detectedVersion) {
-			throw new Error(`Unknown client version with signature 0x${signature.toString(16)}`);
+			throw new Error(`Unknown DAT signature: 0x${signature.toString(16)}`);
 		}
 	}
 
-	// Load DAT file with detected version
-	if (onProgress) onProgress('Loading metadata...', 0, 100);
+	if (onProgress) onProgress('Loading DAT file...', 0, 100);
 
+	// Load DAT file
 	const datData = await loadTibiaDat(datPath, detectedVersion, (current, total) => {
-		if (onProgress) onProgress('Loading metadata...', current, total);
+		if (onProgress) onProgress('Parsing DAT items...', current, total);
 	});
 
-	// Load SPR file (streaming mode - instant!)
-	if (onProgress) onProgress('Opening sprite file...', 0, 100);
-	const sprData = await loadTibiaSpr(sprPath, detectedVersion);
+	if (onProgress) onProgress('Opening SPR file...', 0, 100);
 
-	// Build sprite map
+	// Load SPR file (streaming)
+	const sprData = await loadTibiaSpr(sprPath, detectedVersion, transparency);
+
+	// Initialize sprites map
 	const sprites = new Map<number, Sprite>();
 
-	// Load first 100-sprite window (Object Builder style: aligned to 100s)
-	// This loads sprites 1-100 for instant first page display
-	if (onProgress) onProgress('Loading initial sprites...', 0, 100);
-
-	const WINDOW_SIZE = 100;
-	const spriteCount = Math.min(WINDOW_SIZE, sprData.header.sprite_count);
-
-	if (spriteCount > 0) {
-		try {
-			// Batch load first window from Rust using BINARY protocol
-			const response = await invoke<Uint8Array>('read_sprites_batch_bin', {
-				startId: 1,
-				path: sprData.path,
-				count: spriteCount
-			});
-
-			const batchedSprites = parseBinarySprites(response, sprData.transparency);
-
-			// Add to sprite map
-			for (const sprite of batchedSprites) {
-				sprites.set(sprite.id, sprite);
-			}
-
-			if (onProgress) onProgress('Loading initial sprites...', spriteCount, spriteCount);
-		} catch (err) {
-			logError('Failed to preload sprites', err);
-		}
+	// Preload first 100 sprites to warm up cache
+	try {
+		if (onProgress) onProgress('Preloading sprites...', 0, 100);
+		await loadSpriteWindow(sprPath, 1, sprData.header.sprite_count, sprData.transparency, sprites);
+	} catch (err) {
+		logError('Failed to preload sprites', err);
 	}
 
 	return {
