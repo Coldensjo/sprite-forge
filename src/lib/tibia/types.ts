@@ -60,16 +60,25 @@ export interface FrameDuration {
 /**
  * Sprite data structure
  * Based on Object Builder's Sprite class with bitmap caching
+ *
+ * With the new RGBA optimization, sprites now store pre-decompressed RGBA pixels
+ * directly from Rust, eliminating JavaScript decompression overhead.
  */
 export interface Sprite {
 	id: number;
 	isEmpty: boolean;
-	// Caching fields (like Object Builder's _bitmap field)
-	pixels?: Uint8Array; // Decompressed ARGB pixel data (4096 bytes) - cached after first decompress
 	transparent: boolean;
 
-	imageData?: ImageData; // Canvas-ready ImageData - cached after first render
-	compressedPixels: Uint8Array;
+	// RGBA pixel data (4096 bytes) - pre-decompressed by Rust
+	// This is in RGBA format, ready for direct use with ImageData
+	rgbaPixels: Uint8Array;
+
+	// Canvas-ready ImageData - cached after first render
+	imageData?: ImageData;
+
+	// Legacy fields for compatibility (kept for writing sprites back)
+	pixels?: Uint8Array; // ARGB format (used by outfit blending and sprite writing)
+	compressedPixels?: Uint8Array; // Original compressed data (optional, for writing)
 }
 
 /**

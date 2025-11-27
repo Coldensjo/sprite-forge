@@ -30,10 +30,15 @@ interface FolderSelectDialogProps {
 	open: boolean;
 	title?: string;
 	onOpenChange: (open: boolean) => void;
-	onSelect: (path: string, transparency: boolean) => void;
+	// Option 1: Direct load with transparency (legacy mode)
+	onSelect?: (path: string, transparency: boolean) => void;
+	// Option 2: Return path only (for new two-step flow)
+	onFolderSelected?: (path: string) => void;
 }
 
-export const FolderSelectDialog = ({ open, onSelect, onOpenChange, title = 'Select Folder' }: FolderSelectDialogProps) => {
+export const FolderSelectDialog = ({ open, onSelect, onOpenChange, onFolderSelected, title = 'Select Folder' }: FolderSelectDialogProps) => {
+	// Determine if we're in path-only mode (new two-step flow)
+	const pathOnlyMode = !!onFolderSelected && !onSelect;
 	const [currentPath, setCurrentPath] = useState<string>('');
 	const [entries, setEntries] = useState<DirEntry[]>([]);
 	const [loading, setLoading] = useState(false);
@@ -218,7 +223,12 @@ export const FolderSelectDialog = ({ open, onSelect, onOpenChange, title = 'Sele
 		} catch (err) {
 			console.error('Failed to save last folder:', err);
 		}
-		onSelect(currentPath, transparency);
+
+		if (pathOnlyMode && onFolderSelected) {
+			onFolderSelected(currentPath);
+		} else if (onSelect) {
+			onSelect(currentPath, transparency);
+		}
 		onOpenChange(false);
 	};
 
@@ -369,15 +379,17 @@ export const FolderSelectDialog = ({ open, onSelect, onOpenChange, title = 'Sele
 				</div>
 
 				<div className="border-t border-border px-4 py-3 flex items-center justify-end gap-2">
-					<div className="flex items-center gap-2 mr-2">
-						<Checkbox id="transparency" checked={transparency} onCheckedChange={(checked) => setTransparency(checked === true)} />
-						<Label
-							htmlFor="transparency"
-							className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-						>
-							Enable Alpha Channel
-						</Label>
-					</div>
+					{!pathOnlyMode && (
+						<div className="flex items-center gap-2 mr-2">
+							<Checkbox id="transparency" checked={transparency} onCheckedChange={(checked) => setTransparency(checked === true)} />
+							<Label
+								htmlFor="transparency"
+								className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+							>
+								Enable Alpha Channel
+							</Label>
+						</div>
+					)}
 					<Button variant="outline" onClick={() => onOpenChange(false)}>
 						Cancel
 					</Button>

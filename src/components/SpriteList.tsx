@@ -1,5 +1,5 @@
 import { cn } from '@/lib/utils';
-import { compressPixels } from '@/lib/tibia';
+import { compressPixels, type Sprite } from '@/lib/tibia';
 import { useDragDrop } from '@/contexts/DragDropContext';
 import { useTibiaData } from '@/contexts/TibiaDataContext';
 import { useRef, useMemo, useState, useEffect } from 'react';
@@ -255,7 +255,8 @@ export const SpriteList = () => {
 			// For middle sprites, we can't remove the ID because it would shift all other IDs
 			// Instead, we replace it with an empty sprite
 			sprite.isEmpty = true;
-			sprite.pixels = new Uint8Array(4096); // 32x32x4 bytes of zeros
+			sprite.rgbaPixels = new Uint8Array(4096); // 32x32x4 bytes of zeros (RGBA)
+			sprite.pixels = undefined; // Clear legacy ARGB cache
 			sprite.compressedPixels = new Uint8Array(0);
 			sprite.imageData = undefined; // Clear cached image data
 		}
@@ -339,8 +340,18 @@ export const SpriteList = () => {
 										}
 									}
 
-									// Compress the pixel data
-									const compressedPixels = compressPixels(pixels, data.transparency);
+									// The `pixels` from canvas are in RGBA format
+									// Convert RGBA to ARGB for compression (compressPixels expects ARGB)
+									const argbPixels = new Uint8Array(4096);
+									for (let i = 0; i < 1024; i++) {
+										argbPixels[i * 4] = pixels[i * 4 + 3]; // A
+										argbPixels[i * 4 + 1] = pixels[i * 4]; // R
+										argbPixels[i * 4 + 2] = pixels[i * 4 + 1]; // G
+										argbPixels[i * 4 + 3] = pixels[i * 4 + 2]; // B
+									}
+
+									// Compress the pixel data (using ARGB format)
+									const compressedPixels = compressPixels(argbPixels, data.transparency);
 
 									let spriteId: number;
 
@@ -349,7 +360,8 @@ export const SpriteList = () => {
 										spriteId = targetSpriteId;
 										const sprite = data.sprites.get(spriteId);
 										if (sprite) {
-											sprite.pixels = pixels;
+											sprite.rgbaPixels = pixels; // Store RGBA for rendering
+											sprite.pixels = argbPixels; // Store ARGB for compression/writing
 											sprite.compressedPixels = compressedPixels;
 											sprite.isEmpty = pixels.every((p) => p === 0);
 											sprite.imageData = undefined; // Clear cached image data
@@ -363,9 +375,10 @@ export const SpriteList = () => {
 										}
 										spriteId = newId;
 
-										const newSprite = {
+										const newSprite: Sprite = {
 											id: newId,
-											pixels: pixels,
+											rgbaPixels: pixels, // RGBA for rendering
+											pixels: argbPixels, // ARGB for compression/writing
 											imageData: undefined,
 											transparent: data.transparency,
 											compressedPixels: compressedPixels,
@@ -484,9 +497,10 @@ export const SpriteList = () => {
 											}
 
 											// Create new empty sprite
-											const newSprite = {
+											const newSprite: Sprite = {
 												id: newId,
 												isEmpty: true,
+												rgbaPixels: new Uint8Array(4096), // Empty RGBA
 												pixels: undefined,
 												imageData: undefined,
 												transparent: data.transparency,

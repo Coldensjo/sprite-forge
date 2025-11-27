@@ -208,20 +208,20 @@ export const ItemList = () => {
 	}, [pendingSelection, selectedCategory, allItemIds, itemsPerPage, setHighlightedItemId]);
 
 	// Load sprites for items on current page + prefetch ahead
+	// PROGRESSIVE LOADING: Load first batch quickly, then rest in background
 	useEffect(() => {
 		if (!data || !data.sprPath) return;
 
 		let cancelled = false;
 
-		const loadSpritesForCurrentPage = async () => {
+		const loadSpritesProgressively = async () => {
 			logger.log(EventCode.ITEM_PAGE, { pg: currentPage, cat: selectedCategory, n: paginatedItemIds.length });
 
-			const { loadSpriteIds } = await import('@/lib/tibia');
+			const { loadSpriteIds, loadSpriteIdsLz4 } = await import('@/lib/tibia');
 
 			if (cancelled) return;
 
 			// OPTIMIZATION: Collect ALL sprite IDs for an item at once (all frames/patterns)
-			// With the new read_sprites_list command, this is very fast even for thousands of sprites
 			const collectAllSpriteIds = (itemIds: number[]) => {
 				const ids: number[] = [];
 				for (const id of itemIds) {
@@ -238,38 +238,81 @@ export const ItemList = () => {
 				return ids;
 			};
 
-			// OPTIMIZATION: Load multiple pages at once
-			// Current page + next 2 pages for smoother navigation
+			// PROGRESSIVE LOADING: Split into batches for faster perceived load time
+			// Batch 1: First 20 items (immediate display ~200ms)
+			// Batch 2: Rest of current page (background)
+			// Batch 3: Prefetch next 2 pages (low priority)
+
+			const FIRST_BATCH_SIZE = 20;
 			const PREFETCH_PAGES = 2;
-			const pagesToLoad = Math.min(PREFETCH_PAGES + 1, totalPages - currentPage + 1);
 
-			const allSpriteIds: number[] = [];
+			// Batch 1: First 20 items for immediate display
+			const firstBatchIds = paginatedItemIds.slice(0, FIRST_BATCH_SIZE);
+			const firstBatchSpriteIds = collectAllSpriteIds(firstBatchIds);
 
-			for (let i = 0; i < pagesToLoad; i++) {
-				const pageNum = currentPage + i;
-				if (pageNum > totalPages) break;
+			if (firstBatchSpriteIds.length > 0 && !cancelled) {
+				logger.log(EventCode.ITEM_LOAD_BATCH, { batch: 1, items: firstBatchIds.length, sprites: firstBatchSpriteIds.length });
 
-				const start = (pageNum - 1) * itemsPerPage;
-				const end = start + itemsPerPage;
-				const pageItemIds = allItemIds.slice(start, end);
+				// Use LZ4 for large batches (>100 sprites), regular for small
+				if (firstBatchSpriteIds.length > 100) {
+					await loadSpriteIdsLz4(data.sprPath, firstBatchSpriteIds, data.transparency, data.sprites);
+				} else {
+					await loadSpriteIds(data.sprPath, firstBatchSpriteIds, data.transparency, data.sprites);
+				}
 
-				const pageSpriteIds = collectAllSpriteIds(pageItemIds);
-				allSpriteIds.push(...pageSpriteIds);
+				if (!cancelled) {
+					notifySpritesLoaded(); // UI updates - first items visible!
+				}
 			}
 
-			if (allSpriteIds.length > 0) {
-				logger.log(EventCode.ITEM_LOAD_BATCH, { pages: pagesToLoad, n: allSpriteIds.length });
+			// Batch 2: Rest of current page
+			if (!cancelled && paginatedItemIds.length > FIRST_BATCH_SIZE) {
+				const restBatchIds = paginatedItemIds.slice(FIRST_BATCH_SIZE);
+				const restBatchSpriteIds = collectAllSpriteIds(restBatchIds);
 
-				// OPTIMIZATION: Load all at once, no filtering
-				// loadSpriteIds already handles deduplication internally
-				await loadSpriteIds(data.sprPath, allSpriteIds, data.transparency, data.sprites);
+				if (restBatchSpriteIds.length > 0) {
+					logger.log(EventCode.ITEM_LOAD_BATCH, { batch: 2, items: restBatchIds.length, sprites: restBatchSpriteIds.length });
+
+					// Use LZ4 for large batches
+					if (restBatchSpriteIds.length > 100) {
+						await loadSpriteIdsLz4(data.sprPath, restBatchSpriteIds, data.transparency, data.sprites);
+					} else {
+						await loadSpriteIds(data.sprPath, restBatchSpriteIds, data.transparency, data.sprites);
+					}
+
+					if (!cancelled) {
+						notifySpritesLoaded(); // Full page visible
+					}
+				}
 			}
 
-			if (cancelled) return;
-			notifySpritesLoaded();
+			// Batch 3: Prefetch next pages (low priority, don't block UI)
+			if (!cancelled && totalPages > currentPage) {
+				const pagesToPrefetch = Math.min(PREFETCH_PAGES, totalPages - currentPage);
+				const prefetchSpriteIds: number[] = [];
+
+				for (let i = 1; i <= pagesToPrefetch; i++) {
+					const pageNum = currentPage + i;
+					const start = (pageNum - 1) * itemsPerPage;
+					const end = start + itemsPerPage;
+					const pageItemIds = allItemIds.slice(start, end);
+					prefetchSpriteIds.push(...collectAllSpriteIds(pageItemIds));
+				}
+
+				if (prefetchSpriteIds.length > 0 && !cancelled) {
+					logger.log(EventCode.ITEM_LOAD_BATCH, { batch: 3, prefetch: true, sprites: prefetchSpriteIds.length });
+
+					// Use LZ4 for prefetch (usually large)
+					await loadSpriteIdsLz4(data.sprPath, prefetchSpriteIds, data.transparency, data.sprites);
+
+					if (!cancelled) {
+						notifySpritesLoaded();
+					}
+				}
+			}
 		};
 
-		loadSpritesForCurrentPage();
+		loadSpritesProgressively();
 
 		return () => {
 			cancelled = true;

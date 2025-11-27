@@ -19,7 +19,7 @@ mod dat_manager;
 use dat_manager::{DatManager, DatManagerState};
 
 mod dat_reader;
-use dat_reader::DatReader;
+use dat_reader::{DatReader, encode_dat_to_binary};
 
 // Wrapper to use serde_bytes for efficient binary transfer
 #[derive(Serialize, Deserialize)]
@@ -35,6 +35,19 @@ fn read_file(path: String) -> Result<FileBytes, String> {
 #[tauri::command]
 fn read_file_text(path: String) -> Result<String, String> {
     fs::read_to_string(&path).map_err(|e| format!("Failed to read file {}: {}", path, e))
+}
+
+#[tauri::command]
+fn read_file_header(path: String, bytes: usize) -> Result<FileBytes, String> {
+    use std::io::Read;
+    let mut file = fs::File::open(&path)
+        .map_err(|e| format!("Failed to open file {}: {}", path, e))?;
+
+    let mut buffer = vec![0u8; bytes];
+    file.read_exact(&mut buffer)
+        .map_err(|e| format!("Failed to read {} bytes from {}: {}", bytes, path, e))?;
+
+    Ok(FileBytes(buffer))
 }
 
 // SPR Manager Commands
@@ -219,7 +232,74 @@ fn read_sprite_bin(
         EventCode::SprRead,
         serde_json::json!({"sz": bytes.len(), "bin": true})
     );
-    
+
+    Ok(Response::new(bytes))
+}
+
+/// Read sprites and return decompressed RGBA pixels ready for canvas rendering
+/// Format: [Count: u32] -> ([ID: u32][IsEmpty: u8][RGBA pixels: 4096 bytes])*
+#[tauri::command]
+fn read_sprites_rgba(
+    path: String,
+    ids: Vec<u32>,
+    transparent: bool,
+    spr_state: tauri::State<SprManagerState>,
+    log_state: tauri::State<LoggerState>,
+) -> Result<Response, String> {
+    let mut manager = spr_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let bytes = manager.read_sprites_rgba(&path, ids.clone(), transparent)?;
+
+    let mut logger = log_state.lock().unwrap();
+    logger.log(
+        EventCode::SprBatch,
+        serde_json::json!({"sz": bytes.len(), "rgba": true, "n": ids.len()})
+    );
+
+    Ok(Response::new(bytes))
+}
+
+/// Read a batch of sprites and return decompressed RGBA pixels
+#[tauri::command]
+fn read_sprites_batch_rgba(
+    path: String,
+    start_id: u32,
+    count: u32,
+    transparent: bool,
+    spr_state: tauri::State<SprManagerState>,
+    log_state: tauri::State<LoggerState>,
+) -> Result<Response, String> {
+    let mut manager = spr_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let bytes = manager.read_sprites_batch_rgba(&path, start_id, count, transparent)?;
+
+    let mut logger = log_state.lock().unwrap();
+    logger.log(
+        EventCode::SprBatch,
+        serde_json::json!({"sz": bytes.len(), "rgba": true, "batch": true, "s": start_id, "c": count})
+    );
+
+    Ok(Response::new(bytes))
+}
+
+/// Read sprites and return LZ4-compressed RGBA pixels for faster IPC transfer
+/// The response is LZ4-compressed, reducing transfer size by ~5x (7-8MB -> 1.5MB)
+/// Frontend must decompress with LZ4 before parsing
+#[tauri::command]
+fn read_sprites_rgba_lz4(
+    path: String,
+    ids: Vec<u32>,
+    transparent: bool,
+    spr_state: tauri::State<SprManagerState>,
+    log_state: tauri::State<LoggerState>,
+) -> Result<Response, String> {
+    let mut manager = spr_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let bytes = manager.read_sprites_rgba_lz4(&path, ids.clone(), transparent)?;
+
+    let mut logger = log_state.lock().unwrap();
+    logger.log(
+        EventCode::SprBatch,
+        serde_json::json!({"sz": bytes.len(), "lz4": true, "n": ids.len()})
+    );
+
     Ok(Response::new(bytes))
 }
 
@@ -646,11 +726,65 @@ fn load_dat_file(
 ) -> Result<u32, String> {
     let mut reader = DatReader::open(&path)?;
     let (signature, items, outfits, effects, missiles) = reader.read_dat()?;
-    
+
     let mut manager = dat_state.lock().map_err(|e| format!("Lock error: {}", e))?;
     manager.store_data(path, items, outfits, effects, missiles)?;
-    
+
     Ok(signature)
+}
+
+/// Parse DAT file in Rust and return binary buffer for fast IPC transfer
+/// This replaces slow TypeScript parsing + JSON serialization with:
+/// 1. Native Rust parsing (fast)
+/// 2. Binary IPC response (no JSON overhead)
+/// 3. Automatic storage in DatManager for search operations
+///
+/// Binary format: [signature:u32][items_count:u32][outfits_count:u32][effects_count:u32][missiles_count:u32]
+///                followed by encoded things (see dat_reader::encode_dat_to_binary)
+#[tauri::command]
+fn parse_dat_file_bin(
+    path: String,
+    dat_state: tauri::State<DatManagerState>,
+    log_state: tauri::State<LoggerState>,
+) -> Result<Response, String> {
+    let start = std::time::Instant::now();
+
+    // Parse DAT file using existing reader
+    let mut reader = DatReader::open(&path)?;
+    let (signature, items, outfits, effects, missiles) = reader.read_dat()?;
+
+    let items_count = items.len();
+    let outfits_count = outfits.len();
+    let effects_count = effects.len();
+    let missiles_count = missiles.len();
+
+    // Store in DatManager for search operations
+    {
+        let mut manager = dat_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+        manager.store_data(path.clone(), items.clone(), outfits.clone(), effects.clone(), missiles.clone())?;
+    }
+
+    // Encode to binary buffer for fast IPC transfer
+    let buffer = encode_dat_to_binary(signature, &items, &outfits, &effects, &missiles);
+
+    // Log performance metrics
+    {
+        let mut logger = log_state.lock().unwrap();
+        logger.log(
+            EventCode::SprBatch, // Reuse event code for now
+            serde_json::json!({
+                "op": "parse_dat_bin",
+                "ms": start.elapsed().as_millis(),
+                "items": items_count,
+                "outfits": outfits_count,
+                "effects": effects_count,
+                "missiles": missiles_count,
+                "bytes": buffer.len()
+            })
+        );
+    }
+
+    Ok(Response::new(buffer))
 }
 
 #[tauri::command]
@@ -745,6 +879,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             read_file,
             read_file_text,
+            read_file_header,
             open_spr_file,
             read_sprite,
             close_spr_file,
@@ -754,6 +889,9 @@ pub fn run() {
             read_sprites_list_bin,
             read_sprites_batch_bin,
             read_sprite_bin,
+            read_sprites_rgba,
+            read_sprites_batch_rgba,
+            read_sprites_rgba_lz4,
             search_thing_types_bin,
             set_debug_logging,
             get_debug_logging,
@@ -778,6 +916,7 @@ pub fn run() {
             update_spr_sprites,
             store_dat_data,
             load_dat_file,
+            parse_dat_file_bin,
             search_things,
             search_things_bin,
             clear_dat_data,

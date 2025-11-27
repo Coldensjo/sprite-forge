@@ -174,10 +174,11 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 		setSpriteReader(reader);
 		setError(null);
 
-		// Store DAT data in Rust backend for cross-window access (e.g., Find window)
+		// Store paths in localStorage for Find window to access
+		// NOTE: DAT data is already stored in Rust backend by parse_dat_file_bin command
+		// No need to call store_dat_data again - that would be redundant and slow
 		if (newData.datPath && !skipBackendSync) {
 			try {
-				// Store DAT path in localStorage for Find window to access
 				if (typeof window !== 'undefined') {
 					localStorage.setItem('sprite-forge-dat-path', newData.datPath);
 					if (newData.sprPath) {
@@ -186,30 +187,9 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 					localStorage.setItem('sprite-forge-transparency', String(newData.transparency));
 					localStorage.setItem('sprite-forge-sprites-count', String(newData.spritesCount));
 				}
-
-				const { invoke } = await import('@tauri-apps/api/core');
-
-				// Convert Maps to arrays for Rust
-				const items = Array.from(newData.items.values());
-				const outfits = Array.from(newData.outfits.values());
-				const effects = Array.from(newData.effects.values());
-				const missiles = Array.from(newData.missiles.values());
-
-				await invoke('store_dat_data', {
-					items,
-					outfits,
-					effects,
-					missiles,
-					path: newData.datPath
-				});
-
-				if (outfits.length > 0) {
-					console.log('First outfit sample:', JSON.stringify(outfits[0], null, 2));
-				}
-
-				console.log('DAT data stored in Rust backend for cross-window access');
+				console.log('DAT paths stored in localStorage for cross-window access');
 			} catch (e) {
-				console.error('Failed to store DAT data in Rust backend:', e);
+				console.error('Failed to store paths in localStorage:', e);
 				// Non-fatal - continue execution
 			}
 		}
@@ -507,6 +487,7 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 								id: spriteId,
 								isEmpty: true,
 								transparent: data.transparency,
+								rgbaPixels: new Uint8Array(4096), // Empty RGBA
 								compressedPixels: new Uint8Array(0)
 							} as Sprite);
 						}
@@ -596,88 +577,10 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 		setLoading(false);
 	}, [data, modifiedSinceCompile, clearModifiedTracking]);
 
-	// Global Preloading Effect
-	useEffect(() => {
-		if (data && data.sprPath && !hasPreloadedRef.current) {
-			hasPreloadedRef.current = true;
-
-			const preload = async () => {
-				// Import dependencies dynamically
-				const { loadSpriteIds, isValidSpriteId } = await import('@/lib/tibia');
-
-				// Update loading state to show preloading phase
-				setLoading(true, { current: 0, total: 100, stage: 'Preparing sprite cache...' });
-
-				// Preload first 5 pages (500 items) of each category
-				// This ensures that when the user switches tabs, the content is likely already there
-				const PRELOAD_COUNT = 500;
-				const allIdsToLoad: number[] = [];
-
-				// Helper to collect IDs from a map
-				const collectFromMap = (map: Map<number, ThingType>) => {
-					let count = 0;
-					// Map iteration order is insertion order, which matches ID order usually
-					for (const thing of map.values()) {
-						if (count >= PRELOAD_COUNT) break;
-
-						if (thing.spriteIndex) {
-							for (const spriteId of thing.spriteIndex) {
-								if (isValidSpriteId(spriteId, data.spritesCount)) {
-									allIdsToLoad.push(spriteId);
-								}
-							}
-						}
-						count++;
-					}
-				};
-
-				collectFromMap(data.items);
-				collectFromMap(data.outfits);
-				collectFromMap(data.effects);
-				collectFromMap(data.missiles);
-
-				if (allIdsToLoad.length > 0) {
-					try {
-						setLoading(true, { current: 0, total: allIdsToLoad.length, stage: `Preloading ${allIdsToLoad.length} sprites...` });
-
-						// OPTIMIZATION: Split into chunks to parallelize IPC serialization/deserialization
-						// and allow for smoother progress updates.
-						const CHUNK_SIZE = 500;
-						const chunks: number[][] = [];
-						for (let i = 0; i < allIdsToLoad.length; i += CHUNK_SIZE) {
-							chunks.push(allIdsToLoad.slice(i, i + CHUNK_SIZE));
-						}
-
-						let loadedCount = 0;
-
-						// Process chunks in parallel
-						await Promise.all(
-							chunks.map(async (chunk) => {
-								await loadSpriteIds(data.sprPath!, chunk, data.transparency, data.sprites);
-								loadedCount += chunk.length;
-								// Update progress (throttled slightly by React state batching)
-								setLoading(true, {
-									current: loadedCount,
-									total: allIdsToLoad.length,
-									stage: `Preloading sprites...`
-								});
-							})
-						);
-
-						notifySpritesLoaded();
-					} catch (e) {
-						console.error('Preload failed', e);
-					}
-				}
-
-				// Finish loading completely
-				setLoading(false);
-			};
-
-			// Run preload with a slight delay to let the UI settle first
-			setTimeout(preload, 100);
-		}
-	}, [data, notifySpritesLoaded, setLoading]);
+	// NOTE: Global sprite preloading has been REMOVED
+	// Preloading now happens directly in loadTibiaData() in loader.ts
+	// This eliminates the redundant second preload phase that was causing 1-2s extra delay
+	// Sprites are loaded on-demand as user navigates (Object Builder pattern)
 
 	return (
 		<TibiaDataContext.Provider

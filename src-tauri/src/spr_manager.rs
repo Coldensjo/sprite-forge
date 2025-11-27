@@ -3,6 +3,12 @@ use std::fs::File;
 use std::io::{Read, Seek, SeekFrom, BufReader};
 use std::sync::{Arc, Mutex};
 use serde::Serialize;
+use rayon::prelude::*;
+
+/// Sprite size constants
+const SPRITE_SIZE: usize = 32;
+const SPRITE_PIXELS: usize = SPRITE_SIZE * SPRITE_SIZE; // 1024
+const SPRITE_DATA_SIZE: usize = SPRITE_PIXELS * 4; // 4096 bytes (RGBA)
 
 /// SPR file header information
 #[derive(Debug, Clone, Serialize)]
@@ -555,27 +561,206 @@ impl SprManager {
         let total_pixel_bytes: usize = sprites.iter().map(|s| s.compressed_pixels.len()).sum();
         let metadata_bytes = sprites.len() * (4 + 1 + 4); // ID(4) + Empty(1) + Len(4)
         let header_bytes = 4; // Count(4)
-        
+
         let mut buffer = Vec::with_capacity(header_bytes + metadata_bytes + total_pixel_bytes);
-        
+
         // Write Count
         buffer.extend_from_slice(&(sprites.len() as u32).to_le_bytes());
-        
+
         for sprite in sprites {
             // Write ID
             buffer.extend_from_slice(&sprite.id.to_le_bytes());
-            
+
             // Write IsEmpty
             buffer.push(if sprite.is_empty { 1 } else { 0 });
-            
+
             // Write Length
             buffer.extend_from_slice(&(sprite.compressed_pixels.len() as u32).to_le_bytes());
-            
+
             // Write Data
             buffer.extend_from_slice(&sprite.compressed_pixels);
         }
         buffer
     }
+
+    /// Read sprites and return decompressed RGBA pixels
+    /// Format: [Count: u32] -> ([ID: u32][IsEmpty: u8][RGBA pixels: 4096 bytes])*
+    /// Each sprite is exactly 4096 bytes (32x32x4 RGBA)
+    pub fn read_sprites_rgba(&mut self, path: &str, ids: Vec<u32>, transparent: bool) -> Result<Vec<u8>, String> {
+        let sprites = self.read_sprites_list(path, ids)?;
+        Ok(Self::pack_sprites_rgba(sprites, transparent))
+    }
+
+    /// Read a batch of sprites and return decompressed RGBA pixels
+    pub fn read_sprites_batch_rgba(&mut self, path: &str, start_id: u32, count: u32, transparent: bool) -> Result<Vec<u8>, String> {
+        let sprites = self.read_sprites_batch(path, start_id, count)?;
+        Ok(Self::pack_sprites_rgba(sprites, transparent))
+    }
+
+    /// Read sprites and return LZ4-compressed RGBA pixels for faster IPC transfer
+    /// The RGBA data is first decompressed from Tibia's RLE format, then LZ4 compressed
+    /// This reduces IPC transfer size by ~5x (7-8MB -> 1.5MB for outfit pages)
+    pub fn read_sprites_rgba_lz4(&mut self, path: &str, ids: Vec<u32>, transparent: bool) -> Result<Vec<u8>, String> {
+        let sprites = self.read_sprites_list(path, ids)?;
+        Ok(Self::pack_sprites_rgba_lz4(sprites, transparent))
+    }
+
+    /// Read a batch of sprites and return LZ4-compressed RGBA pixels
+    pub fn read_sprites_batch_rgba_lz4(&mut self, path: &str, start_id: u32, count: u32, transparent: bool) -> Result<Vec<u8>, String> {
+        let sprites = self.read_sprites_batch(path, start_id, count)?;
+        Ok(Self::pack_sprites_rgba_lz4(sprites, transparent))
+    }
+
+    /// Pack sprites with RGBA pixels and then LZ4 compress for fast IPC transfer
+    /// LZ4 is very fast to decompress (~2GB/s) while providing ~5x compression on RGBA data
+    fn pack_sprites_rgba_lz4(sprites: Vec<SpriteData>, transparent: bool) -> Vec<u8> {
+        // First, pack to uncompressed RGBA format
+        let uncompressed = Self::pack_sprites_rgba(sprites, transparent);
+
+        // Then compress with LZ4 (prepend size for decompression)
+        lz4_flex::compress_prepend_size(&uncompressed)
+    }
+
+    /// Helper to pack sprites with decompressed RGBA pixels
+    /// Format: [Count: u32] -> ([ID: u32][IsEmpty: u8][CompressedLen: u32][CompressedData...][RGBA pixels: 4096 bytes])*
+    ///
+    /// We include both compressed data (for saving) and RGBA pixels (for rendering)
+    /// Uses parallel processing with rayon for faster decompression
+    fn pack_sprites_rgba(sprites: Vec<SpriteData>, transparent: bool) -> Vec<u8> {
+        // Step 1: Decompress all sprites in parallel
+        // Each thread decompresses its own sprites independently
+        let decompressed: Vec<(SpriteData, Vec<u8>)> = sprites
+            .into_par_iter()
+            .map(|sprite| {
+                let rgba = decompress_to_rgba(&sprite.compressed_pixels, transparent);
+                (sprite, rgba)
+            })
+            .collect();
+
+        // Step 2: Calculate total buffer size
+        let header_bytes = 4; // Count(4)
+        let total_compressed: usize = decompressed.iter()
+            .map(|(s, _)| s.compressed_pixels.len())
+            .sum();
+        // ID(4) + Empty(1) + CompressedLen(4) + compressed_data + RGBA(4096) per sprite
+        let total_size = header_bytes
+            + decompressed.len() * (4 + 1 + 4 + SPRITE_DATA_SIZE)
+            + total_compressed;
+
+        let mut buffer = Vec::with_capacity(total_size);
+
+        // Step 3: Write header
+        buffer.extend_from_slice(&(decompressed.len() as u32).to_le_bytes());
+
+        // Step 4: Write all sprite data sequentially (fast memory copy)
+        for (sprite, rgba) in decompressed {
+            // Write ID
+            buffer.extend_from_slice(&sprite.id.to_le_bytes());
+
+            // Write IsEmpty
+            buffer.push(if sprite.is_empty { 1 } else { 0 });
+
+            // Write Compressed Pixels Length
+            buffer.extend_from_slice(&(sprite.compressed_pixels.len() as u32).to_le_bytes());
+
+            // Write Compressed Pixels Data (for saving back to file)
+            buffer.extend_from_slice(&sprite.compressed_pixels);
+
+            // Write RGBA pixels (already decompressed in parallel)
+            buffer.extend_from_slice(&rgba);
+        }
+        buffer
+    }
+}
+
+/// Decompress Tibia's RLE-compressed sprite data directly to RGBA format
+/// This is the Rust implementation of the TypeScript decompressPixels function
+///
+/// Format:
+/// - Alternates between transparent and colored pixel chunks
+/// - Each chunk has a 2-byte count (little-endian u16)
+/// - Transparent pixels: just count (no data)
+/// - Colored pixels: RGB or RGBA bytes follow (depending on transparent flag)
+///
+/// Output: 4096 bytes of RGBA data (32x32 pixels, 4 bytes per pixel)
+fn decompress_to_rgba(compressed: &[u8], transparent: bool) -> Vec<u8> {
+    let mut pixels = vec![0u8; SPRITE_DATA_SIZE];
+    let mut write_pos = 0;
+    let mut read_pos = 0;
+    let channels = if transparent { 4 } else { 3 };
+
+    // Process chunks until we run out of data or fill the buffer
+    while read_pos + 4 <= compressed.len() && write_pos < SPRITE_DATA_SIZE {
+        // Read transparent pixels count (2 bytes, little-endian)
+        let transparent_count = u16::from_le_bytes([
+            compressed[read_pos],
+            compressed[read_pos + 1]
+        ]) as usize;
+        read_pos += 2;
+
+        // Read colored pixels count (2 bytes, little-endian)
+        let colored_count = u16::from_le_bytes([
+            compressed[read_pos],
+            compressed[read_pos + 1]
+        ]) as usize;
+        read_pos += 2;
+
+        // Determine actual channels to read (fallback to 3 if not enough data for 4)
+        let mut current_channels = channels;
+        let bytes_needed = colored_count * current_channels;
+
+        if read_pos + bytes_needed > compressed.len() {
+            // Fallback: if we expected 4 channels but don't have enough data, try 3
+            if transparent && read_pos + colored_count * 3 <= compressed.len() {
+                current_channels = 3;
+            } else {
+                // Not enough data, stop processing
+                break;
+            }
+        }
+
+        // Write transparent pixels (RGBA = 0x00000000)
+        for _ in 0..transparent_count {
+            if write_pos >= SPRITE_DATA_SIZE {
+                break;
+            }
+            pixels[write_pos] = 0;     // R
+            pixels[write_pos + 1] = 0; // G
+            pixels[write_pos + 2] = 0; // B
+            pixels[write_pos + 3] = 0; // A
+            write_pos += 4;
+        }
+
+        // Write colored pixels (convert from RGB/RGBA to RGBA)
+        for _ in 0..colored_count {
+            if write_pos >= SPRITE_DATA_SIZE {
+                break;
+            }
+
+            let red = compressed[read_pos];
+            let green = compressed[read_pos + 1];
+            let blue = compressed[read_pos + 2];
+            read_pos += 3;
+
+            let alpha = if current_channels == 4 {
+                let a = compressed[read_pos];
+                read_pos += 1;
+                a
+            } else {
+                0xFF
+            };
+
+            // Write as RGBA (canvas native format)
+            pixels[write_pos] = red;       // R
+            pixels[write_pos + 1] = green; // G
+            pixels[write_pos + 2] = blue;  // B
+            pixels[write_pos + 3] = alpha; // A
+            write_pos += 4;
+        }
+    }
+
+    // Remaining pixels are already initialized to 0 (transparent black)
+    pixels
 }
 
 /// Type alias for thread-safe SPR manager

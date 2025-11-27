@@ -13,6 +13,7 @@ import { LoadingDialog } from './LoadingDialog';
 import { FolderSelectDialog } from './FolderSelectDialog';
 import { ThemeSettingsDialog } from './ThemeSettingsDialog';
 import { VersionHistoryDialog } from './VersionHistoryDialog';
+import { OpenAssetFilesDialog, LoadOptions } from './OpenAssetFilesDialog';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from './ui/tooltip';
 
@@ -21,6 +22,8 @@ export const Toolbar = () => {
 	const { settings, togglePanel } = usePanelSettings();
 	const { toast } = useToast();
 	const [folderDialogOpen, setFolderDialogOpen] = useState(false);
+	const [assetDialogOpen, setAssetDialogOpen] = useState(false);
+	const [selectedFolderPath, setSelectedFolderPath] = useState('');
 	const [themeDialogOpen, setThemeDialogOpen] = useState(false);
 	const [versionHistoryOpen, setVersionHistoryOpen] = useState(false);
 
@@ -61,8 +64,8 @@ export const Toolbar = () => {
 				});
 			}
 
-			// Don't set loading false here - let the context handle sprite preloading first
-			// setLoading(false);
+			// Loading complete - sprite preloading already happened in loadTibiaData()
+			setLoading(false);
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Failed to load files';
 			setError(errorMessage);
@@ -79,6 +82,26 @@ export const Toolbar = () => {
 	const handleOpenFiles = (e: React.MouseEvent) => {
 		e.stopPropagation();
 		setFolderDialogOpen(true);
+	};
+
+	// Handler when folder is selected from FolderSelectDialog (Step 1)
+	const handleFolderChosen = (path: string) => {
+		setSelectedFolderPath(path);
+		setFolderDialogOpen(false);
+		setAssetDialogOpen(true); // Open Step 2 modal
+	};
+
+	// Handler when user clicks Browse in OpenAssetFilesDialog
+	const handleBrowseFromAssetDialog = () => {
+		setAssetDialogOpen(false);
+		setFolderDialogOpen(true);
+	};
+
+	// Handler when Load is clicked in OpenAssetFilesDialog (Step 2)
+	const handleLoadWithOptions = async (options: LoadOptions) => {
+		setAssetDialogOpen(false);
+		// Use existing load logic with transparency option
+		await handleFolderSelect(options.folderPath, options.transparency);
 	};
 
 	const handleMinimize = async (e: React.MouseEvent) => {
@@ -418,9 +441,16 @@ export const Toolbar = () => {
 
 			<FolderSelectDialog
 				open={folderDialogOpen}
-				onSelect={handleFolderSelect}
+				onFolderSelected={handleFolderChosen}
 				onOpenChange={setFolderDialogOpen}
 				title="Select folder containing Tibia.dat and Tibia.spr"
+			/>
+			<OpenAssetFilesDialog
+				open={assetDialogOpen}
+				initialPath={selectedFolderPath}
+				onOpenChange={setAssetDialogOpen}
+				onLoad={handleLoadWithOptions}
+				onBrowse={handleBrowseFromAssetDialog}
 			/>
 			<ThemeSettingsDialog open={themeDialogOpen} onOpenChange={setThemeDialogOpen} />
 			<VersionHistoryDialog open={versionHistoryOpen} onOpenChange={setVersionHistoryOpen} />

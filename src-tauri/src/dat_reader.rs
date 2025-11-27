@@ -2,6 +2,165 @@ use std::fs::File;
 use std::io::{self, Read, BufReader, Seek, SeekFrom};
 use crate::dat_writer::{ThingType, FrameDuration};
 
+// Binary encoding for fast IPC transfer (no JSON serialization)
+// This module provides functions to encode parsed DAT data to binary buffers
+
+/// Encode all parsed things to a binary buffer for IPC transfer
+/// Format: 20-byte header + encoded things
+pub fn encode_dat_to_binary(
+    signature: u32,
+    items: &[ThingType],
+    outfits: &[ThingType],
+    effects: &[ThingType],
+    missiles: &[ThingType],
+) -> Vec<u8> {
+    // Estimate buffer size (20 header + ~150 bytes per thing average)
+    let thing_count = items.len() + outfits.len() + effects.len() + missiles.len();
+    let mut buffer = Vec::with_capacity(20 + thing_count * 150);
+
+    // Write header (20 bytes)
+    buffer.extend_from_slice(&signature.to_le_bytes());
+    buffer.extend_from_slice(&(items.len() as u32).to_le_bytes());
+    buffer.extend_from_slice(&(outfits.len() as u32).to_le_bytes());
+    buffer.extend_from_slice(&(effects.len() as u32).to_le_bytes());
+    buffer.extend_from_slice(&(missiles.len() as u32).to_le_bytes());
+
+    // Encode each category
+    for thing in items { encode_thing(&mut buffer, thing); }
+    for thing in outfits { encode_thing(&mut buffer, thing); }
+    for thing in effects { encode_thing(&mut buffer, thing); }
+    for thing in missiles { encode_thing(&mut buffer, thing); }
+
+    buffer
+}
+
+/// Encode a single ThingType to binary
+fn encode_thing(buffer: &mut Vec<u8>, thing: &ThingType) {
+    // Fixed header (12 bytes)
+    buffer.extend_from_slice(&thing.id.to_le_bytes());           // 4 bytes
+    buffer.push(thing.width);                                     // 1 byte
+    buffer.push(thing.height);                                    // 1 byte
+    buffer.push(thing.exact_size);                                // 1 byte
+    buffer.push(thing.layers);                                    // 1 byte
+    buffer.push(thing.pattern_x);                                 // 1 byte
+    buffer.push(thing.pattern_y);                                 // 1 byte
+    buffer.push(thing.pattern_z);                                 // 1 byte
+    buffer.push(thing.frames);                                    // 1 byte
+
+    // Encode boolean flags as 64-bit bitfield (8 bytes)
+    let flags = encode_flags(thing);
+    buffer.extend_from_slice(&flags.to_le_bytes());
+
+    // Sprite IDs (2 + 4*n bytes)
+    buffer.extend_from_slice(&(thing.sprite_index.len() as u16).to_le_bytes());
+    for &sprite_id in &thing.sprite_index {
+        buffer.extend_from_slice(&sprite_id.to_le_bytes());
+    }
+
+    // Conditional numeric fields (based on flags)
+    if thing.is_ground {
+        buffer.extend_from_slice(&thing.ground_speed.to_le_bytes());
+    }
+    if thing.has_light {
+        buffer.extend_from_slice(&thing.light_level.to_le_bytes());
+        buffer.extend_from_slice(&thing.light_color.to_le_bytes());
+    }
+    if thing.has_offset {
+        buffer.extend_from_slice(&thing.offset_x.to_le_bytes());
+        buffer.extend_from_slice(&thing.offset_y.to_le_bytes());
+    }
+    if thing.has_elevation {
+        buffer.extend_from_slice(&thing.elevation.to_le_bytes());
+    }
+    if thing.mini_map {
+        buffer.extend_from_slice(&thing.mini_map_color.to_le_bytes());
+    }
+    if thing.is_lens_help {
+        buffer.extend_from_slice(&thing.lens_help.to_le_bytes());
+    }
+    if thing.cloth {
+        buffer.extend_from_slice(&thing.cloth_slot.to_le_bytes());
+    }
+    if thing.is_market_item {
+        buffer.extend_from_slice(&thing.market_category.to_le_bytes());
+        buffer.extend_from_slice(&thing.market_trade_as.to_le_bytes());
+        buffer.extend_from_slice(&thing.market_show_as.to_le_bytes());
+        buffer.extend_from_slice(&thing.market_restrict_profession.to_le_bytes());
+        buffer.extend_from_slice(&thing.market_restrict_level.to_le_bytes());
+        // Market name as length-prefixed string
+        let name_bytes = thing.market_name.as_bytes();
+        buffer.extend_from_slice(&(name_bytes.len() as u16).to_le_bytes());
+        buffer.extend_from_slice(name_bytes);
+    }
+    if thing.has_default_action {
+        buffer.extend_from_slice(&thing.default_action.to_le_bytes());
+    }
+    if thing.writable || thing.writable_once {
+        buffer.extend_from_slice(&thing.max_text_length.to_le_bytes());
+    }
+
+    // Animation data (only if is_animation AND has frame durations)
+    if thing.is_animation && !thing.frame_durations.is_empty() {
+        buffer.push(thing.animation_mode);
+        buffer.extend_from_slice(&thing.loop_count.to_le_bytes());
+        buffer.push(thing.start_frame as u8);
+        buffer.push(thing.frame_durations.len() as u8);
+        for fd in &thing.frame_durations {
+            buffer.extend_from_slice(&fd.minimum.to_le_bytes());
+            buffer.extend_from_slice(&fd.maximum.to_le_bytes());
+        }
+    }
+}
+
+/// Encode boolean properties as 64-bit bitfield
+fn encode_flags(thing: &ThingType) -> u64 {
+    let mut flags: u64 = 0;
+    if thing.is_ground          { flags |= 1 << 0; }
+    if thing.is_ground_border   { flags |= 1 << 1; }
+    if thing.is_on_bottom       { flags |= 1 << 2; }
+    if thing.is_on_top          { flags |= 1 << 3; }
+    if thing.is_container       { flags |= 1 << 4; }
+    if thing.stackable          { flags |= 1 << 5; }
+    if thing.force_use          { flags |= 1 << 6; }
+    if thing.multi_use          { flags |= 1 << 7; }
+    if thing.has_charges        { flags |= 1 << 8; }
+    if thing.writable           { flags |= 1 << 9; }
+    if thing.writable_once      { flags |= 1 << 10; }
+    if thing.is_fluid_container { flags |= 1 << 11; }
+    if thing.is_fluid           { flags |= 1 << 12; }
+    if thing.is_unpassable      { flags |= 1 << 13; }
+    if thing.is_unmoveable      { flags |= 1 << 14; }
+    if thing.block_missile      { flags |= 1 << 15; }
+    if thing.block_pathfind     { flags |= 1 << 16; }
+    if thing.no_move_animation  { flags |= 1 << 17; }
+    if thing.pickupable         { flags |= 1 << 18; }
+    if thing.hangable           { flags |= 1 << 19; }
+    if thing.is_vertical        { flags |= 1 << 20; }
+    if thing.is_horizontal      { flags |= 1 << 21; }
+    if thing.rotatable          { flags |= 1 << 22; }
+    if thing.has_light          { flags |= 1 << 23; }
+    if thing.dont_hide          { flags |= 1 << 24; }
+    if thing.floor_change       { flags |= 1 << 25; }
+    if thing.is_translucent     { flags |= 1 << 26; }
+    if thing.has_offset         { flags |= 1 << 27; }
+    if thing.has_elevation      { flags |= 1 << 28; }
+    if thing.is_lying_object    { flags |= 1 << 29; }
+    if thing.animate_always     { flags |= 1 << 30; }
+    if thing.mini_map           { flags |= 1 << 31; }
+    if thing.is_lens_help       { flags |= 1 << 32; }
+    if thing.is_full_ground     { flags |= 1 << 33; }
+    if thing.ignore_look        { flags |= 1 << 34; }
+    if thing.cloth              { flags |= 1 << 35; }
+    if thing.is_market_item     { flags |= 1 << 36; }
+    if thing.has_default_action { flags |= 1 << 37; }
+    if thing.usable             { flags |= 1 << 38; }
+    if thing.wrappable          { flags |= 1 << 39; }
+    if thing.unwrappable        { flags |= 1 << 40; }
+    if thing.top_effect         { flags |= 1 << 41; }
+    if thing.is_animation       { flags |= 1 << 42; }
+    flags
+}
+
 // Re-define flags locally for reading to avoid massive edits to dat_writer.rs
 struct MetadataFlags6;
 impl MetadataFlags6 {

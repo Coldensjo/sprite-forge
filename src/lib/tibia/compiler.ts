@@ -160,10 +160,12 @@ export async function compileSprFile(path: string, data: TibiaData): Promise<voi
 	for (let id = 1; id <= data.spritesCount; id++) {
 		const sprite = data.sprites.get(id);
 		if (sprite) {
+			// Use compressedPixels if available, otherwise sprite wasn't modified
+			// (Sprites loaded via RGBA don't have compressedPixels until modified)
 			sprites.push({
 				id: sprite.id,
 				isEmpty: sprite.isEmpty,
-				compressedPixels: sprite.compressedPixels
+				compressedPixels: sprite.compressedPixels || new Uint8Array(0)
 			});
 		} else {
 			// Create empty sprite for deleted IDs

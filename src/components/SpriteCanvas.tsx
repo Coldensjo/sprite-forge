@@ -5,7 +5,7 @@ import { blendOutfit } from '@/lib/tibia/outfit';
 import { useDragDrop } from '@/contexts/DragDropContext';
 import { useTibiaData } from '@/contexts/TibiaDataContext';
 import { memo, useRef, useMemo, useState, useEffect, useCallback } from 'react';
-import { SPRITE_SIZE, getSpriteIndex, type ThingType, isValidSpriteId, decompressPixels } from '@/lib/tibia';
+import { SPRITE_SIZE, getSpriteIndex, type ThingType, isValidSpriteId } from '@/lib/tibia';
 
 interface SpriteCanvasProps {
 	panX?: number;
@@ -310,22 +310,12 @@ export const SpriteCanvas = memo(
 
 					loadedSprites++;
 
-					// OPTIMIZATION: Decompress and cache ImageData only ONCE
-					if (!sprite.pixels) {
-						sprite.pixels = decompressPixels(sprite.compressedPixels, sprite.transparent);
-					}
-
-					// OPTIMIZATION: Cache ImageData permanently
+					// OPTIMIZATION: Use pre-decompressed RGBA pixels from Rust
+					// No decompression or color conversion needed - pixels are already in RGBA format
 					if (!sprite.imageData) {
 						const imageData = offscreenCtx.createImageData(SPRITE_SIZE, SPRITE_SIZE);
-						const pixels = sprite.pixels;
-						for (let i = 0; i < SPRITE_SIZE * SPRITE_SIZE; i++) {
-							const dstOffset = i * 4;
-							imageData.data[dstOffset] = pixels[i * 4 + 1]; // R
-							imageData.data[dstOffset + 1] = pixels[i * 4 + 2]; // G
-							imageData.data[dstOffset + 2] = pixels[i * 4 + 3]; // B
-							imageData.data[dstOffset + 3] = pixels[i * 4]; // A
-						}
+						// Direct copy - rgbaPixels is already in RGBA format
+						imageData.data.set(sprite.rgbaPixels);
 						sprite.imageData = imageData;
 					}
 
@@ -415,26 +405,12 @@ export const SpriteCanvas = memo(
 
 					loadedSprites++;
 
-					// OPTIMIZATION: Decompress and create ImageData only ONCE per sprite
-					// This is cached forever and never recreated (Object Builder pattern)
-					if (!sprite.pixels) {
-						sprite.pixels = decompressPixels(sprite.compressedPixels, sprite.transparent);
-					}
-
-					// OPTIMIZATION: Cache ImageData permanently - never recreate it
+					// OPTIMIZATION: Use pre-decompressed RGBA pixels from Rust
+					// No decompression or color conversion needed - pixels are already in RGBA format
 					if (!sprite.imageData) {
 						const imageData = offscreenCtx.createImageData(SPRITE_SIZE, SPRITE_SIZE);
-						const pixels = sprite.pixels;
-
-						// Convert ARGB to RGBA once and cache forever
-						for (let i = 0; i < SPRITE_SIZE * SPRITE_SIZE; i++) {
-							const dstOffset = i * 4;
-							imageData.data[dstOffset] = pixels[i * 4 + 1]; // R
-							imageData.data[dstOffset + 1] = pixels[i * 4 + 2]; // G
-							imageData.data[dstOffset + 2] = pixels[i * 4 + 3]; // B
-							imageData.data[dstOffset + 3] = pixels[i * 4]; // A
-						}
-
+						// Direct copy - rgbaPixels is already in RGBA format
+						imageData.data.set(sprite.rgbaPixels);
 						sprite.imageData = imageData;
 					}
 
