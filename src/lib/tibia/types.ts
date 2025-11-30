@@ -67,17 +67,17 @@ export interface FrameDuration {
 export interface Sprite {
 	id: number;
 	isEmpty: boolean;
-	transparent: boolean;
+	// Legacy fields for compatibility (kept for writing sprites back)
+	pixels?: Uint8Array; // ARGB format (used by outfit blending and sprite writing)
 
-	// RGBA pixel data (4096 bytes) - pre-decompressed by Rust
-	// This is in RGBA format, ready for direct use with ImageData
-	rgbaPixels: Uint8Array;
+	transparent: boolean;
 
 	// Canvas-ready ImageData - cached after first render
 	imageData?: ImageData;
 
-	// Legacy fields for compatibility (kept for writing sprites back)
-	pixels?: Uint8Array; // ARGB format (used by outfit blending and sprite writing)
+	// RGBA pixel data (4096 bytes) - pre-decompressed by Rust
+	// This is in RGBA format, ready for direct use with ImageData
+	rgbaPixels: Uint8Array;
 	compressedPixels?: Uint8Array; // Original compressed data (optional, for writing)
 }
 
@@ -194,9 +194,31 @@ export interface ThingType {
 	texturePatterns?: number[];
 	marketRestrictLevel: number;
 	upgradeClassification?: number;
+	frameGroupsData?: FrameGroup[]; // Detailed data for each frame group
 	frameDurations: FrameDuration[];
 	marketRestrictProfession: number;
 	unknownFlags?: Array<{ orig: number; remapped: number }>; // For debugging
+}
+
+/**
+ * Frame Group data (for outfits 10.57+)
+ */
+export interface FrameGroup {
+	type: number; // 0 = idle, 1 = moving
+	width: number;
+	height: number;
+	layers: number;
+	frames: number;
+	patternX: number;
+	patternY: number;
+	patternZ: number;
+	exactSize: number;
+	loopCount?: number;
+	startFrame?: number;
+	isAnimation: boolean;
+	spriteIndex: number[];
+	animationMode?: number;
+	frameDurations?: FrameDuration[];
 }
 
 export enum MarketCategory {

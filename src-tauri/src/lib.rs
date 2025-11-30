@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use serde::{Serialize, Deserialize};
 
 mod spr_manager;
-use spr_manager::{SprManager, SprManagerState, SprHeader, SpriteData};
+use spr_manager::{SprManager, SprManagerState, SprHeader, SpriteData, compress_to_rle};
 
 mod logger;
 use logger::{Logger, LoggerState, EventCode};
@@ -20,6 +20,9 @@ use dat_manager::{DatManager, DatManagerState};
 
 mod dat_reader;
 use dat_reader::{DatReader, encode_dat_to_binary};
+
+mod optimizer;
+use optimizer::{optimize_sprites_rust, apply_optimization};
 
 // Wrapper to use serde_bytes for efficient binary transfer
 #[derive(Serialize, Deserialize)]
@@ -301,6 +304,20 @@ fn read_sprites_rgba_lz4(
     );
 
     Ok(Response::new(bytes))
+}
+
+/// Compress RGBA pixels to Tibia RLE format
+/// Input: 4096 bytes of RGBA data (32x32 pixels, 4 bytes per pixel)
+/// Output: RLE compressed data ready for SPR file
+#[tauri::command]
+fn compress_sprite_rgba(
+    pixels: Vec<u8>,
+    transparent: bool,
+) -> Result<Vec<u8>, String> {
+    if pixels.len() != 4096 {
+        return Err(format!("Invalid pixel data length: {} (expected 4096)", pixels.len()));
+    }
+    Ok(compress_to_rle(&pixels, transparent))
 }
 
 #[tauri::command]
@@ -744,6 +761,7 @@ fn load_dat_file(
 #[tauri::command]
 fn parse_dat_file_bin(
     path: String,
+    version: u32,  // Version from frontend (e.g., 860 for 8.60, 1098 for 10.98)
     dat_state: tauri::State<DatManagerState>,
     log_state: tauri::State<LoggerState>,
 ) -> Result<Response, String> {
@@ -751,7 +769,9 @@ fn parse_dat_file_bin(
 
     // Parse DAT file using existing reader
     let mut reader = DatReader::open(&path)?;
-    let (signature, items, outfits, effects, missiles) = reader.read_dat()?;
+    reader.set_version(version);  // Set version from frontend
+    let (signature, items, outfits, effects, missiles) = reader.read_dat()
+        .map_err(|e| format!("DAT parse error (version {}): {}", version, e))?;
 
     let items_count = items.len();
     let outfits_count = outfits.len();
@@ -892,6 +912,7 @@ pub fn run() {
             read_sprites_rgba,
             read_sprites_batch_rgba,
             read_sprites_rgba_lz4,
+            compress_sprite_rgba,
             search_thing_types_bin,
             set_debug_logging,
             get_debug_logging,
@@ -920,7 +941,9 @@ pub fn run() {
             search_things,
             search_things_bin,
             clear_dat_data,
-            get_thing
+            get_thing,
+            optimize_sprites_rust,
+            apply_optimization
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

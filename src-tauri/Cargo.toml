@@ -22,5 +22,7 @@ serde_bytes = "0.11"
 dirs = "5.0"
 rayon = "1.10"
 lz4_flex = "0.11"
+sha1 = "0.10.6"
+tempfile = "3.23.0"
 
 

@@ -140,81 +140,84 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 		[openedItemId, openedItemCategory]
 	);
 
-	const setData = useCallback(async (newData: TibiaData, reader: SpriteReader, skipBackendSync = false) => {
-		// Clean up previous file resources in Rust backend FIRST
-		// This prevents resource leakage when loading new files (file handles + memory)
-		if (data?.sprPath) {
-			try {
-				const { invoke } = await import('@tauri-apps/api/core');
-				await invoke('close_spr_file', { path: data.sprPath });
-				console.log('Closed previous SPR file:', data.sprPath);
-			} catch (e) {
-				console.warn('Failed to close previous SPR file:', e);
-			}
-		}
-		if (data?.datPath) {
-			try {
-				const { invoke } = await import('@tauri-apps/api/core');
-				await invoke('clear_dat_data', { path: data.datPath });
-				console.log('Cleared previous DAT data:', data.datPath);
-			} catch (e) {
-				console.warn('Failed to clear previous DAT data:', e);
-			}
-		}
-
-		// Clear localStorage FIRST (before setting new data)
-		try {
-			if (typeof window !== 'undefined') {
-				localStorage.removeItem('sprite-forge-opened-items');
-				// Clear all item property states
-				const keysToRemove: string[] = [];
-				for (let i = 0; i < localStorage.length; i++) {
-					const key = localStorage.key(i);
-					if (key && key.startsWith('sprite-forge-item-state-')) {
-						keysToRemove.push(key);
-					}
+	const setData = useCallback(
+		async (newData: TibiaData, reader: SpriteReader, skipBackendSync = false) => {
+			// Clean up previous file resources in Rust backend FIRST
+			// This prevents resource leakage when loading new files (file handles + memory)
+			if (data?.sprPath) {
+				try {
+					const { invoke } = await import('@tauri-apps/api/core');
+					await invoke('close_spr_file', { path: data.sprPath });
+					console.log('Closed previous SPR file:', data.sprPath);
+				} catch (e) {
+					console.warn('Failed to close previous SPR file:', e);
 				}
-				keysToRemove.forEach((key) => localStorage.removeItem(key));
 			}
-		} catch (e) {
-			console.error('Failed to clear localStorage:', e);
-		}
+			if (data?.datPath) {
+				try {
+					const { invoke } = await import('@tauri-apps/api/core');
+					await invoke('clear_dat_data', { path: data.datPath });
+					console.log('Cleared previous DAT data:', data.datPath);
+				} catch (e) {
+					console.warn('Failed to clear previous DAT data:', e);
+				}
+			}
 
-		// Clear all application state when loading new files
-		setOpenedItemIdState(null);
-		setOpenedItemCategoryState(null);
-		setOpenedItems([]);
-		setHighlightedItemId(null);
-		setUnsavedChanges(new Set());
-
-		// Reset restoration flag BEFORE setting new data
-		hasRestoredRef.current = false;
-		hasPreloadedRef.current = false;
-
-		setDataState(newData);
-		setSpriteReader(reader);
-		setError(null);
-
-		// Store paths in localStorage for Find window to access
-		// NOTE: DAT data is already stored in Rust backend by parse_dat_file_bin command
-		// No need to call store_dat_data again - that would be redundant and slow
-		if (newData.datPath && !skipBackendSync) {
+			// Clear localStorage FIRST (before setting new data)
 			try {
 				if (typeof window !== 'undefined') {
-					localStorage.setItem('sprite-forge-dat-path', newData.datPath);
-					if (newData.sprPath) {
-						localStorage.setItem('sprite-forge-spr-path', newData.sprPath);
+					localStorage.removeItem('sprite-forge-opened-items');
+					// Clear all item property states
+					const keysToRemove: string[] = [];
+					for (let i = 0; i < localStorage.length; i++) {
+						const key = localStorage.key(i);
+						if (key && key.startsWith('sprite-forge-item-state-')) {
+							keysToRemove.push(key);
+						}
 					}
-					localStorage.setItem('sprite-forge-transparency', String(newData.transparency));
-					localStorage.setItem('sprite-forge-sprites-count', String(newData.spritesCount));
+					keysToRemove.forEach((key) => localStorage.removeItem(key));
 				}
-				console.log('DAT paths stored in localStorage for cross-window access');
 			} catch (e) {
-				console.error('Failed to store paths in localStorage:', e);
-				// Non-fatal - continue execution
+				console.error('Failed to clear localStorage:', e);
 			}
-		}
-	}, [data]);
+
+			// Clear all application state when loading new files
+			setOpenedItemIdState(null);
+			setOpenedItemCategoryState(null);
+			setOpenedItems([]);
+			setHighlightedItemId(null);
+			setUnsavedChanges(new Set());
+
+			// Reset restoration flag BEFORE setting new data
+			hasRestoredRef.current = false;
+			hasPreloadedRef.current = false;
+
+			setDataState(newData);
+			setSpriteReader(reader);
+			setError(null);
+
+			// Store paths in localStorage for Find window to access
+			// NOTE: DAT data is already stored in Rust backend by parse_dat_file_bin command
+			// No need to call store_dat_data again - that would be redundant and slow
+			if (newData.datPath && !skipBackendSync) {
+				try {
+					if (typeof window !== 'undefined') {
+						localStorage.setItem('sprite-forge-dat-path', newData.datPath);
+						if (newData.sprPath) {
+							localStorage.setItem('sprite-forge-spr-path', newData.sprPath);
+						}
+						localStorage.setItem('sprite-forge-transparency', String(newData.transparency));
+						localStorage.setItem('sprite-forge-sprites-count', String(newData.spritesCount));
+					}
+					console.log('DAT paths stored in localStorage for cross-window access');
+				} catch (e) {
+					console.error('Failed to store paths in localStorage:', e);
+					// Non-fatal - continue execution
+				}
+			}
+		},
+		[data]
+	);
 
 	const setLoading = useCallback((loading: boolean, progress?: { stage: string; total: number; current: number }) => {
 		setIsLoading(loading);

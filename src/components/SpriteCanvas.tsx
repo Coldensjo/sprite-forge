@@ -25,13 +25,15 @@ interface SpriteCanvasProps {
 	showGrid?: boolean;
 	showEmpty?: boolean;
 	spriteIds?: number[];
+	isPanEnabled?: boolean;
 	showExactSize?: boolean;
 	// Pattern/Frame support for full rendering mode
 	renderMode?: 'list' | 'full' | 'preview';
 	onPanChange?: (x: number, y: number) => void;
-
 	onSpriteDoubleClick?: (spriteId: number) => void;
+
 	onSpriteHover?: (spriteId: null | number) => void;
+	onMiddleMousePanChange?: (isPanning: boolean) => void;
 	onSpriteDrop?: (index: number, spriteId: number | number[]) => void;
 	// Outfit data for colorization and addons
 	outfitData?: {
@@ -66,7 +68,9 @@ export const SpriteCanvas = memo(
 		showGrid = false,
 		onSpriteDoubleClick,
 		renderMode = 'full',
+		isPanEnabled = false,
 		showExactSize = false,
+		onMiddleMousePanChange,
 		showEmpty: _showEmpty = false // Rename to avoid unused var error
 	}: SpriteCanvasProps) => {
 		const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -77,8 +81,6 @@ export const SpriteCanvas = memo(
 		const [isPanning, setIsPanning] = useState(false);
 		const [panStart, setPanStart] = useState({ x: 0, y: 0 });
 
-		// Check if pan is enabled (if onPanChange is provided)
-		const isPanEnabled = !!onPanChange;
 		// Highlight state for drag and drop
 		const [highlightedSlot, setHighlightedSlot] = useState<null | { x: number; y: number; w: number; h: number }>(null);
 		// Hover state for visual feedback
@@ -507,7 +509,8 @@ export const SpriteCanvas = memo(
 		]);
 
 		const exactSizeCenter = useMemo(() => {
-			if (!thing || renderMode !== 'preview') return null;
+			// Calculate exact size center for all categories
+			if (!thing) return null;
 
 			const exactSize = thing.exactSize || SPRITE_SIZE;
 			const pixelsWidth = thing.width * SPRITE_SIZE;
@@ -517,14 +520,42 @@ export const SpriteCanvas = memo(
 			const exactSizeCenterY = pixelsHeight - exactSize / 2;
 
 			return { x: exactSizeCenterX, y: exactSizeCenterY };
-		}, [thing, renderMode]);
+		}, [thing]);
 
-		const handleMouseDown = (e: React.MouseEvent) => {
-			if (e.button !== 0 || !onPanChange) return;
-			setIsPanning(true);
-			setPanStart({ x: e.clientX - panX, y: e.clientY - panY });
-			e.preventDefault();
-		};
+		const handleMouseDown = useCallback(
+			(e: React.MouseEvent) => {
+				// Only handle panning if onPanChange is provided
+				if (!onPanChange) return;
+
+				// Check which button was pressed
+				const isLeftButton = e.button === 0;
+				const isMiddleButton = e.button === 1;
+
+				// Determine if panning should be allowed
+				let allowPanning = false;
+
+				if (isMiddleButton) {
+					// Middle mouse button always allows panning
+					allowPanning = true;
+				} else if (isLeftButton && isPanEnabled) {
+					// Left button only allows panning when explicitly enabled
+					allowPanning = true;
+				}
+
+				if (!allowPanning) return;
+
+				setIsPanning(true);
+				setPanStart({ x: e.clientX - panX, y: e.clientY - panY });
+
+				// Notify parent if middle mouse button is being used
+				if (isMiddleButton && onMiddleMousePanChange) {
+					onMiddleMousePanChange(true);
+				}
+
+				e.preventDefault();
+			},
+			[onPanChange, isPanEnabled, panX, panY, onMiddleMousePanChange]
+		);
 
 		useEffect(() => {
 			if (!isPanning || !onPanChange) return;
@@ -535,8 +566,15 @@ export const SpriteCanvas = memo(
 				onPanChange(newPanX, newPanY);
 			};
 
-			const handleMouseUp = () => {
+			const handleMouseUp = (e: MouseEvent) => {
+				// Stop panning on any mouse button release
+				const wasMiddleButton = e.button === 1;
 				setIsPanning(false);
+
+				// Notify parent if middle mouse button was released
+				if (wasMiddleButton && onMiddleMousePanChange) {
+					onMiddleMousePanChange(false);
+				}
 			};
 
 			window.addEventListener('mousemove', handleMouseMove);
@@ -546,7 +584,7 @@ export const SpriteCanvas = memo(
 				window.removeEventListener('mousemove', handleMouseMove);
 				window.removeEventListener('mouseup', handleMouseUp);
 			};
-		}, [isPanning, panStart, onPanChange, panX, panY]);
+		}, [isPanning, panStart, onPanChange, panX, panY, onMiddleMousePanChange]);
 
 		// Handle custom drag and drop (for highlighting)
 		useEffect(() => {
@@ -669,6 +707,7 @@ export const SpriteCanvas = memo(
 			}
 
 			// For preview mode, always center by exact size if available
+			// Remove maxWidth/maxHeight constraints so sprites render at natural size
 			if (renderMode === 'preview' && exactSizeCenter) {
 				const canvasCenterX = canvasWidth / 2;
 				const canvasCenterY = canvasHeight / 2;
@@ -677,35 +716,21 @@ export const SpriteCanvas = memo(
 				const offsetY = canvasCenterY - exactSizeCenter.y;
 
 				return {
-					...baseStyle,
-					width: `${canvasWidth} px`,
-					height: `${canvasHeight} px`,
-					transformOrigin: `${exactSizeCenter.x}px ${exactSizeCenter.y} px`,
+					width: `${canvasWidth}px`,
+					height: `${canvasHeight}px`,
+					imageRendering: 'pixelated' as const,
+					transformOrigin: `${exactSizeCenter.x}px ${exactSizeCenter.y}px`,
 					transform: `translate(${panX}px, ${panY}px) translate(${offsetX}px, ${offsetY}px) scale(${scale})`
 				};
 			}
 
-			if (!exactSizeCenter || scale === 1) {
-				return {
-					...baseStyle,
-					width: `${canvasWidth * scale} px`,
-					height: `${canvasHeight * scale} px`,
-					transform: `translate(${panX}px, ${panY}px)`
-				};
-			}
-
-			const canvasCenterX = canvasWidth / 2;
-			const canvasCenterY = canvasHeight / 2;
-
-			const offsetX = canvasCenterX - exactSizeCenter.x;
-			const offsetY = canvasCenterY - exactSizeCenter.y;
-
+			// Full mode (items, effects): center on entire grid
 			return {
 				...baseStyle,
-				width: `${canvasWidth} px`,
-				height: `${canvasHeight} px`,
-				transformOrigin: `${exactSizeCenter.x}px ${exactSizeCenter.y} px`,
-				transform: `translate(${panX}px, ${panY}px) translate(${offsetX}px, ${offsetY}px) scale(${scale})`
+				width: `${canvasWidth}px`,
+				height: `${canvasHeight}px`,
+				transformOrigin: 'center center',
+				transform: `translate(${panX}px, ${panY}px) scale(${scale})`
 			};
 		}, [canvasWidth, canvasHeight, scale, exactSizeCenter, panX, panY, renderMode]);
 
@@ -927,9 +952,8 @@ export const SpriteCanvas = memo(
 				ref={containerRef}
 				onDrop={handleDrop}
 				onDragOver={handleDragOver}
-				onMouseDown={handleMouseDown}
 				onDragLeave={handleDragLeave}
-				style={{ cursor: isPanning ? 'grabbing' : onPanChange && isPanEnabled ? 'grab' : 'default' }}
+				style={{ cursor: isPanning ? 'grabbing' : onPanChange && (isPanEnabled || isPanning) ? 'grab' : 'default' }}
 				className={cn(
 					'relative flex items-center justify-center',
 					// Ensure it fills the parent (CheckerBoard)
@@ -950,10 +974,17 @@ export const SpriteCanvas = memo(
 						height={canvasHeight}
 						ref={overlayCanvasRef}
 						onMouseMove={handleMouseMove}
+						onMouseDown={handleMouseDown}
 						onMouseLeave={handleMouseLeave}
 						onDoubleClick={handleMouseDoubleClick}
 						style={{ imageRendering: 'pixelated' }}
 						className="absolute inset-0 w-full h-full"
+						onContextMenu={(e) => {
+							// Prevent context menu on middle mouse button
+							if (e.button === 1) {
+								e.preventDefault();
+							}
+						}}
 					/>
 				</div>
 				{isLoading && (

@@ -10,6 +10,26 @@ pub struct FrameDuration {
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
+pub struct FrameGroup {
+    pub r#type: u8,
+    pub width: u8,
+    pub height: u8,
+    pub exact_size: u8,
+    pub layers: u8,
+    pub pattern_x: u8,
+    pub pattern_y: u8,
+    pub pattern_z: u8,
+    pub frames: u8,
+    pub sprite_index: Vec<u32>,
+    pub is_animation: bool,
+    pub animation_mode: Option<u8>,
+    pub loop_count: Option<i32>,
+    pub start_frame: Option<i8>,
+    pub frame_durations: Option<Vec<FrameDuration>>,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct ThingType {
     pub id: u32,
     pub category: String,
@@ -22,6 +42,7 @@ pub struct ThingType {
     pub pattern_z: u8,
     pub frames: u8,
     pub sprite_index: Vec<u32>,
+    pub frame_groups_data: Option<Vec<FrameGroup>>,
 
     // Properties
     pub is_ground: bool,
@@ -730,7 +751,62 @@ impl<W: Write> DatWriter<W> {
     fn write_texture_patterns(&mut self, thing: &ThingType) -> io::Result<()> {
         // For version >= 10.57 (1057) outfits use frame groups
         if self.frame_groups && thing.category == "outfit" {
-            // Write group count (we only write 1 group - the DEFAULT)
+            if let Some(groups) = &thing.frame_groups_data {
+                // Write group count
+                self.write_u8(groups.len() as u8)?;
+                
+                for group in groups {
+                    // Write group type
+                    self.write_u8(group.r#type)?;
+                    
+                    // Write texture data for group
+                    self.write_u8(group.width)?;
+                    self.write_u8(group.height)?;
+                    
+                    if group.width > 1 || group.height > 1 {
+                        self.write_u8(group.exact_size)?;
+                    }
+                    
+                    self.write_u8(group.layers)?;
+                    self.write_u8(group.pattern_x)?;
+                    self.write_u8(group.pattern_y)?;
+                    self.write_u8(group.pattern_z)?;
+                    self.write_u8(group.frames)?;
+                    
+                    // Write animation data if frames > 1
+                    if group.frames > 1 && self.frame_durations {
+                        self.write_u8(group.animation_mode.unwrap_or(0))?;
+                        self.write_i32_le(group.loop_count.unwrap_or(0))?;
+                        self.write_i8(group.start_frame.unwrap_or(0))?;
+                        
+                        // Write frame durations
+                        if let Some(durations) = &group.frame_durations {
+                            for fd in durations {
+                                self.write_u32_le(fd.minimum)?;
+                                self.write_u32_le(fd.maximum)?;
+                            }
+                        } else {
+                            // Default durations if missing
+                            for _ in 0..group.frames {
+                                self.write_u32_le(100)?;
+                                self.write_u32_le(100)?;
+                            }
+                        }
+                    }
+                    
+                    // Write sprite indices
+                    for &sprite_id in &group.sprite_index {
+                        if self.extended {
+                            self.write_u32_le(sprite_id)?;
+                        } else {
+                            self.write_u16_le(sprite_id as u16)?;
+                        }
+                    }
+                }
+                return Ok(());
+            }
+
+            // Fallback: Write group count (we only write 1 group - the DEFAULT)
             self.write_u8(1)?;
             // Write group type (0 = DEFAULT/IDLE)
             self.write_u8(0)?;

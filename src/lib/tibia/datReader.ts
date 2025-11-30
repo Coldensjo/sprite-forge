@@ -3,7 +3,7 @@
  * Based on Object Builder's MetadataReader classes
  */
 
-import { ThingType, SPRITE_SIZE, ThingCategory, ClientVersion, createThingType, DAT_FILE_POSITIONS } from './types';
+import { ThingType, ThingCategory, ClientVersion, createThingType, DAT_FILE_POSITIONS } from './types';
 
 /**
  * Metadata flags for client versions 7.80 - 8.54 (MetadataFlags4)
@@ -557,14 +557,24 @@ export class DatReader {
 		// Check if this is an outfit with frame groups (idle animations)
 		// Frame groups were introduced in version 10.57 (1057)
 		const hasFrameGroups = thing.category === ThingCategory.OUTFIT && this.version >= 1057;
-		const groupCount = hasFrameGroups ? this.reader.readUInt8() : 1;
+		let groupCount = 1;
+		if (hasFrameGroups) {
+			groupCount = this.reader.readUInt8();
+		}
+
+		// Safety check: Ensure at least one group exists
+		if (groupCount === 0) {
+			groupCount = 1;
+		}
 
 		let totalSpritesCount = 0;
+		thing.frameGroupsData = [];
 
 		for (let groupIndex = 0; groupIndex < groupCount; groupIndex++) {
+			let frameGroupType = 0;
 			// Read frame group type if this outfit has frame groups
 			if (hasFrameGroups) {
-				const frameGroupType = this.reader.readUInt8();
+				frameGroupType = this.reader.readUInt8();
 				// Store frame group type for later use (0 = idle, 1 = moving)
 				if (!thing.frameGroups) {
 					thing.frameGroups = [];
@@ -580,11 +590,11 @@ export class DatReader {
 				throw new Error(`EOF reached while reading texture patterns for ${thing.category} ${thing.id}`);
 			}
 
-			let exactSize = SPRITE_SIZE;
+			let exactSize = 32;
 			if (width > 1 || height > 1) {
 				exactSize = this.reader.readUInt8();
 			} else {
-				exactSize = SPRITE_SIZE;
+				exactSize = 32;
 			}
 
 			const layers = this.reader.readUInt8();
@@ -606,7 +616,23 @@ export class DatReader {
 				thing.frames = frames;
 			}
 
+			const currentFrameGroup: any = {
+				width,
+				height,
+				layers,
+				frames,
+				patternX,
+				patternY,
+				patternZ,
+				exactSize,
+				spriteIndex: [],
+				isAnimation: false,
+				frameDurations: [],
+				type: frameGroupType
+			};
+
 			if (frames > 1) {
+				currentFrameGroup.isAnimation = true;
 				if (groupIndex === 0) {
 					thing.isAnimation = true;
 					thing.frameDurations = [];
@@ -617,6 +643,10 @@ export class DatReader {
 					const loopCount = this.reader.readInt32LE();
 					const startFrame = this.reader.readInt8();
 
+					currentFrameGroup.animationMode = animationMode;
+					currentFrameGroup.loopCount = loopCount;
+					currentFrameGroup.startFrame = startFrame;
+
 					if (groupIndex === 0) {
 						thing.animationMode = animationMode;
 						thing.loopCount = loopCount;
@@ -626,15 +656,17 @@ export class DatReader {
 					for (let i = 0; i < frames; i++) {
 						const minimum = this.reader.readUInt32LE();
 						const maximum = this.reader.readUInt32LE();
+						currentFrameGroup.frameDurations.push({ minimum, maximum });
 						if (groupIndex === 0) {
 							thing.frameDurations.push({ minimum, maximum });
 						}
 					}
 				} else {
 					// Use default duration for older versions
-					if (groupIndex === 0) {
-						const defaultDuration = getDefaultFrameDuration(thing.category);
-						for (let i = 0; i < frames; i++) {
+					const defaultDuration = getDefaultFrameDuration(thing.category);
+					for (let i = 0; i < frames; i++) {
+						currentFrameGroup.frameDurations.push({ minimum: defaultDuration, maximum: defaultDuration });
+						if (groupIndex === 0) {
 							thing.frameDurations.push({ minimum: defaultDuration, maximum: defaultDuration });
 						}
 					}
@@ -674,12 +706,15 @@ export class DatReader {
 					spriteId = this.reader.readUInt16LE();
 				}
 
+				currentFrameGroup.spriteIndex.push(spriteId);
+
 				// Only add sprites if this is the first group
 				if (groupIndex === 0) {
 					thing.spriteIndex.push(spriteId);
 				}
 			}
 
+			thing.frameGroupsData.push(currentFrameGroup);
 			totalSpritesCount += groupTotalSprites;
 		}
 
@@ -723,11 +758,14 @@ export class DatReader {
  */
 function getDefaultFrameDuration(category: ThingCategory): number {
 	// Default animation durations (in milliseconds)
+	// Default durations matching Object Builder (ObjectBuilderSettings.as)
+	// Note: OTClient uses 75ms for effects/missiles (in-game timing),
+	// but Object Builder uses 100ms for easier frame viewing in the editor
 	switch (category) {
 		case ThingCategory.OUTFIT:
 			return 300;
 		case ThingCategory.EFFECT:
-			return 75;
+			return 100; // Object Builder default (OTClient uses 75ms)
 		case ThingCategory.MISSILE:
 			return 150;
 		default:

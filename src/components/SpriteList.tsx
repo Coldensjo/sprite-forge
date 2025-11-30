@@ -1,5 +1,6 @@
 import { cn } from '@/lib/utils';
-import { compressPixels, type Sprite } from '@/lib/tibia';
+import { type Sprite } from '@/lib/tibia';
+import { invoke } from '@tauri-apps/api/core';
 import { useDragDrop } from '@/contexts/DragDropContext';
 import { useTibiaData } from '@/contexts/TibiaDataContext';
 import { useRef, useMemo, useState, useEffect } from 'react';
@@ -291,7 +292,7 @@ export const SpriteList = () => {
 						const img = document.createElement('img');
 						const url = URL.createObjectURL(blob);
 
-						img.onload = () => {
+						img.onload = async () => {
 							URL.revokeObjectURL(url);
 
 							// Validate that dimensions are multiples of 32
@@ -341,17 +342,11 @@ export const SpriteList = () => {
 									}
 
 									// The `pixels` from canvas are in RGBA format
-									// Convert RGBA to ARGB for compression (compressPixels expects ARGB)
-									const argbPixels = new Uint8Array(4096);
-									for (let i = 0; i < 1024; i++) {
-										argbPixels[i * 4] = pixels[i * 4 + 3]; // A
-										argbPixels[i * 4 + 1] = pixels[i * 4]; // R
-										argbPixels[i * 4 + 2] = pixels[i * 4 + 1]; // G
-										argbPixels[i * 4 + 3] = pixels[i * 4 + 2]; // B
-									}
-
-									// Compress the pixel data (using ARGB format)
-									const compressedPixels = compressPixels(argbPixels, data.transparency);
+									// Compress using Rust (accepts RGBA directly)
+									const compressedPixels = await invoke<Uint8Array>('compress_sprite_rgba', {
+										pixels: Array.from(pixels),
+										transparent: data.transparency
+									});
 
 									let spriteId: number;
 
@@ -361,8 +356,7 @@ export const SpriteList = () => {
 										const sprite = data.sprites.get(spriteId);
 										if (sprite) {
 											sprite.rgbaPixels = pixels; // Store RGBA for rendering
-											sprite.pixels = argbPixels; // Store ARGB for compression/writing
-											sprite.compressedPixels = compressedPixels;
+											sprite.compressedPixels = new Uint8Array(compressedPixels);
 											sprite.isEmpty = pixels.every((p) => p === 0);
 											sprite.imageData = undefined; // Clear cached image data
 											modifiedSpriteIds.push(spriteId);
@@ -378,11 +372,10 @@ export const SpriteList = () => {
 										const newSprite: Sprite = {
 											id: newId,
 											rgbaPixels: pixels, // RGBA for rendering
-											pixels: argbPixels, // ARGB for compression/writing
 											imageData: undefined,
 											transparent: data.transparency,
-											compressedPixels: compressedPixels,
-											isEmpty: pixels.every((p) => p === 0)
+											isEmpty: pixels.every((p) => p === 0),
+											compressedPixels: new Uint8Array(compressedPixels)
 										};
 
 										data.sprites.set(newId, newSprite);
@@ -500,10 +493,10 @@ export const SpriteList = () => {
 											const newSprite: Sprite = {
 												id: newId,
 												isEmpty: true,
-												rgbaPixels: new Uint8Array(4096), // Empty RGBA
 												pixels: undefined,
 												imageData: undefined,
 												transparent: data.transparency,
+												rgbaPixels: new Uint8Array(4096), // Empty RGBA
 												compressedPixels: new Uint8Array(0)
 											};
 

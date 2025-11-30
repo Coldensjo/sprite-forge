@@ -226,11 +226,27 @@ export const ItemList = () => {
 				const ids: number[] = [];
 				for (const id of itemIds) {
 					const item = getThing(id, selectedCategory);
-					if (item && item.spriteIndex && item.spriteIndex.length > 0) {
-						// Add ALL sprites for this item (all frames, patterns, layers)
-						for (const spriteId of item.spriteIndex) {
-							if (spriteId && isValidSpriteId(spriteId, data.spritesCount)) {
-								ids.push(spriteId);
+					if (item) {
+						// Collect from main spriteIndex (covers idle group / non-frame-group items)
+						if (item.spriteIndex && item.spriteIndex.length > 0) {
+							for (const spriteId of item.spriteIndex) {
+								if (spriteId && isValidSpriteId(spriteId, data.spritesCount)) {
+									ids.push(spriteId);
+								}
+							}
+						}
+
+						// Also collect from all frame groups (walking group, etc.)
+						// This is needed for 10.98+ outfits where walking sprites are in frameGroupsData[1]
+						if (item.frameGroupsData) {
+							for (const group of item.frameGroupsData) {
+								if (group?.spriteIndex && group.spriteIndex.length > 0) {
+									for (const spriteId of group.spriteIndex) {
+										if (spriteId && isValidSpriteId(spriteId, data.spritesCount)) {
+											ids.push(spriteId);
+										}
+									}
+								}
 							}
 						}
 					}
@@ -326,7 +342,8 @@ export const ItemList = () => {
 		notifySpritesLoaded,
 		allItemIds,
 		totalPages,
-		itemsPerPage
+		itemsPerPage,
+		updateCounter // Force reload when data changes (e.g. after optimization)
 	]);
 
 	const handlePageChange = (page: number) => {
@@ -584,6 +601,7 @@ export const ItemList = () => {
 			<ScrollArea className="flex-1" ref={scrollViewportRef}>
 				<TooltipProvider>
 					<div
+						key={updateCounter} // Force re-render when data changes (e.g. after optimization)
 						className={cn(
 							'p-2 pb-16',
 							viewMode === 'list' && 'space-y-0.5',

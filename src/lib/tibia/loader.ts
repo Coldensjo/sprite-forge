@@ -3,13 +3,12 @@
  * Utilities for loading .dat and .spr files via Tauri
  */
 
+import * as lz4 from 'lz4js';
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
 import { logger, logError, EventCode } from '@/lib/debug';
-import * as lz4 from 'lz4js';
 
 import { loadDatFile } from './datReader';
-import { decodeDatResponse } from './datDecoder';
 import { SpriteReader } from './spriteReader';
 import { Sprite, TibiaData, ThingType, ClientVersion, CLIENT_VERSIONS } from './types';
 
@@ -53,7 +52,7 @@ export interface DatHeader {
 	outfitsCount: number;
 	effectsCount: number;
 	missilesCount: number;
-	version: ClientVersion | null;
+	version: null | ClientVersion;
 }
 
 /**
@@ -71,12 +70,12 @@ export interface SprHeader {
  */
 export interface OtfiData {
 	extended: boolean;
-	transparency: boolean;
-	frameDurations: boolean; // "frame-durations" in file
-	frameGroups: boolean; // "frame-groups" in file
-	metadataFile?: string;
-	spritesFile?: string;
 	spriteSize?: number;
+	frameGroups: boolean; // "frame-groups" in file
+	spritesFile?: string;
+	transparency: boolean;
+	metadataFile?: string;
+	frameDurations: boolean; // "frame-durations" in file
 	spriteDataSize?: number;
 }
 
@@ -109,12 +108,9 @@ function parseOtml(content: string): Record<string, string> {
  * Tries multiple file patterns: Tibia.otfi, Tibia.dat.otfi
  * Returns null if file doesn't exist or can't be parsed
  */
-export async function readOtfiFile(folderPath: string): Promise<OtfiData | null> {
+export async function readOtfiFile(folderPath: string): Promise<null | OtfiData> {
 	// Try different OTFI file naming patterns (Object Builder uses both)
-	const patterns = [
-		`${folderPath}\\Tibia.otfi`,
-		`${folderPath}\\Tibia.dat.otfi`
-	];
+	const patterns = [`${folderPath}\\Tibia.otfi`, `${folderPath}\\Tibia.dat.otfi`];
 
 	for (const path of patterns) {
 		try {
@@ -124,11 +120,11 @@ export async function readOtfiFile(folderPath: string): Promise<OtfiData | null>
 
 			return {
 				extended: data['extended'] === 'true',
-				transparency: data['transparency'] === 'true',
-				frameDurations: data['frame-durations'] === 'true',
 				frameGroups: data['frame-groups'] === 'true',
-				metadataFile: data['metadata-file'] || undefined,
+				transparency: data['transparency'] === 'true',
 				spritesFile: data['sprites-file'] || undefined,
+				metadataFile: data['metadata-file'] || undefined,
+				frameDurations: data['frame-durations'] === 'true',
 				spriteSize: data['sprite-size'] ? parseInt(data['sprite-size'], 10) : undefined,
 				spriteDataSize: data['sprite-data-size'] ? parseInt(data['sprite-data-size'], 10) : undefined
 			};
@@ -163,12 +159,12 @@ export async function readDatHeader(path: string): Promise<DatHeader> {
 	const version = detectVersionFromSignature(signature);
 
 	return {
+		version,
 		signature,
 		itemsCount,
 		outfitsCount,
 		effectsCount,
-		missilesCount,
-		version
+		missilesCount
 	};
 }
 
@@ -200,8 +196,8 @@ export async function readSprHeader(path: string): Promise<SprHeader> {
 	}
 
 	return {
-		signature,
 		extended,
+		signature,
 		spriteCount
 	};
 }
@@ -234,7 +230,7 @@ export async function loadTibiaDat(
 /**
  * SPR Header returned from Rust
  */
-interface SprHeader {
+interface RustSprHeader {
 	signature: number;
 	extended: boolean;
 	sprite_count: number;
@@ -247,7 +243,7 @@ export async function loadTibiaSpr(
 	path: string,
 	version: ClientVersion,
 	enableTransparency?: boolean
-): Promise<{ path: string; header: SprHeader; transparency: boolean }> {
+): Promise<{ path: string; header: RustSprHeader; transparency: boolean }> {
 	const extended = version.supportsExtended;
 	// Use enableTransparency if provided, otherwise fallback to version's default
 	const transparency = enableTransparency ?? version.supportsAlphaChannel;
@@ -256,7 +252,7 @@ export async function loadTibiaSpr(
 	);
 
 	// Open SPR file in Rust backend (keeps file handle open)
-	const header = await invoke<SprHeader>('open_spr_file', {
+	const header = await invoke<RustSprHeader>('open_spr_file', {
 		path,
 		extended
 	});
@@ -328,13 +324,8 @@ export async function selectTibiaFolder(): Promise<null | { datPath: string; spr
 /**
  * Load complete Tibia client data (.dat + .spr)
  *
- * OPTIMIZED VERSION (Object Builder style):
- * - DAT parsing happens in Rust (fast native code)
- * - Binary IPC transfer (no JSON serialization overhead)
- * - Minimal sprite preloading (first 100 only for instant first page)
- * - Rest loaded on-demand as user navigates
- *
- * Expected performance: ~500ms total (vs 4-5s before)
+ * Uses TypeScript DAT parser to ensure full compatibility with recent fixes
+ * (Frame Groups support for 10.57+ outfits)
  */
 export async function loadTibiaData(
 	datPath: string,
@@ -357,53 +348,26 @@ export async function loadTibiaData(
 	}
 
 	// Step 2: Parse DAT file
-	// For version 10.10+ (1010+), use fast Rust parsing with binary IPC
-	// For older versions, use TypeScript parsing (Rust doesn't support old flag formats yet)
+	// Use TypeScript parser to ensure we get all data (including frame groups)
 	if (onProgress) onProgress('Loading DAT file...', 0, 100);
 
-	let datData;
-	const useRustParser = detectedVersion.value >= 1010;
+	console.log(`[loadTibiaData] Using TypeScript parser for version ${detectedVersion.value}`);
 
-	if (useRustParser) {
-		// Fast path: Rust parsing with binary IPC (~200-400ms)
-		console.log(`[loadTibiaData] Using Rust parser for version ${detectedVersion.value}`);
-		let datResponse: ArrayBuffer | Uint8Array;
-		try {
-			datResponse = await invoke<ArrayBuffer | Uint8Array>('parse_dat_file_bin', { path: datPath });
-		} catch (err) {
-			console.error('[loadTibiaData] Failed to parse DAT file:', err);
-			throw new Error(`Failed to parse DAT file: ${err}`);
-		}
+	// Read raw file buffer
+	const datBuffer = await readBinaryFile(datPath);
 
-		// Handle both ArrayBuffer (from Response::new) and Uint8Array
-		const datBuffer = datResponse instanceof Uint8Array
-			? datResponse
-			: new Uint8Array(datResponse);
-
-		console.log(`[loadTibiaData] Received binary buffer: ${datBuffer.byteLength} bytes`);
-
-		// Decode binary response to TypeScript objects (FAST - just memory reads)
-		if (onProgress) onProgress('Processing metadata...', 50, 100);
-		try {
-			datData = decodeDatResponse(datBuffer);
-		} catch (err) {
-			console.error('[loadTibiaData] Failed to decode DAT response:', err);
-			throw new Error(`Failed to decode DAT response: ${err}`);
-		}
-	} else {
-		// Fallback: TypeScript parsing for older versions (supports MetadataFlags4/5)
-		console.log(`[loadTibiaData] Using TypeScript parser for version ${detectedVersion.value}`);
-		const buffer = await readBinaryFile(datPath);
-		datData = await loadDatFile(
-			buffer,
-			detectedVersion.supportsExtended,
-			detectedVersion.supportsFrameDurations,
-			(current, total) => {
-				if (onProgress) onProgress('Loading DAT file...', Math.floor((current / total) * 50), 100);
-			},
-			detectedVersion
-		);
-	}
+	// Parse using updated datReader.ts
+	const datData = await loadDatFile(
+		datBuffer,
+		detectedVersion.supportsExtended,
+		detectedVersion.supportsFrameDurations,
+		(current, total) => {
+			if (onProgress && current % 1000 === 0) {
+				onProgress('Parsing metadata...', Math.floor((current / total) * 50), 100);
+			}
+		},
+		detectedVersion
+	);
 
 	const datTime = performance.now();
 	console.log(`[loadTibiaData] DAT parsing: ${(datTime - startTime).toFixed(0)}ms`);
@@ -436,7 +400,9 @@ export async function loadTibiaData(
 
 	const totalTime = performance.now();
 	console.log(`[loadTibiaData] Total loading time: ${(totalTime - startTime).toFixed(0)}ms`);
-	console.log(`[loadTibiaData] Items: ${datData.itemsCount}, Outfits: ${datData.outfitsCount}, Effects: ${datData.effectsCount}, Missiles: ${datData.missilesCount}`);
+	console.log(
+		`[loadTibiaData] Items: ${datData.itemsCount}, Outfits: ${datData.outfitsCount}, Effects: ${datData.effectsCount}, Missiles: ${datData.missilesCount}`
+	);
 
 	// Done! Return immediately - app is ready to use
 	if (onProgress) onProgress('Ready', 100, 100);
@@ -495,7 +461,7 @@ const SPRITE_DATA_SIZE = 4096;
  * returns RGBA pixels ready for direct use with Canvas ImageData.
  * We also receive compressed pixels for saving back to SPR files.
  */
-function parseRgbaSprites(response: Uint8Array | ArrayBuffer, transparency: boolean): Sprite[] {
+export function parseRgbaSprites(response: Uint8Array | ArrayBuffer, transparency: boolean): Sprite[] {
 	let view: DataView;
 	let buffer: Uint8Array;
 
@@ -572,74 +538,8 @@ function parseRgbaSprites(response: Uint8Array | ArrayBuffer, transparency: bool
  * Format: [Count: u32] -> ([ID: u32][IsEmpty: u8][Len: u32][Data...])*
  * @deprecated Use parseRgbaSprites with read_sprites_rgba command instead
  */
-function parseBinarySprites(response: Uint8Array | ArrayBuffer, transparency: boolean): Sprite[] {
-	let view: DataView;
-	let buffer: Uint8Array;
-
-	if (response instanceof Uint8Array) {
-		view = new DataView(response.buffer, response.byteOffset, response.byteLength);
-		buffer = response;
-	} else if (response instanceof ArrayBuffer) {
-		view = new DataView(response);
-		buffer = new Uint8Array(response);
-	} else {
-		console.error('Unexpected response type:', response);
-		return [];
-	}
-
-	const sprites: Sprite[] = [];
-	let offset = 0;
-
-	// Safety check
-	if (view.byteLength < 4) return [];
-
-	const count = view.getUint32(offset, true);
-	offset += 4;
-
-	for (let i = 0; i < count; i++) {
-		// Safety check
-		if (offset + 9 > view.byteLength) break;
-
-		const id = view.getUint32(offset, true);
-		offset += 4;
-
-		const isEmpty = view.getUint8(offset) === 1;
-		offset += 1;
-
-		const len = view.getUint32(offset, true);
-		offset += 4;
-
-		let compressedPixels: Uint8Array;
-		if (len > 0) {
-			if (offset + len > view.byteLength) {
-				console.error(`Binary parse error: sprite ${id} length ${len} exceeds buffer`);
-				compressedPixels = new Uint8Array(0);
-				offset = view.byteLength; // Stop parsing
-			} else {
-				// Use slice to create a copy
-				compressedPixels = buffer.slice(offset, offset + len);
-				offset += len;
-			}
-		} else {
-			compressedPixels = new Uint8Array(0);
-		}
-
-		sprites.push({
-			id,
-			isEmpty,
-			compressedPixels,
-			rgbaPixels: new Uint8Array(0), // Will need decompression
-			transparent: transparency
-		});
-	}
-	return sprites;
-}
-
 /** Default window size for sprite loading */
 const DEFAULT_WINDOW_SIZE = 100;
-
-/** Large window size for bulk preloading */
-const LARGE_WINDOW_SIZE = 500;
 
 /**
  * Load a sprite window around the given sprite ID
@@ -690,8 +590,8 @@ export async function loadSpriteWindow(
 		const response = await invoke<Uint8Array>('read_sprites_batch_rgba', {
 			count,
 			startId,
-			transparent: transparency,
-			path: sprPath
+			path: sprPath,
+			transparent: transparency
 		});
 
 		const batchedSprites = parseRgbaSprites(response, transparency);
@@ -729,7 +629,7 @@ export async function preloadSprites(
 	const BATCH_SIZE = 500; // Load 500 sprites per batch
 	const batches = Math.ceil(Math.min(count, totalSprites) / BATCH_SIZE);
 
-	logger.log(EventCode.LOADER_READ, { preload: true, count, batches });
+	logger.log(EventCode.LOADER_READ, { count, batches, preload: true });
 
 	for (let i = 0; i < batches; i++) {
 		const startId = i * BATCH_SIZE + 1;
@@ -739,10 +639,10 @@ export async function preloadSprites(
 
 		try {
 			const response = await invoke<Uint8Array>('read_sprites_batch_rgba', {
-				count: batchCount,
 				startId,
-				transparent: transparency,
-				path: sprPath
+				path: sprPath,
+				count: batchCount,
+				transparent: transparency
 			});
 
 			const batchedSprites = parseRgbaSprites(response, transparency);
@@ -842,7 +742,7 @@ export async function loadSpriteIdsLz4(
 	const uncachedIds = spriteIds.filter((id) => id > 0 && !spriteCache.has(id));
 
 	if (uncachedIds.length === 0) {
-		logger.log(EventCode.LOADER_CACHED, { n: spriteIds.length, lz4: true });
+		logger.log(EventCode.LOADER_CACHED, { lz4: true, n: spriteIds.length });
 		return; // All sprites already cached
 	}
 
@@ -864,18 +764,16 @@ export async function loadSpriteIdsLz4(
 		});
 
 		// Handle ArrayBuffer response
-		const compressedBuffer = compressedResponse instanceof Uint8Array
-			? compressedResponse
-			: new Uint8Array(compressedResponse);
+		const compressedBuffer = compressedResponse instanceof Uint8Array ? compressedResponse : new Uint8Array(compressedResponse);
 
 		// Decompress LZ4 (lz4_flex prepends uncompressed size as 4-byte little-endian)
 		const decompressed = lz4.decompress(compressedBuffer);
 
 		logger.log(EventCode.LOADER_READ, {
 			lz4: true,
-			compressed: compressedBuffer.byteLength,
 			decompressed: decompressed.byteLength,
-			ratio: (compressedBuffer.byteLength / decompressed.byteLength * 100).toFixed(1) + '%'
+			compressed: compressedBuffer.byteLength,
+			ratio: ((compressedBuffer.byteLength / decompressed.byteLength) * 100).toFixed(1) + '%'
 		});
 
 		const batchedSprites = parseRgbaSprites(decompressed, transparency);

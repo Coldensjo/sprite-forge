@@ -764,5 +764,87 @@ fn decompress_to_rgba(compressed: &[u8], transparent: bool) -> Vec<u8> {
     pixels
 }
 
+/// Compress RGBA pixels to Tibia's RLE format
+/// This is the inverse of decompress_to_rgba
+///
+/// Input: 4096 bytes of RGBA data (32x32 pixels, 4 bytes per pixel)
+/// Output: RLE compressed data
+///
+/// Format:
+/// - Alternates between transparent and colored pixel chunks
+/// - Each chunk has a 2-byte count (little-endian u16)
+/// - Transparent pixels: just count (no data)
+/// - Colored pixels: RGB or RGBA bytes follow (depending on transparent flag)
+pub fn compress_to_rle(pixels: &[u8], transparent: bool) -> Vec<u8> {
+    if pixels.len() != SPRITE_DATA_SIZE {
+        return Vec::new();
+    }
+
+    let mut compressed = Vec::new();
+    let mut index = 0;
+    let pixel_count = SPRITE_DATA_SIZE / 4; // 1024 pixels
+
+    while index < pixel_count {
+        // Count transparent pixels (RGBA = 0,0,0,0)
+        let mut transparent_count = 0u16;
+        while index < pixel_count {
+            let offset = index * 4;
+            let r = pixels[offset];
+            let g = pixels[offset + 1];
+            let b = pixels[offset + 2];
+            let a = pixels[offset + 3];
+
+            let is_transparent = r == 0 && g == 0 && b == 0 && a == 0;
+            if !is_transparent {
+                break;
+            }
+
+            transparent_count += 1;
+            index += 1;
+        }
+
+        // Write transparent count (2 bytes, little-endian)
+        compressed.extend_from_slice(&transparent_count.to_le_bytes());
+
+        // Save position for colored count
+        let colored_count_pos = compressed.len();
+        compressed.push(0); // Placeholder for colored count low byte
+        compressed.push(0); // Placeholder for colored count high byte
+
+        // Count and write colored pixels
+        let mut colored_count = 0u16;
+        while index < pixel_count {
+            let offset = index * 4;
+            let r = pixels[offset];
+            let g = pixels[offset + 1];
+            let b = pixels[offset + 2];
+            let a = pixels[offset + 3];
+
+            let is_transparent = r == 0 && g == 0 && b == 0 && a == 0;
+            if is_transparent {
+                break;
+            }
+
+            // Write RGB(A) data
+            compressed.push(r);
+            compressed.push(g);
+            compressed.push(b);
+            if transparent {
+                compressed.push(a);
+            }
+
+            colored_count += 1;
+            index += 1;
+        }
+
+        // Update colored count
+        let count_bytes = colored_count.to_le_bytes();
+        compressed[colored_count_pos] = count_bytes[0];
+        compressed[colored_count_pos + 1] = count_bytes[1];
+    }
+
+    compressed
+}
+
 /// Type alias for thread-safe SPR manager
 pub type SprManagerState = Arc<Mutex<SprManager>>;

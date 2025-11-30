@@ -2,9 +2,13 @@
 
 ![Sprite Forge](/.github/images/sprite-forge.png)
 
-**Sprite Forge** is a revamp of the Object Builder, fully **vibe coded** during my limited free time, so it doesn't follow any established good practices yet.
+**Sprite Forge** is a modern Tibia spr and dat editor and a revamp of the Object Builder, fully **vibe coded** during my limited free time, so it doesn't follow any established good practices yet.
 
 It is currently an **experiment** focused on delivering a new and improved user experience for SPR and DAT management for Open Tibia projects.
+
+## ⚠️ Important Warning
+
+**Always create a backup of your SPR and DAT files before using Sprite Forge.** This application is experimental and may corrupt your files.
 
 ## About
 

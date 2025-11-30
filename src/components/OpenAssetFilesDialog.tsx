@@ -1,6 +1,14 @@
 import { useState, useEffect } from 'react';
-import { readDatHeader, readSprHeader, readOtfiFile, ClientVersion, type DatHeader, type SprHeader, type OtfiData } from '@/lib/tibia';
-import { X, Info, Image, Loader2, Package, Settings, FolderOpen, AlertCircle, CheckCircle2, FileText } from 'lucide-react';
+import { X, Info, Image, Loader2, Package, Settings, FileText, FolderOpen, AlertCircle, CheckCircle2 } from 'lucide-react';
+import {
+	readOtfiFile,
+	readDatHeader,
+	readSprHeader,
+	ClientVersion,
+	type OtfiData,
+	type DatHeader,
+	type SprHeader
+} from '@/lib/tibia';
 
 import { Label } from './ui/label';
 import { Input } from './ui/input';
@@ -26,20 +34,20 @@ interface OpenAssetFilesDialogProps {
 
 interface FileInfo {
 	error: null | string;
+	otfi: null | OtfiData;
 	datHeader: null | DatHeader;
 	sprHeader: null | SprHeader;
 	version: null | ClientVersion;
-	otfi: null | OtfiData;
 }
 
 export const OpenAssetFilesDialog = ({ open, onLoad, onBrowse, initialPath, onOpenChange }: OpenAssetFilesDialogProps) => {
 	const [loading, setLoading] = useState(false);
 	const [fileInfo, setFileInfo] = useState<FileInfo>({
+		otfi: null,
 		error: null,
 		version: null,
 		datHeader: null,
-		sprHeader: null,
-		otfi: null
+		sprHeader: null
 	});
 
 	// Options state (initialized from detected version)
@@ -57,7 +65,7 @@ export const OpenAssetFilesDialog = ({ open, onLoad, onBrowse, initialPath, onOp
 
 	const detectFileInfo = async (folderPath: string) => {
 		setLoading(true);
-		setFileInfo({ error: null, version: null, datHeader: null, sprHeader: null, otfi: null });
+		setFileInfo({ otfi: null, error: null, version: null, datHeader: null, sprHeader: null });
 
 		try {
 			const datPath = `${folderPath}\\Tibia.dat`;
@@ -79,10 +87,10 @@ export const OpenAssetFilesDialog = ({ open, onLoad, onBrowse, initialPath, onOp
 			const version = datHeader.version;
 
 			setFileInfo({
+				otfi,
 				version,
 				datHeader,
 				sprHeader,
-				otfi,
 				error: null
 			});
 

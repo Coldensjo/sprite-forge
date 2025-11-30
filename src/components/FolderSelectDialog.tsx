@@ -30,13 +30,19 @@ interface FolderSelectDialogProps {
 	open: boolean;
 	title?: string;
 	onOpenChange: (open: boolean) => void;
-	// Option 1: Direct load with transparency (legacy mode)
-	onSelect?: (path: string, transparency: boolean) => void;
 	// Option 2: Return path only (for new two-step flow)
 	onFolderSelected?: (path: string) => void;
+	// Option 1: Direct load with transparency (legacy mode)
+	onSelect?: (path: string, transparency: boolean) => void;
 }
 
-export const FolderSelectDialog = ({ open, onSelect, onOpenChange, onFolderSelected, title = 'Select Folder' }: FolderSelectDialogProps) => {
+export const FolderSelectDialog = ({
+	open,
+	onSelect,
+	onOpenChange,
+	onFolderSelected,
+	title = 'Select Folder'
+}: FolderSelectDialogProps) => {
 	// Determine if we're in path-only mode (new two-step flow)
 	const pathOnlyMode = !!onFolderSelected && !onSelect;
 	const [currentPath, setCurrentPath] = useState<string>('');
@@ -381,7 +387,11 @@ export const FolderSelectDialog = ({ open, onSelect, onOpenChange, onFolderSelec
 				<div className="border-t border-border px-4 py-3 flex items-center justify-end gap-2">
 					{!pathOnlyMode && (
 						<div className="flex items-center gap-2 mr-2">
-							<Checkbox id="transparency" checked={transparency} onCheckedChange={(checked) => setTransparency(checked === true)} />
+							<Checkbox
+								id="transparency"
+								checked={transparency}
+								onCheckedChange={(checked) => setTransparency(checked === true)}
+							/>
 							<Label
 								htmlFor="transparency"
 								className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"

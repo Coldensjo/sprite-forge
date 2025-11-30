@@ -7,7 +7,23 @@
 
 import type { Sprite, TibiaData } from './types';
 
-import { isEmptyPixels, compressPixels } from './spriteReader';
+import { invoke } from '@tauri-apps/api/core';
+
+import { isEmptyPixels } from './spriteReader';
+
+/**
+ * Compress RGBA pixels using Rust backend
+ * @param pixels - RGBA pixel data (4096 bytes)
+ * @param transparent - Whether to include alpha channel in output
+ * @returns Compressed RLE data
+ */
+async function compressPixelsRust(pixels: Uint8Array, transparent: boolean): Promise<Uint8Array> {
+	const result = await invoke<number[]>('compress_sprite_rgba', {
+		transparent,
+		pixels: Array.from(pixels)
+	});
+	return new Uint8Array(result);
+}
 
 /**
  * Result of a sprite operation
@@ -23,10 +39,10 @@ export interface SpriteOperationResult {
  * Reference: Object Builder SpriteStorage.as lines 158-171
  *
  * @param data - TibiaData instance to modify
- * @param pixels - ARGB pixel data (4096 bytes)
+ * @param pixels - RGBA pixel data (4096 bytes)
  * @returns Operation result with new sprite ID
  */
-export function addSprite(data: TibiaData, pixels: Uint8Array): SpriteOperationResult {
+export async function addSprite(data: TibiaData, pixels: Uint8Array): Promise<SpriteOperationResult> {
 	// Check sprite limit
 	const maxSprites = data.extended ? 0xffffffff : 0xffff;
 	if (data.spritesCount >= maxSprites) {
@@ -48,12 +64,13 @@ export function addSprite(data: TibiaData, pixels: Uint8Array): SpriteOperationR
 	const newId = data.spritesCount + 1;
 
 	try {
-		// Compress pixels using RLE
-		const compressed = compressPixels(pixels, data.transparency);
+		// Compress pixels using Rust (accepts RGBA directly)
+		const compressed = await compressPixelsRust(pixels, data.transparency);
 
 		// Create sprite object
 		const sprite: Sprite = {
 			id: newId,
+			rgbaPixels: pixels,
 			compressedPixels: compressed,
 			isEmpty: isEmptyPixels(pixels),
 			transparent: data.transparency
@@ -83,10 +100,10 @@ export function addSprite(data: TibiaData, pixels: Uint8Array): SpriteOperationR
  *
  * @param data - TibiaData instance to modify
  * @param id - Sprite ID to replace
- * @param pixels - New ARGB pixel data (4096 bytes)
+ * @param pixels - New RGBA pixel data (4096 bytes)
  * @returns Operation result
  */
-export function replaceSprite(data: TibiaData, id: number, pixels: Uint8Array): SpriteOperationResult {
+export async function replaceSprite(data: TibiaData, id: number, pixels: Uint8Array): Promise<SpriteOperationResult> {
 	// Validate sprite ID
 	if (id === 0 || id > data.spritesCount) {
 		return {
@@ -104,12 +121,13 @@ export function replaceSprite(data: TibiaData, id: number, pixels: Uint8Array): 
 	}
 
 	try {
-		// Compress new pixels
-		const compressed = compressPixels(pixels, data.transparency);
+		// Compress new pixels using Rust (accepts RGBA directly)
+		const compressed = await compressPixelsRust(pixels, data.transparency);
 
 		// Create updated sprite
 		const sprite: Sprite = {
 			id,
+			rgbaPixels: pixels,
 			compressedPixels: compressed,
 			isEmpty: isEmptyPixels(pixels),
 			transparent: data.transparency
@@ -144,7 +162,7 @@ export function replaceSprite(data: TibiaData, id: number, pixels: Uint8Array): 
  * @param id - Sprite ID to remove
  * @returns Operation result
  */
-export function removeSprite(data: TibiaData, id: number): SpriteOperationResult {
+export async function removeSprite(data: TibiaData, id: number): Promise<SpriteOperationResult> {
 	// Validate sprite ID
 	if (id === 0 || id > data.spritesCount) {
 		return {
@@ -177,11 +195,12 @@ export function removeSprite(data: TibiaData, id: number): SpriteOperationResult
 
 		// Otherwise, replace with blank sprite
 		const blankPixels = new Uint8Array(4096); // All zeros = transparent
-		const compressed = compressPixels(blankPixels, data.transparency);
+		const compressed = await compressPixelsRust(blankPixels, data.transparency);
 
 		const blankSprite: Sprite = {
 			id,
 			isEmpty: true,
+			rgbaPixels: blankPixels,
 			compressedPixels: compressed,
 			transparent: data.transparency
 		};
@@ -229,10 +248,10 @@ export function getRemainingCapacity(data: TibiaData): number {
  * More efficient than calling addSprite repeatedly
  *
  * @param data - TibiaData instance to modify
- * @param pixelsArray - Array of ARGB pixel data (4096 bytes each)
+ * @param pixelsArray - Array of RGBA pixel data (4096 bytes each)
  * @returns Array of operation results with sprite IDs
  */
-export function addSpritesBatch(data: TibiaData, pixelsArray: Uint8Array[]): SpriteOperationResult[] {
+export async function addSpritesBatch(data: TibiaData, pixelsArray: Uint8Array[]): Promise<SpriteOperationResult[]> {
 	const results: SpriteOperationResult[] = [];
 
 	// Check if we have enough capacity
@@ -241,7 +260,7 @@ export function addSpritesBatch(data: TibiaData, pixelsArray: Uint8Array[]): Spr
 		// Add partial results for overflow
 		for (let i = 0; i < pixelsArray.length; i++) {
 			if (i < capacity) {
-				const result = addSprite(data, pixelsArray[i]);
+				const result = await addSprite(data, pixelsArray[i]);
 				results.push(result);
 			} else {
 				results.push({
@@ -255,7 +274,7 @@ export function addSpritesBatch(data: TibiaData, pixelsArray: Uint8Array[]): Spr
 
 	// Add all sprites
 	for (const pixels of pixelsArray) {
-		const result = addSprite(data, pixels);
+		const result = await addSprite(data, pixels);
 		results.push(result);
 
 		// Stop on first error
