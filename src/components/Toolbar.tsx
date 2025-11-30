@@ -1,24 +1,26 @@
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
-import { loadTibiaData } from '@/lib/tibia';
 import { useToast } from '@/hooks/use-toast';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useTibiaData } from '@/contexts/TibiaDataContext';
+import { loadTibiaData, optimizeSprites } from '@/lib/tibia';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { usePanelSettings } from '@/contexts/PanelSettingsContext';
-import { X, Eye, List, Info, Minus, Square, Search, Palette, History, HardDrive, FolderOpen } from 'lucide-react';
+import { X, Eye, List, Info, Minus, Square, Search, Palette, History, Sparkles, HardDrive, FolderOpen } from 'lucide-react';
 
 import { Button } from './ui/button';
 import { LoadingDialog } from './LoadingDialog';
 import { FolderSelectDialog } from './FolderSelectDialog';
 import { ThemeSettingsDialog } from './ThemeSettingsDialog';
 import { VersionHistoryDialog } from './VersionHistoryDialog';
-import { OpenAssetFilesDialog, LoadOptions } from './OpenAssetFilesDialog';
+import { SpriteOptimizerDialog } from './SpriteOptimizerDialog';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
+import { LoadOptions, OpenAssetFilesDialog } from './OpenAssetFilesDialog';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from './ui/tooltip';
 
 export const Toolbar = () => {
-	const { data, setData, setError, isLoading, setLoading, compileFiles, loadingProgress, hasModifiedItems } = useTibiaData();
+	const { data, setData, setError, isLoading, setLoading, compileFiles, loadingProgress, hasModifiedItems, notifyDataChanged } =
+		useTibiaData();
 	const { settings, togglePanel } = usePanelSettings();
 	const { toast } = useToast();
 	const [folderDialogOpen, setFolderDialogOpen] = useState(false);
@@ -26,11 +28,81 @@ export const Toolbar = () => {
 	const [selectedFolderPath, setSelectedFolderPath] = useState('');
 	const [themeDialogOpen, setThemeDialogOpen] = useState(false);
 	const [versionHistoryOpen, setVersionHistoryOpen] = useState(false);
+	const [optimizerOpen, setOptimizerOpen] = useState(false);
+	const [isOptimizing, setIsOptimizing] = useState(false);
+	const [optimizerProgress, setOptimizerProgress] = useState({ total: 0, current: 0, message: '' });
+	const [optimizerResult, setOptimizerResult] = useState<null | { oldTotal: number; newTotal: number; removedCount: number }>(
+		null
+	);
+
+	const [originalSprPath, setOriginalSprPath] = useState<null | string>(null);
+
+	const handleOptimize = () => {
+		setOptimizerOpen(true);
+		setOptimizerResult(null);
+		setOptimizerProgress({ total: 0, current: 0, message: 'Ready to optimize' });
+	};
+
+	const runOptimization = async () => {
+		if (!data) return;
+
+		setIsOptimizing(true);
+		// Store original path before optimization if not already stored
+		if (!originalSprPath) {
+			setOriginalSprPath(data.sprPath);
+		}
+
+		try {
+			const result = await optimizeSprites(data, (message, current, total) => {
+				setOptimizerProgress({ total, message, current });
+			});
+
+			setOptimizerResult(result);
+
+			// Create new data object to avoid mutating state directly
+			// and to ensure setData closes the OLD path correctly
+			const newData = { ...data };
+			newData.sprPath = result.tempPath;
+			newData.spritesCount = result.newTotal;
+
+			// Update data reference to trigger re-render with new temp path
+			setData(newData, null as any);
+
+			toast({
+				title: 'Optimization Complete',
+				description: `Removed ${result.removedCount} sprites. New total: ${result.newTotal}. Click Compile to save changes.`
+			});
+
+			// Mark as modified so Compile button is enabled
+			if (newData) {
+				notifyDataChanged();
+			}
+		} catch (error) {
+			toast({
+				variant: 'destructive',
+				title: 'Optimization Failed',
+				description: error instanceof Error ? error.message : 'Unknown error'
+			});
+			setOptimizerOpen(false);
+		} finally {
+			setIsOptimizing(false);
+		}
+	};
+
+	// Effect to notify data changed when optimization completes successfully
+	// We do this in a separate effect or just call it if we extract it from context
+
+	// We can't call hook inside function, so we use the one from top level
+	// But runOptimization is inside component, so it has access to notifyDataChanged from line 22
+
+	// Let's update runOptimization to call notifyDataChanged
+	// Re-declaring runOptimization to include notifyDataChanged call
 
 	const handleFolderSelect = async (selectedPath: string, transparency: boolean) => {
 		try {
 			setLoading(true);
 			setError(null);
+			setOriginalSprPath(null); // Reset original path on new load
 
 			const datPath = `${selectedPath}\\Tibia.dat`;
 			const sprPath = `${selectedPath}\\Tibia.spr`;
@@ -125,7 +197,7 @@ export const Toolbar = () => {
 	const handleCompile = async (e: React.MouseEvent) => {
 		e.stopPropagation();
 
-		if (!hasModifiedItems()) {
+		if (!hasModifiedItems() && !originalSprPath) {
 			toast({
 				title: 'No changes to compile',
 				description: 'Make some changes to items before compiling.'
@@ -134,6 +206,34 @@ export const Toolbar = () => {
 		}
 
 		try {
+			// If we have an optimized temp file, apply it to the original path first
+			if (originalSprPath && data) {
+				const { invoke } = await import('@tauri-apps/api/core');
+
+				// 1. Close the TEMP file handle in the backend
+				await invoke('close_spr_file', { path: data.sprPath });
+
+				// 2. Apply optimization (swap files)
+				await invoke('apply_optimization', {
+					tempPath: data.sprPath,
+					originalPath: originalSprPath
+				});
+
+				// 3. Update data to point back to original path
+				data.sprPath = originalSprPath;
+				setOriginalSprPath(null);
+
+				// 4. Re-open the ORIGINAL file (now containing optimized data)
+				// This is crucial because compileFiles might need to read from it
+				await invoke('open_spr_file', {
+					path: data.sprPath,
+					extended: data.extended
+				});
+
+				// We still need to run compileFiles to save the DAT file (which has updated IDs)
+				// and any other changes
+			}
+
 			await compileFiles();
 
 			toast({
@@ -213,6 +313,17 @@ export const Toolbar = () => {
 						<History className="h-3.5 w-3.5 mr-1.5" />
 						History
 					</Button>
+					<Button
+						size="sm"
+						variant="ghost"
+						onClick={handleOptimize}
+						disabled={!data || isLoading}
+						className="h-8 text-xs font-medium"
+						onMouseDown={(e) => e.stopPropagation()}
+					>
+						<Sparkles className="h-3.5 w-3.5 mr-1.5" />
+						Optimize
+					</Button>
 				</div>
 
 				<div className="h-5 w-px bg-border/50 flex-shrink-0" />
@@ -248,7 +359,6 @@ export const Toolbar = () => {
 
 								// Listen for creation success/error
 								newWindow.once('tauri://error', (error) => {
-									console.error('Failed to create find window:', error);
 									toast({
 										title: 'Error',
 										variant: 'destructive',
@@ -257,7 +367,6 @@ export const Toolbar = () => {
 								});
 							}
 						} catch (error: any) {
-							console.error('Failed to open find window:', error);
 							toast({
 								title: 'Error',
 								variant: 'destructive',
@@ -441,19 +550,30 @@ export const Toolbar = () => {
 
 			<FolderSelectDialog
 				open={folderDialogOpen}
-				onFolderSelected={handleFolderChosen}
 				onOpenChange={setFolderDialogOpen}
+				onFolderSelected={handleFolderChosen}
 				title="Select folder containing Tibia.dat and Tibia.spr"
 			/>
 			<OpenAssetFilesDialog
 				open={assetDialogOpen}
+				onLoad={handleLoadWithOptions}
 				initialPath={selectedFolderPath}
 				onOpenChange={setAssetDialogOpen}
-				onLoad={handleLoadWithOptions}
 				onBrowse={handleBrowseFromAssetDialog}
 			/>
 			<ThemeSettingsDialog open={themeDialogOpen} onOpenChange={setThemeDialogOpen} />
 			<VersionHistoryDialog open={versionHistoryOpen} onOpenChange={setVersionHistoryOpen} />
+			<SpriteOptimizerDialog
+				open={optimizerOpen}
+				result={optimizerResult}
+				isOptimizing={isOptimizing}
+				onOptimize={runOptimization}
+				progress={optimizerProgress}
+				onOpenChange={(open) => {
+					if (isOptimizing) return;
+					setOptimizerOpen(open);
+				}}
+			/>
 		</>
 	);
 };
