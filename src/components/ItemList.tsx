@@ -236,15 +236,12 @@ export const ItemList = () => {
 							}
 						}
 
-						// Also collect from all frame groups (walking group, etc.)
-						// This is needed for 10.98+ outfits where walking sprites are in frameGroupsData[1]
-						if (item.frameGroupsData) {
-							for (const group of item.frameGroupsData) {
-								if (group?.spriteIndex && group.spriteIndex.length > 0) {
-									for (const spriteId of group.spriteIndex) {
-										if (spriteId && isValidSpriteId(spriteId, data.spritesCount)) {
-											ids.push(spriteId);
-										}
+						if (item.frameGroupsData && item.frameGroupsData.length > 0) {
+							const idleGroup = item.frameGroupsData[0];
+							if (idleGroup?.spriteIndex && idleGroup.spriteIndex.length > 0) {
+								for (const spriteId of idleGroup.spriteIndex) {
+									if (spriteId && isValidSpriteId(spriteId, data.spritesCount)) {
+										ids.push(spriteId);
 									}
 								}
 							}

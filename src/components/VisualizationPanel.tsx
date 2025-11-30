@@ -1,5 +1,5 @@
-import { ThingCategory } from '@/lib/tibia';
 import { Play, Pause, FileQuestion } from 'lucide-react';
+import { ThingCategory, loadSpriteIds } from '@/lib/tibia';
 import { useTibiaData } from '@/contexts/TibiaDataContext';
 import { useRef, useMemo, useState, useEffect } from 'react';
 
@@ -8,7 +8,7 @@ import { SpriteCanvas } from './SpriteCanvas';
 import { CheckerBoard } from './CheckerBoard';
 
 export const VisualizationPanel = () => {
-	const { data, getThing, selectedCategory, highlightedItemId } = useTibiaData();
+	const { data, getThing, selectedCategory, highlightedItemId, notifySpritesLoaded } = useTibiaData();
 	const item = highlightedItemId ? getThing(highlightedItemId, selectedCategory) : null;
 
 	// Animation state
@@ -44,6 +44,35 @@ export const VisualizationPanel = () => {
 			cancelAnimationFrame(requestRef.current);
 		}
 	}, [highlightedItemId, selectedCategory]);
+
+	// Fast load walking sprites when outfit is highlighted
+	// This enables immediate animation playback in the visualization panel
+	useEffect(() => {
+		if (!data?.sprPath || !item) return;
+
+		// Only for outfits with walking frame groups
+		if (item.category !== ThingCategory.OUTFIT || !item.frameGroupsData || item.frameGroupsData.length < 2) {
+			return;
+		}
+
+		const walkingGroup = item.frameGroupsData[1];
+		if (!walkingGroup?.spriteIndex || walkingGroup.spriteIndex.length === 0) {
+			return;
+		}
+
+		// Check if walking sprites are already cached
+		const uncachedIds = walkingGroup.spriteIndex.filter((id) => id > 0 && !data.sprites.has(id));
+
+		if (uncachedIds.length === 0) {
+			return; // Already loaded
+		}
+
+		// Load walking sprites immediately (small batch - ~24 sprites max)
+		// Use non-LZ4 version since batch is small - less overhead
+		loadSpriteIds(data.sprPath, uncachedIds, data.transparency, data.sprites).then(() => {
+			notifySpritesLoaded();
+		});
+	}, [highlightedItemId, item, data, notifySpritesLoaded]);
 
 	// Determine which frame group to use for animation
 	// For outfits with frame groups, use walking group (index 1) if it has animation
