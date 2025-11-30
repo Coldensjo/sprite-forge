@@ -6,7 +6,7 @@
  * The binary format is defined in dat_reader.rs::encode_dat_to_binary
  */
 
-import { ThingType, ThingCategory, FrameDuration, createThingType } from './types';
+import { ThingType, ThingCategory, createThingType } from './types';
 
 // Flag bit positions (must match Rust encode_flags in dat_reader.rs)
 // Bits 0-31 are in flagsLow, bits 32-42 are in flagsHigh
@@ -76,6 +76,10 @@ export interface DatParseResult {
  * This is MUCH faster than JSON parsing for large data sets
  */
 export function decodeDatResponse(buffer: Uint8Array): DatParseResult {
+	if (!buffer || buffer.byteLength < 20) {
+		throw new Error(`Invalid DAT response: buffer is ${buffer?.byteLength || 0} bytes (expected at least 20)`);
+	}
+
 	const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);
 	let offset = 0;
 
@@ -98,51 +102,62 @@ export function decodeDatResponse(buffer: Uint8Array): DatParseResult {
 
 	// Decode items
 	for (let i = 0; i < itemsCount; i++) {
-		const [thing, newOffset] = decodeThing(view, buffer, offset, ThingCategory.ITEM);
-		items.set(thing.id, thing);
-		offset = newOffset;
+		try {
+			const [thing, newOffset] = decodeThing(view, buffer, offset, ThingCategory.ITEM);
+			items.set(thing.id, thing);
+			offset = newOffset;
+		} catch (e) {
+			throw new Error(`Failed to decode item ${i + 1}/${itemsCount} at offset ${offset}: ${e}`);
+		}
 	}
 
 	// Decode outfits
 	for (let i = 0; i < outfitsCount; i++) {
-		const [thing, newOffset] = decodeThing(view, buffer, offset, ThingCategory.OUTFIT);
-		outfits.set(thing.id, thing);
-		offset = newOffset;
+		try {
+			const [thing, newOffset] = decodeThing(view, buffer, offset, ThingCategory.OUTFIT);
+			outfits.set(thing.id, thing);
+			offset = newOffset;
+		} catch (e) {
+			throw new Error(`Failed to decode outfit ${i + 1}/${outfitsCount} at offset ${offset}: ${e}`);
+		}
 	}
 
 	// Decode effects
 	for (let i = 0; i < effectsCount; i++) {
-		const [thing, newOffset] = decodeThing(view, buffer, offset, ThingCategory.EFFECT);
-		effects.set(thing.id, thing);
-		offset = newOffset;
+		try {
+			const [thing, newOffset] = decodeThing(view, buffer, offset, ThingCategory.EFFECT);
+			effects.set(thing.id, thing);
+			offset = newOffset;
+		} catch (e) {
+			throw new Error(`Failed to decode effect ${i + 1}/${effectsCount} at offset ${offset}: ${e}`);
+		}
 	}
 
 	// Decode missiles
 	for (let i = 0; i < missilesCount; i++) {
-		const [thing, newOffset] = decodeThing(view, buffer, offset, ThingCategory.MISSILE);
-		missiles.set(thing.id, thing);
-		offset = newOffset;
+		try {
+			const [thing, newOffset] = decodeThing(view, buffer, offset, ThingCategory.MISSILE);
+			missiles.set(thing.id, thing);
+			offset = newOffset;
+		} catch (e) {
+			throw new Error(`Failed to decode missile ${i + 1}/${missilesCount} at offset ${offset}: ${e}`);
+		}
 	}
 
 	return {
+		items,
+		outfits,
+		effects,
+		missiles,
 		signature,
 		itemsCount,
 		outfitsCount,
 		effectsCount,
-		missilesCount,
-		items,
-		outfits,
-		effects,
-		missiles
+		missilesCount
 	};
 }
 
-function decodeThing(
-	view: DataView,
-	buffer: Uint8Array,
-	offset: number,
-	category: ThingCategory
-): [ThingType, number] {
+function decodeThing(view: DataView, buffer: Uint8Array, offset: number, category: ThingCategory): [ThingType, number] {
 	const thing = createThingType(0, category);
 
 	// Fixed header (12 bytes)
@@ -287,37 +302,25 @@ function decodeThing(
 		offset += 2;
 	}
 
-	// Animation data (only if is_animation AND has frame durations in file)
-	if (thing.isAnimation && thing.frames > 1) {
-		// Check if there's animation data by checking remaining bytes
-		// Animation data block: mode(1) + loopCount(4) + startFrame(1) + count(1) + durations(8*n)
-		// We need to peek if there's animation data - it's only present if encoded
-		// The Rust encoder only writes animation data if frame_durations is not empty
-		// We can detect this by checking if we have enough remaining data
-		const remainingBeforeNext = buffer.length - offset;
-		if (remainingBeforeNext >= 7) {
-			// Minimum animation header size
-			// Try to read animation data
-			const mode = view.getUint8(offset);
-			// Sanity check: animation mode should be 0, 1, or 2
-			if (mode <= 2) {
-				thing.animationMode = mode;
-				offset += 1;
-				thing.loopCount = view.getInt32(offset, true);
-				offset += 4;
-				thing.startFrame = view.getInt8(offset);
-				offset += 1;
-				const durationCount = view.getUint8(offset);
-				offset += 1;
-				thing.frameDurations = [];
-				for (let i = 0; i < durationCount; i++) {
-					const minimum = view.getUint32(offset, true);
-					offset += 4;
-					const maximum = view.getUint32(offset, true);
-					offset += 4;
-					thing.frameDurations.push({ minimum, maximum });
-				}
-			}
+	// Animation data (only present if isAnimation flag is set)
+	// The Rust encoder only sets isAnimation flag AND writes animation data when frame_durations is not empty
+	// So if isAnimation is true, animation data MUST follow
+	if (thing.isAnimation) {
+		thing.animationMode = view.getUint8(offset);
+		offset += 1;
+		thing.loopCount = view.getInt32(offset, true);
+		offset += 4;
+		thing.startFrame = view.getInt8(offset);
+		offset += 1;
+		const durationCount = view.getUint8(offset);
+		offset += 1;
+		thing.frameDurations = [];
+		for (let i = 0; i < durationCount; i++) {
+			const minimum = view.getUint32(offset, true);
+			offset += 4;
+			const maximum = view.getUint32(offset, true);
+			offset += 4;
+			thing.frameDurations.push({ minimum, maximum });
 		}
 	}
 
