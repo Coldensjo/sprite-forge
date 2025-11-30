@@ -9,12 +9,14 @@ import {
 	Play,
 	Move,
 	Save,
+	Plus,
 	Pause,
 	Undo2,
 	ZoomIn,
 	ZoomOut,
 	ArrowUp,
 	Shuffle,
+	Compass,
 	SkipBack,
 	ChevronUp,
 	ArrowDown,
@@ -130,14 +132,90 @@ export const PropertiesPanel = () => {
 	const [draftItem, setDraftItem] = useState<typeof item>(null);
 	const [hasChanges, setHasChanges] = useState(false);
 	const [showCloseConfirm, setShowCloseConfirm] = useState(false);
+	const [selectedFrameGroup, setSelectedFrameGroup] = useState(0);
+	const selectedFrameGroupRef = useRef(0);
 	const originalItemRef = useRef<typeof item>(null);
 
 	// Initialize draft when item changes
 	useEffect(() => {
 		if (item && openedItemId && openedItemCategory) {
-			originalItemRef.current = { ...item };
-			setDraftItem({ ...item });
+			let initialItem = { ...item };
+			let initialGroup = 0;
+
+			// For outfits, ensure frameGroupsData exists (initialize if missing)
+			if (item.category === ThingCategory.OUTFIT) {
+				if (!initialItem.frameGroupsData || initialItem.frameGroupsData.length === 0) {
+					// Create default frame group from item properties
+					initialItem.frameGroupsData = [
+						{
+							type: 0, // Idle
+							width: initialItem.width,
+							height: initialItem.height,
+							layers: initialItem.layers,
+							frames: initialItem.frames,
+							patternX: initialItem.patternX,
+							patternY: initialItem.patternY,
+							patternZ: initialItem.patternZ,
+							exactSize: initialItem.exactSize,
+							loopCount: initialItem.loopCount,
+							startFrame: initialItem.startFrame,
+							isAnimation: initialItem.isAnimation,
+							animationMode: initialItem.animationMode,
+							frameDurations: initialItem.frameDurations,
+							spriteIndex: [...(initialItem.spriteIndex || [])]
+						}
+					];
+				}
+
+				// Default to Walking group (index 1) for outfits if available
+				// This matches Object Builder behavior and ensures animation controller shows up
+				if (initialItem.frameGroupsData.length > 1) {
+					initialGroup = 1;
+					const group = initialItem.frameGroupsData[1];
+					initialItem = {
+						...initialItem,
+						width: group.width,
+						height: group.height,
+						frames: group.frames,
+						layers: group.layers,
+						patternX: group.patternX,
+						patternY: group.patternY,
+						patternZ: group.patternZ,
+						exactSize: group.exactSize,
+						spriteIndex: group.spriteIndex,
+						isAnimation: group.isAnimation,
+						loopCount: group.loopCount || 0,
+						startFrame: group.startFrame || 0,
+						animationMode: group.animationMode || 0,
+						frameDurations: group.frameDurations || []
+					};
+				} else if (initialItem.frameGroupsData.length === 1) {
+					// Load the first (and only) frame group
+					const group = initialItem.frameGroupsData[0];
+					initialItem = {
+						...initialItem,
+						width: group.width,
+						height: group.height,
+						frames: group.frames,
+						layers: group.layers,
+						patternX: group.patternX,
+						patternY: group.patternY,
+						patternZ: group.patternZ,
+						exactSize: group.exactSize,
+						spriteIndex: group.spriteIndex,
+						isAnimation: group.isAnimation,
+						loopCount: group.loopCount || 0,
+						startFrame: group.startFrame || 0,
+						animationMode: group.animationMode || 0,
+						frameDurations: group.frameDurations || []
+					};
+				}
+			}
+
+			setDraftItem(initialItem);
 			setHasChanges(false);
+			setSelectedFrameGroup(initialGroup);
+			selectedFrameGroupRef.current = initialGroup;
 			markUnsavedChanges(openedItemId, openedItemCategory, false);
 		} else {
 			originalItemRef.current = null;
@@ -156,7 +234,23 @@ export const PropertiesPanel = () => {
 				finalValue = Number(value);
 			}
 
-			setDraftItem((prev) => (prev ? { ...prev, [property]: finalValue } : null));
+			setDraftItem((prev) => {
+				if (!prev) return null;
+				const newItem = { ...prev, [property]: finalValue };
+
+				// Update frameGroupsData if it exists
+				const currentFrameGroup = selectedFrameGroupRef.current;
+				if (newItem.frameGroupsData && newItem.frameGroupsData[currentFrameGroup]) {
+					// Update the specific group data
+					const newGroups = [...newItem.frameGroupsData];
+					newGroups[currentFrameGroup] = {
+						...newGroups[currentFrameGroup],
+						[property]: finalValue
+					};
+					newItem.frameGroupsData = newGroups;
+				}
+				return newItem;
+			});
 			setHasChanges(true);
 			markUnsavedChanges(openedItemId, openedItemCategory, true);
 		},
@@ -327,6 +421,8 @@ export const PropertiesPanel = () => {
 	const [showExactSize, setShowExactSize] = useState(false);
 	const [showGrid, setShowGrid] = useState(false);
 	const [isPanEnabled, setIsPanEnabled] = useState(false);
+	const [isMiddleMousePanning, setIsMiddleMousePanning] = useState(false);
+	const [showDirectionButtons, setShowDirectionButtons] = useState(true);
 
 	// Pattern and frame state for rendering
 	const [patternX, setPatternX] = useState(0);
@@ -344,6 +440,152 @@ export const PropertiesPanel = () => {
 		feet: 0,
 		addons: [false, false] // [addon1, addon2]
 	});
+
+	const handleFrameGroupChange = (index: number) => {
+		setSelectedFrameGroup(index);
+		selectedFrameGroupRef.current = index;
+		if (draftItem && draftItem.frameGroupsData) {
+			const group = draftItem.frameGroupsData[index];
+			if (group) {
+				setDraftItem((prev) => ({
+					...prev!,
+					width: group.width,
+					height: group.height,
+					frames: group.frames,
+					layers: group.layers,
+					patternX: group.patternX,
+					patternY: group.patternY,
+					patternZ: group.patternZ,
+					exactSize: group.exactSize,
+					spriteIndex: group.spriteIndex,
+					isAnimation: group.isAnimation,
+					loopCount: group.loopCount || 0,
+					startFrame: group.startFrame || 0,
+					animationMode: group.animationMode || 0,
+					frameDurations: group.frameDurations || []
+				}));
+				// Reset current frame to 0 to avoid out of bounds
+				setCurrentFrame(0);
+			}
+		}
+	};
+
+	const handleCreateFrameGroup = () => {
+		if (!draftItem || !isOutfit) return;
+
+		const currentGroups = draftItem.frameGroupsData || [];
+		if (currentGroups.length >= 2) return; // Maximum 2 frame groups
+
+		// Determine new group type (Walking=1, Idle=0)
+		// If we have no groups, default to Idle (0)
+		// If we have one group, check its type and pick the other one
+		let type = 0;
+		if (currentGroups.length > 0) {
+			const existingType = currentGroups[0].type;
+			type = existingType === 0 ? 1 : 0;
+		}
+
+		// Default values matching Object Builder behavior
+		const width = 1;
+		const height = 1;
+		const exactSize = 32;
+		const layers = 1;
+		const patternX = 4; // 4 directions
+		const patternY = 1;
+		const patternZ = 1;
+		const frames = type === 1 ? 3 : 1; // 3 frames for walking (type 1), 1 for idle (type 0)
+
+		// Initialize empty sprites (ID 0)
+		const totalSprites = width * height * layers * patternX * patternY * patternZ * frames;
+		const spriteIndex = new Array(totalSprites).fill(0);
+
+		// Create new frame group with defaults
+		const newGroup = {
+			type,
+			width,
+			height,
+			layers,
+			frames,
+			patternX,
+			patternY,
+			patternZ,
+			exactSize,
+			spriteIndex,
+			loopCount: 0,
+			startFrame: 0,
+			animationMode: 0, // Asynchronous
+			frameDurations: [],
+			isAnimation: frames > 1
+		};
+
+		const newGroups = [...currentGroups, newGroup];
+		const newIndex = newGroups.length - 1;
+
+		setDraftItem((prev) => ({
+			...prev!,
+			width: newGroup.width,
+			height: newGroup.height,
+			frames: newGroup.frames,
+			layers: newGroup.layers,
+			frameGroupsData: newGroups,
+			patternX: newGroup.patternX,
+			patternY: newGroup.patternY,
+			patternZ: newGroup.patternZ,
+			exactSize: newGroup.exactSize,
+			spriteIndex: newGroup.spriteIndex,
+			isAnimation: newGroup.isAnimation,
+			loopCount: newGroup.loopCount || 0,
+			startFrame: newGroup.startFrame || 0,
+			animationMode: newGroup.animationMode || 0,
+			frameDurations: newGroup.frameDurations || []
+		}));
+
+		setSelectedFrameGroup(newIndex);
+		selectedFrameGroupRef.current = newIndex;
+		setCurrentFrame(0);
+		setHasChanges(true);
+		if (openedItemId && openedItemCategory) {
+			markUnsavedChanges(openedItemId, openedItemCategory, true);
+		}
+	};
+
+	const handleDeleteFrameGroup = () => {
+		if (!draftItem || !isOutfit) return;
+
+		const currentGroups = draftItem.frameGroupsData || [];
+		if (currentGroups.length <= 1) return; // Must keep at least 1 frame group
+
+		const newGroups = currentGroups.filter((_, idx) => idx !== selectedFrameGroup);
+		const newIndex = Math.min(selectedFrameGroup, newGroups.length - 1);
+		const group = newGroups[newIndex];
+
+		setDraftItem((prev) => ({
+			...prev!,
+			width: group.width,
+			height: group.height,
+			frames: group.frames,
+			layers: group.layers,
+			patternX: group.patternX,
+			patternY: group.patternY,
+			patternZ: group.patternZ,
+			frameGroupsData: newGroups,
+			exactSize: group.exactSize,
+			spriteIndex: group.spriteIndex,
+			isAnimation: group.isAnimation,
+			loopCount: group.loopCount || 0,
+			startFrame: group.startFrame || 0,
+			animationMode: group.animationMode || 0,
+			frameDurations: group.frameDurations || []
+		}));
+
+		setSelectedFrameGroup(newIndex);
+		selectedFrameGroupRef.current = newIndex;
+		setCurrentFrame(0);
+		setHasChanges(true);
+		if (openedItemId && openedItemCategory) {
+			markUnsavedChanges(openedItemId, openedItemCategory, true);
+		}
+	};
 
 	const zoomLevels = [1, 2, 4, 8];
 
@@ -462,62 +704,152 @@ export const PropertiesPanel = () => {
 	]);
 
 	// Animation loop
-	useEffect(() => {
-		let timeoutId: NodeJS.Timeout;
+	// Animation Logic - Re-implementing Object Builder Logic
+	// Reference: ThingDataView.as and Animator.as
 
-		if (isPlaying && item && draftItem && item.frames > 1) {
-			// For outfits, skip first frame if animateAlways is false
-			const skipFirstFrame = isOutfit && draftItem && !draftItem.animateAlways;
-			const startFrame = skipFirstFrame ? 1 : 0;
-			const endFrame = item.frames - 1;
-			const frameCount = endFrame - startFrame + 1;
+	const animationState = useRef({
+		lastTime: 0,
+		timeRemaining: 0,
+		skipFirstFrame: false,
+		durations: [] as number[]
+	});
 
-			if (frameCount <= 0) {
-				setIsPlaying(false);
-				return;
-			}
+	const requestRef = useRef<number>();
 
-			const animate = () => {
-				setCurrentFrame((prev) => {
-					let nextFrame = prev + 1;
-					if (nextFrame > endFrame) {
-						nextFrame = startFrame;
-					}
-					return nextFrame;
-				});
-			};
+	const animate = (time: number) => {
+		if (!isPlaying || !draftItem) return;
 
-			// Determine duration for current frame using correct animation timing
-			let duration = 200; // Default 200ms
+		const state = animationState.current;
 
-			if (isOutfit) {
-				// CRITICAL: Outfits use 1000/frames with OTClient clamping
-				// This matches our generateDefaultDurations() logic
-				duration = draftItem.frames > 0 ? Math.floor(1000 / draftItem.frames) : 333;
-				const maxDelay = draftItem.frames > 2 ? 80 : 205;
-				duration = Math.min(duration, maxDelay);
-			} else if (draftItem.frameDurations && item.frameDurations[currentFrame]) {
-				const fd = item.frameDurations[currentFrame];
-				// Use minimum duration if available, otherwise default
-				duration = fd.minimum > 0 ? fd.minimum : 200;
-			} else {
-				// Use category-specific defaults
-				if (item.category === 'effect') {
-					duration = 200;
-				} else if (item.category === 'missile') {
-					duration = 300;
-				} else {
-					duration = 500;
+		// Initialize lastTime if needed
+		if (state.lastTime === 0) {
+			state.lastTime = time;
+			requestRef.current = requestAnimationFrame(animate);
+			return;
+		}
+
+		const elapsed = time - state.lastTime;
+		state.lastTime = time;
+
+		if (state.durations.length === 0) return;
+
+		// Logic from Animator.as update()
+		if (elapsed >= state.timeRemaining) {
+			// Advance frame
+			setCurrentFrame((prevFrame) => {
+				const frames = draftItem.frames;
+				let nextFrame = prevFrame + 1;
+
+				// Loop logic
+				if (nextFrame >= frames) {
+					nextFrame = 0;
 				}
+
+				// Skip first frame logic (Animator.as line 144)
+				// m_currentFrame = skipFirstFrame && frame == 0 ? 1 % frames : frame;
+				if (state.skipFirstFrame && nextFrame === 0) {
+					nextFrame = 1 % frames;
+				}
+
+				// Update duration for the new frame
+				// Animator.as line 137: var duration:int = this.durations[frame].duration - (elapsed - m_currentFrameDuration);
+				// We simplify this by just setting the new duration, but subtracting the overshoot would be more precise.
+				// For now, let's just set the new duration to avoid drift issues in JS.
+				const nextDuration = state.durations[nextFrame] || 200;
+				state.timeRemaining = nextDuration - (elapsed - state.timeRemaining);
+
+				// Clamp to 0
+				if (state.timeRemaining < 0) state.timeRemaining = 0;
+
+				return nextFrame;
+			});
+		} else {
+			state.timeRemaining -= elapsed;
+		}
+
+		requestRef.current = requestAnimationFrame(animate);
+	};
+
+	useEffect(() => {
+		if (isPlaying && draftItem) {
+			// 1. Setup Durations (ThingDataView.as setThingData)
+			const currentGroup = draftItem.frameGroupsData?.[selectedFrameGroupRef.current];
+
+			// Get base durations
+			let durations: number[] = [];
+
+			// Use durations from the current frame group if available
+			const groupDurations = currentGroup?.frameDurations;
+			if (groupDurations && groupDurations.length > 0) {
+				durations = groupDurations.map((d) => d.minimum);
+			} else if (draftItem.frameDurations && draftItem.frameDurations.length > 0) {
+				// Fallback to item-level durations (usually same as group 0)
+				durations = draftItem.frameDurations.map((d) => d.minimum);
+			} else {
+				// Fallback defaults if no duration data is available
+				// Matches Object Builder ObjectBuilderSettings.as defaults
+				let defaultDuration = 500; // Item default
+				if (draftItem.category === ThingCategory.OUTFIT) {
+					defaultDuration = 300;
+				} else if (draftItem.category === ThingCategory.EFFECT) {
+					defaultDuration = 100; // Object Builder uses 100ms for effects
+				} else if (draftItem.category === ThingCategory.MISSILE) {
+					defaultDuration = 150;
+				}
+				durations = new Array(draftItem.frames).fill(defaultDuration);
 			}
 
-			timeoutId = setTimeout(animate, duration);
+			// Object Builder Override Logic (ThingDataView.as lines 239-244)
+			// "if(durations && frameGroup.type == FrameGroupType.WALKING && frameGroup.frames > 2)"
+			// The 1000/frames override ONLY applies for actual WALKING frame groups (type 1)
+			// NOT for simulated walking on Idle/Default groups (older versions like 8.60)
+			const isOutfit = draftItem.category === ThingCategory.OUTFIT;
+			const isGroupWalking = currentGroup?.type === 1;
+
+			// Only apply the walking duration override for actual WALKING frame groups
+			if (isGroupWalking && draftItem.frames > 2) {
+				const calculatedDuration = Math.floor(1000 / draftItem.frames);
+				durations = durations.map(() => calculatedDuration);
+			}
+
+			// Sanity check: Ensure no duration is 0 or too small
+			durations = durations.map((d) => Math.max(d, 50));
+
+			console.log('[AnimDebug] Setup', {
+				durations,
+				isGroupWalking,
+				frames: draftItem.frames,
+				category: draftItem.category,
+				groupDurationsLen: groupDurations?.length,
+				itemDurationsLen: draftItem.frameDurations?.length
+			});
+
+			// Setup Animator State
+			animationState.current.durations = durations;
+
+			// Skip First Frame Logic (ThingDataView.as line 248)
+			// _animator.skipFirstFrame = (thingData.category == ThingCategory.OUTFIT && !thingData.thing.animateAlways && frameGroup.type != FrameGroupType.WALKING);
+			const animateAlways = draftItem.animateAlways;
+			const isIdle = currentGroup?.type !== 1; // Not walking
+
+			animationState.current.skipFirstFrame = isOutfit && !animateAlways && isIdle;
+
+			// Initialize time remaining for current frame if starting fresh
+			if (animationState.current.timeRemaining <= 0) {
+				animationState.current.timeRemaining = durations[currentFrame] || 200;
+			}
+
+			// Start Loop
+			animationState.current.lastTime = 0; // Reset time
+			requestRef.current = requestAnimationFrame(animate);
+		} else {
+			if (requestRef.current) cancelAnimationFrame(requestRef.current);
 		}
 
 		return () => {
-			if (timeoutId) clearTimeout(timeoutId);
+			if (requestRef.current) cancelAnimationFrame(requestRef.current);
 		};
-	}, [isPlaying, item, currentFrame, isOutfit, draftItem]);
+	}, [isPlaying, draftItem, data, selectedFrameGroup]);
 
 	// Direction handlers for outfits
 	// Arrow buttons control direction (patternX):
@@ -562,13 +894,13 @@ export const PropertiesPanel = () => {
 	};
 
 	const handleNextFrame = () => {
-		if (item && currentFrame < item.frames - 1) {
+		if (draftItem && currentFrame < draftItem.frames - 1) {
 			setCurrentFrame(currentFrame + 1);
 		}
 	};
 
 	const handleLastFrame = () => {
-		if (item) {
+		if (draftItem) {
 			setCurrentFrame(draftItem.frames - 1);
 		}
 	};
@@ -723,11 +1055,14 @@ export const PropertiesPanel = () => {
 			// Update previous item ref immediately after loading completes
 			previousItemRef.current = { id: openedItemId, category: openedItemCategory };
 			hasLoadedStateRef.current = true;
-			// Clear loading flag AFTER a brief delay to ensure all state updates are complete
+			// Clear loading flag AFTER React completes its render cycle
 			// This prevents the save effect from running immediately after loading
-			setTimeout(() => {
-				isLoadingStateRef.current = false;
-			}, 100);
+			// Using double requestAnimationFrame ensures all state updates are flushed
+			requestAnimationFrame(() => {
+				requestAnimationFrame(() => {
+					isLoadingStateRef.current = false;
+				});
+			});
 		} else {
 			hasLoadedStateRef.current = false;
 			isLoadingStateRef.current = false;
@@ -912,9 +1247,9 @@ export const PropertiesPanel = () => {
 					<div
 						className={`grid gap-4 mb-4 grid-cols-1 min-[820px]:grid-cols-[361px_1fr] ${isOutfit ? '' : 'min-[1400px]:grid-cols-[361px_1fr_1fr]'}`}
 					>
-						<div className="w-full max-w-[361px] mx-auto min-[820px]:w-[361px] min-[820px]:max-w-none">
-							<div className="flex flex-col items-center justify-between space-y-4">
-								<div className="relative w-full">
+						<div className="w-full max-w-[361px] mx-auto min-[820px]:w-[361px] min-[820px]:max-w-none flex flex-col h-full">
+							<div className="flex flex-col items-center justify-between space-y-4 flex-1">
+								<div className="relative w-full flex-1">
 									{/* Size badge - Top Left */}
 									<div className="absolute top-2 left-2 z-10 bg-secondary/90 backdrop-blur-sm px-2 py-0.5 rounded text-[10px] text-muted-foreground font-mono border border-border/50 shadow-lg">
 										{draftItem.width * draftItem.exactSize}x{draftItem.height * draftItem.exactSize}
@@ -922,7 +1257,7 @@ export const PropertiesPanel = () => {
 
 									{/* Hovered Sprite ID Badge */}
 									{hoveredSpriteId !== null && (
-										<div className="absolute top-2 left-24 z-10 bg-secondary/90 backdrop-blur-sm px-2 py-0.5 rounded text-[10px] text-muted-foreground font-mono border border-border/50 shadow-lg">
+										<div className="absolute bottom-2 right-2 z-10 bg-secondary/90 backdrop-blur-sm px-2 py-0.5 rounded text-[10px] text-muted-foreground font-mono border border-border/50 shadow-lg">
 											Sprite: {hoveredSpriteId}
 										</div>
 									)}
@@ -974,10 +1309,10 @@ export const PropertiesPanel = () => {
 									)}
 
 									{/* Missile Directional Controls - Overlay on Canvas */}
-									{itemCategory === ThingCategory.MISSILE && (
+									{itemCategory === ThingCategory.MISSILE && showDirectionButtons && (
 										<div className="absolute inset-0 z-10 pointer-events-none">
 											{/* Top Row */}
-											<div className="absolute top-8 left-1/2 -translate-x-1/2 flex gap-8 pointer-events-auto">
+											<div className="absolute top-[15%] left-1/2 -translate-x-1/2 flex gap-3 pointer-events-auto">
 												<Button
 													size="icon"
 													variant="ghost"
@@ -1014,7 +1349,7 @@ export const PropertiesPanel = () => {
 											</div>
 
 											{/* Middle Row */}
-											<div className="absolute top-1/2 -translate-y-1/2 left-8 flex flex-col gap-1 pointer-events-auto">
+											<div className="absolute top-1/2 -translate-y-1/2 left-[15%] flex flex-col gap-1 pointer-events-auto">
 												<Button
 													size="icon"
 													variant="ghost"
@@ -1027,7 +1362,7 @@ export const PropertiesPanel = () => {
 													<ArrowLeft className="h-4 w-4 text-muted-foreground" />
 												</Button>
 											</div>
-											<div className="absolute top-1/2 -translate-y-1/2 right-8 flex flex-col gap-1 pointer-events-auto">
+											<div className="absolute top-1/2 -translate-y-1/2 right-[15%] flex flex-col gap-1 pointer-events-auto">
 												<Button
 													size="icon"
 													variant="ghost"
@@ -1042,7 +1377,7 @@ export const PropertiesPanel = () => {
 											</div>
 
 											{/* Bottom Row */}
-											<div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex gap-8 pointer-events-auto">
+											<div className="absolute bottom-[15%] left-1/2 -translate-x-1/2 flex gap-3 pointer-events-auto">
 												<Button
 													size="icon"
 													variant="ghost"
@@ -1080,8 +1415,28 @@ export const PropertiesPanel = () => {
 										</div>
 									)}
 
+									{/* Direction buttons toggle - Left of zoom controls (Only for missiles) */}
+									{itemCategory === ThingCategory.MISSILE && (
+										<div className="absolute top-2 right-[2.85rem] z-10 flex flex-col items-end gap-1">
+											<div className="flex flex-col items-center bg-secondary/90 backdrop-blur-sm rounded-md px-1 py-0.5 border border-border/50 shadow-lg">
+												<Button
+													size="icon"
+													variant={showDirectionButtons ? 'secondary' : 'ghost'}
+													onClick={() => setShowDirectionButtons(!showDirectionButtons)}
+													title={showDirectionButtons ? 'Hide direction buttons' : 'Show direction buttons'}
+													className={cn(
+														'h-6 w-6 p-0',
+														showDirectionButtons ? 'bg-primary/20 hover:bg-primary/30' : 'hover:bg-secondary/50'
+													)}
+												>
+													<Compass className="h-3 w-3 text-muted-foreground" />
+												</Button>
+											</div>
+										</div>
+									)}
+
 									{/* Zoom controls - Top Right (Vertical) */}
-									<div className="absolute top-2 right-2 z-10 flex flex-col items-center gap-1">
+									<div className="absolute top-2 right-2 z-10 flex flex-col items-end gap-1">
 										<div className="flex flex-col items-center gap-0.5 bg-secondary/90 backdrop-blur-sm rounded-md px-1 py-0.5 border border-border/50 shadow-lg">
 											<Button
 												size="icon"
@@ -1116,15 +1471,15 @@ export const PropertiesPanel = () => {
 											</Button>
 											<Button
 												size="icon"
-												variant={isPanEnabled ? 'secondary' : 'ghost'}
 												onClick={() => setIsPanEnabled(!isPanEnabled)}
 												title={isPanEnabled ? 'Disable Pan' : 'Enable Pan'}
+												variant={isPanEnabled || isMiddleMousePanning ? 'secondary' : 'ghost'}
 												className={cn(
 													'h-6 w-6 p-0',
-													isPanEnabled ? 'bg-primary/20 text-primary hover:bg-primary/30' : 'hover:bg-secondary/50'
+													isPanEnabled || isMiddleMousePanning ? 'bg-primary/20 hover:bg-primary/30' : 'hover:bg-secondary/50'
 												)}
 											>
-												<Move className="h-3 w-3" />
+												<Move className="h-3 w-3 text-muted-foreground" />
 											</Button>
 										</div>
 
@@ -1142,7 +1497,7 @@ export const PropertiesPanel = () => {
 									</div>
 
 									{/* Sprite Canvas */}
-									<CheckerBoard className="w-full aspect-square border border-border/50 rounded-lg flex items-center justify-center overflow-hidden">
+									<CheckerBoard className="w-full h-full border border-border/50 rounded-lg flex items-center justify-center overflow-hidden">
 										{firstSpriteId > 0 ? (
 											<SpriteCanvas
 												showEmpty
@@ -1156,20 +1511,18 @@ export const PropertiesPanel = () => {
 												showGrid={showGrid}
 												frame={currentFrame}
 												layer={currentLayer}
+												isPanEnabled={isPanEnabled}
 												showExactSize={showExactSize}
 												onSpriteDrop={handleSpriteDrop}
 												onSpriteHover={handleSpriteHover}
 												onSpriteDoubleClick={handleSpriteDoubleClick}
 												outfitData={isOutfit ? outfitData : undefined}
+												onMiddleMousePanChange={setIsMiddleMousePanning}
 												renderMode={isMissile || isOutfit ? 'preview' : 'full'}
-												onPanChange={
-													isPanEnabled
-														? (x, y) => {
-																setPanX(x);
-																setPanY(y);
-															}
-														: undefined
-												}
+												onPanChange={(x, y) => {
+													setPanX(x);
+													setPanY(y);
+												}}
 											/>
 										) : (
 											<div className="text-muted-foreground text-xs">No sprite</div>
@@ -1217,7 +1570,7 @@ export const PropertiesPanel = () => {
 													variant="ghost"
 													onClick={handleNextFrame}
 													className="h-6 w-6 hover:bg-secondary/50 p-0"
-													disabled={currentFrame >= item.frames - 1 || isPlaying}
+													disabled={currentFrame >= draftItem.frames - 1 || isPlaying}
 												>
 													<ChevronRight className="h-3 w-3" />
 												</Button>
@@ -1226,7 +1579,7 @@ export const PropertiesPanel = () => {
 													variant="ghost"
 													onClick={handleLastFrame}
 													className="h-6 w-6 hover:bg-secondary/50 p-0"
-													disabled={currentFrame >= item.frames - 1 || isPlaying}
+													disabled={currentFrame >= draftItem.frames - 1 || isPlaying}
 												>
 													<SkipForward className="h-3 w-3" />
 												</Button>
@@ -1239,9 +1592,53 @@ export const PropertiesPanel = () => {
 
 						<div className="flex flex-col gap-4 min-[820px]:col-span-1">
 							<div className="bg-secondary/20 rounded-md border border-border/40 overflow-hidden">
-								<div className="flex items-center gap-1.5 px-3 py-2 bg-secondary/40 border-b border-border/30">
-									<div className="w-0.5 h-3 bg-primary rounded-full" />
-									<h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Dimensions</h3>
+								<div className="flex items-center justify-between gap-1.5 px-3 py-2 bg-secondary/40 border-b border-border/30">
+									<div className="flex items-center gap-1.5">
+										<div className="w-0.5 h-3 bg-primary rounded-full" />
+										<h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Dimensions</h3>
+									</div>
+									{isOutfit && draftItem && (
+										<div className="flex items-center gap-2">
+											<Label className="text-[10px] text-muted-foreground whitespace-nowrap">Frame Group</Label>
+											<Select
+												value={selectedFrameGroup.toString()}
+												onValueChange={(val) => handleFrameGroupChange(parseInt(val))}
+											>
+												<SelectTrigger className="h-6 w-[100px] text-[10px]">
+													<SelectValue />
+												</SelectTrigger>
+												<SelectContent>
+													{(draftItem.frameGroupsData || []).map((group, idx) => (
+														<SelectItem key={idx} value={idx.toString()} className="text-[10px]">
+															{group.type === 0 ? 'Idle' : 'Walking'}
+														</SelectItem>
+													))}
+												</SelectContent>
+											</Select>
+											{(draftItem.frameGroupsData || []).length < 2 && (
+												<Button
+													size="sm"
+													variant="ghost"
+													title="Create new frame group"
+													onClick={handleCreateFrameGroup}
+													className="h-6 w-6 p-0 hover:bg-secondary/50"
+												>
+													<Plus className="h-3 w-3" />
+												</Button>
+											)}
+											{(draftItem.frameGroupsData || []).length > 1 && (
+												<Button
+													size="sm"
+													variant="ghost"
+													onClick={handleDeleteFrameGroup}
+													title="Delete current frame group"
+													className="h-6 w-6 p-0 hover:bg-destructive/20 hover:text-destructive"
+												>
+													<X className="h-3 w-3" />
+												</Button>
+											)}
+										</div>
+									)}
 								</div>
 								<div className="p-3 grid grid-cols-2 gap-3">
 									<div className="flex items-center justify-between gap-2">

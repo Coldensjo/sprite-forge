@@ -49,12 +49,29 @@ function collectModifiedSprites(
 
 	// For each modified item, collect its sprite IDs
 	for (const item of modifiedItems.values()) {
+		// Collect from main spriteIndex (usually Idle)
 		if (item.data.spriteIndex) {
 			for (const spriteId of item.data.spriteIndex) {
 				if (!modifiedSprites.has(spriteId)) {
 					const sprite = data.sprites.get(spriteId);
 					if (sprite) {
 						modifiedSprites.set(spriteId, sprite);
+					}
+				}
+			}
+		}
+
+		// Collect from frameGroupsData (Walking, etc.)
+		if (item.data.frameGroupsData) {
+			for (const group of item.data.frameGroupsData) {
+				if (group.spriteIndex) {
+					for (const spriteId of group.spriteIndex) {
+						if (!modifiedSprites.has(spriteId)) {
+							const sprite = data.sprites.get(spriteId);
+							if (sprite) {
+								modifiedSprites.set(spriteId, sprite);
+							}
+						}
 					}
 				}
 			}
