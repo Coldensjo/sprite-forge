@@ -7,6 +7,15 @@ import { useTibiaData } from '@/contexts/TibiaDataContext';
 import { memo, useRef, useMemo, useState, useEffect, useCallback } from 'react';
 import { SPRITE_SIZE, getSpriteIndex, type ThingType, isValidSpriteId } from '@/lib/tibia';
 
+interface SceneItem {
+	id: number;
+	count?: number;
+}
+
+interface SceneTile {
+	items: SceneItem[];
+}
+
 interface SpriteCanvasProps {
 	panX?: number;
 	panY?: number;
@@ -15,23 +24,30 @@ interface SpriteCanvasProps {
 	frame?: number;
 	layer?: number;
 	height?: number;
+	// Smoothing/blur effect (bilinear filtering like OTClient's GL_LINEAR)
+	smooth?: boolean;
 	spriteId?: number;
 	thing?: ThingType;
 	patternX?: number;
 	patternY?: number;
-	patternZ?: number;
 
+	patternZ?: number;
 	className?: string;
 	showGrid?: boolean;
 	showEmpty?: boolean;
+	sceneWidth?: number;
 	spriteIds?: number[];
+	sceneHeight?: number;
 	isPanEnabled?: boolean;
+
 	showExactSize?: boolean;
+	sceneScrollOffset?: number;
+	// Scene preview props (for outfit scene background)
+	sceneTiles?: null | SceneTile[][];
 	// Pattern/Frame support for full rendering mode
 	renderMode?: 'list' | 'full' | 'preview';
 	onPanChange?: (x: number, y: number) => void;
 	onSpriteDoubleClick?: (spriteId: number) => void;
-
 	onSpriteHover?: (spriteId: null | number) => void;
 	onMiddleMousePanChange?: (isPanning: boolean) => void;
 	onSpriteDrop?: (index: number, spriteId: number | number[]) => void;
@@ -58,6 +74,7 @@ export const SpriteCanvas = memo(
 		layer = 0,
 		height = 1,
 		outfitData,
+		sceneTiles,
 		onPanChange,
 		patternX = 0,
 		patternY = 0,
@@ -65,17 +82,20 @@ export const SpriteCanvas = memo(
 		onSpriteDrop,
 		onSpriteHover,
 		className = '',
+		sceneWidth = 0,
+		smooth = false,
+		sceneHeight = 0,
 		showGrid = false,
 		onSpriteDoubleClick,
 		renderMode = 'full',
 		isPanEnabled = false,
 		showExactSize = false,
-		onMiddleMousePanChange,
-		showEmpty: _showEmpty = false // Rename to avoid unused var error
+		sceneScrollOffset = 0,
+		onMiddleMousePanChange
 	}: SpriteCanvasProps) => {
 		const canvasRef = useRef<HTMLCanvasElement>(null);
 		const containerRef = useRef<HTMLDivElement>(null);
-		const { data, getSprite, spriteLoadVersion } = useTibiaData();
+		const { data, getSprite, spriteLoadVersion, notifySpritesLoaded } = useTibiaData();
 		const { dragType, isDragging, draggedItem } = useDragDrop();
 		const [isLoading, setIsLoading] = useState(false);
 		const [isPanning, setIsPanning] = useState(false);
@@ -124,8 +144,14 @@ export const SpriteCanvas = memo(
 			} else if (renderMode === 'preview' && thing) {
 				// Preview mode: Render specific pattern/frame configuration
 				// Used for PropertiesPanel to show the current state
-				canvasW = thing.width * SPRITE_SIZE;
-				canvasH = thing.height * SPRITE_SIZE;
+				// If scene is enabled for outfit, expand canvas to fit scene
+				if (sceneTiles && sceneWidth > 0 && sceneHeight > 0 && thing.category === 'outfit') {
+					canvasW = sceneWidth * SPRITE_SIZE;
+					canvasH = sceneHeight * SPRITE_SIZE;
+				} else {
+					canvasW = thing.width * SPRITE_SIZE;
+					canvasH = thing.height * SPRITE_SIZE;
+				}
 
 				const currentFrame = thing.frames > 1 ? frame : 0;
 
@@ -148,6 +174,18 @@ export const SpriteCanvas = memo(
 					patternYsToRender.push(patternY);
 				}
 
+				// Calculate offset to center outfit when scene is enabled
+				let offsetX = 0;
+				let offsetY = 0;
+				if (sceneTiles && sceneWidth > 0 && sceneHeight > 0 && thing.category === 'outfit') {
+					// Center outfit at the middle of the scene
+					const centerTileX = Math.floor(sceneWidth / 2);
+					const centerTileY = Math.floor(sceneHeight / 2);
+					// Outfit position: center tile, adjusted for outfit size
+					offsetX = centerTileX * SPRITE_SIZE - (thing.width - 1) * SPRITE_SIZE;
+					offsetY = centerTileY * SPRITE_SIZE - (thing.height - 1) * SPRITE_SIZE;
+				}
+
 				// Render all layers for each patternY (stacked on top of each other)
 				for (const py of patternYsToRender) {
 					for (let l = 0; l < thing.layers; l++) {
@@ -155,8 +193,8 @@ export const SpriteCanvas = memo(
 							for (let w = 0; w < thing.width; w++) {
 								const index = getSpriteIndex(thing, w, h, l, patternX, py, patternZ, currentFrame);
 								if (index < thing.spriteIndex.length) {
-									const posX = (thing.width - w - 1) * SPRITE_SIZE;
-									const posY = (thing.height - h - 1) * SPRITE_SIZE;
+									const posX = (thing.width - w - 1) * SPRITE_SIZE + offsetX;
+									const posY = (thing.height - h - 1) * SPRITE_SIZE + offsetY;
 									layout.push({
 										x: posX,
 										y: posY,
@@ -252,10 +290,76 @@ export const SpriteCanvas = memo(
 			}
 
 			return { canvasWidth: canvasW, spriteLayout: layout, canvasHeight: canvasH };
-		}, [thing, frame, renderMode, spriteId, spriteIds, width, height, patternX, patternY, patternZ, layer, outfitData]);
+		}, [
+			thing,
+			frame,
+			renderMode,
+			spriteId,
+			spriteIds,
+			width,
+			height,
+			patternX,
+			patternY,
+			patternZ,
+			layer,
+			outfitData,
+			sceneTiles,
+			sceneWidth,
+			sceneHeight
+		]);
 
 		// Offscreen canvas for compositing ImageData
 		const offscreenCanvasRef = useRef<null | HTMLCanvasElement>(null);
+
+		// Cached scene canvas - pre-rendered scene for performance
+		const sceneCacheRef = useRef<{
+			width: number;
+			height: number;
+			tiles: null | SceneTile[][];
+			canvas: null | HTMLCanvasElement;
+		}>({ width: 0, height: 0, tiles: null, canvas: null });
+
+		// Preload sprites for scene items when scene tiles change
+		useEffect(() => {
+			if (!sceneTiles || !data || !data.sprPath || sceneWidth === 0 || sceneHeight === 0) return;
+
+			const loadSceneSprites = async () => {
+				// Collect all sprite IDs needed for scene items
+				const spriteIds = new Set<number>();
+
+				for (let tileY = 0; tileY < sceneHeight; tileY++) {
+					for (let tileX = 0; tileX < sceneWidth; tileX++) {
+						const tile = sceneTiles[tileY]?.[tileX];
+						if (!tile) continue;
+
+						for (const sceneItem of tile.items) {
+							const sceneThing = data.items.get(sceneItem.id);
+							if (!sceneThing) continue;
+
+							// Collect all sprites for multi-tile items
+							for (const spriteId of sceneThing.spriteIndex) {
+								if (isValidSpriteId(spriteId, data.spritesCount)) {
+									spriteIds.add(spriteId);
+								}
+							}
+						}
+					}
+				}
+
+				if (spriteIds.size === 0) return;
+
+				// Filter out already loaded sprites
+				const missingIds = Array.from(spriteIds).filter((id) => !data.sprites.has(id));
+				if (missingIds.length === 0) return;
+
+				// Load missing sprites
+				const { loadSpriteIds } = await import('@/lib/tibia');
+				await loadSpriteIds(data.sprPath, missingIds, data.transparency, data.sprites);
+				notifySpritesLoaded();
+			};
+
+			loadSceneSprites();
+		}, [sceneTiles, sceneWidth, sceneHeight, data, notifySpritesLoaded]);
 
 		useEffect(() => {
 			const canvas = canvasRef.current;
@@ -273,8 +377,131 @@ export const SpriteCanvas = memo(
 			const offscreenCtx = offscreenCanvasRef.current.getContext('2d');
 			if (!offscreenCtx) return;
 
+			// Apply smoothing setting (bilinear filtering like OTClient's GL_LINEAR)
+			ctx.imageSmoothingEnabled = smooth;
+			if (smooth) {
+				ctx.imageSmoothingQuality = 'high';
+			}
+
 			// Clear canvas (transparent, checkerboard shows through)
 			ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+
+			// Render scene tiles first (behind everything else) when in preview mode for outfits
+			if (sceneTiles && sceneWidth > 0 && sceneHeight > 0 && renderMode === 'preview' && thing?.category === 'outfit') {
+				const sceneCache = sceneCacheRef.current;
+				const scenePixelWidth = sceneWidth * SPRITE_SIZE;
+				const scenePixelHeight = sceneHeight * SPRITE_SIZE;
+
+				// Check if we need to rebuild the scene cache
+				const needsRebuild =
+					!sceneCache.canvas ||
+					sceneCache.tiles !== sceneTiles ||
+					sceneCache.width !== sceneWidth ||
+					sceneCache.height !== sceneHeight;
+
+				if (needsRebuild) {
+					// Create or resize cache canvas (2x size for seamless wrapping)
+					if (!sceneCache.canvas) {
+						sceneCache.canvas = document.createElement('canvas');
+					}
+					sceneCache.canvas.width = scenePixelWidth * 2;
+					sceneCache.canvas.height = scenePixelHeight * 2;
+					sceneCache.tiles = sceneTiles;
+					sceneCache.width = sceneWidth;
+					sceneCache.height = sceneHeight;
+
+					const cacheCtx = sceneCache.canvas.getContext('2d');
+					if (cacheCtx) {
+						cacheCtx.clearRect(0, 0, sceneCache.canvas.width, sceneCache.canvas.height);
+
+						// Render scene 2x2 times for seamless wrapping
+						for (let repeatY = 0; repeatY < 2; repeatY++) {
+							for (let repeatX = 0; repeatX < 2; repeatX++) {
+								const offsetX = repeatX * scenePixelWidth;
+								const offsetY = repeatY * scenePixelHeight;
+
+								// Render all tiles
+								for (let tileY = 0; tileY < sceneHeight; tileY++) {
+									for (let tileX = 0; tileX < sceneWidth; tileX++) {
+										const tile = sceneTiles[tileY]?.[tileX];
+										if (!tile) continue;
+
+										const drawBaseX = tileX * SPRITE_SIZE + offsetX;
+										const drawBaseY = tileY * SPRITE_SIZE + offsetY;
+										let elevation = 0;
+
+										// Render items in tile stack
+										for (const sceneItem of tile.items) {
+											const sceneThing = data?.items.get(sceneItem.id);
+											if (!sceneThing) continue;
+
+											const itemWidth = sceneThing.width || 1;
+											const itemHeight = sceneThing.height || 1;
+
+											for (let h = 0; h < itemHeight; h++) {
+												for (let w = 0; w < itemWidth; w++) {
+													const spriteIdx = (itemHeight - h - 1) * itemWidth + (itemWidth - w - 1);
+													const sceneSpriteId = sceneThing.spriteIndex[spriteIdx];
+
+													if (isValidSpriteId(sceneSpriteId, data?.spritesCount)) {
+														const sceneSprite = getSprite(sceneSpriteId);
+														if (sceneSprite && !sceneSprite.isEmpty) {
+															if (!sceneSprite.imageData) {
+																const imageData = offscreenCtx.createImageData(SPRITE_SIZE, SPRITE_SIZE);
+																imageData.data.set(sceneSprite.rgbaPixels);
+																sceneSprite.imageData = imageData;
+															}
+															offscreenCtx.clearRect(0, 0, SPRITE_SIZE, SPRITE_SIZE);
+															offscreenCtx.putImageData(sceneSprite.imageData, 0, 0);
+
+															const drawX = drawBaseX - elevation - w * SPRITE_SIZE;
+															const drawY = drawBaseY - elevation - h * SPRITE_SIZE;
+															cacheCtx.drawImage(offscreenCanvasRef.current!, drawX, drawY);
+														}
+													}
+												}
+											}
+
+											if (sceneThing.elevation && sceneThing.elevation > 0) {
+												elevation += sceneThing.elevation;
+											}
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+
+				// Draw from cache with scroll offset (fast!)
+				if (sceneCache.canvas) {
+					// Calculate scroll offset based on direction
+					let scrollX = 0;
+					let scrollY = 0;
+
+					switch (patternX) {
+						case 0: // North - scene scrolls down
+							scrollY = -(sceneScrollOffset % scenePixelHeight);
+							break;
+						case 1: // East - scene scrolls left
+							scrollX = sceneScrollOffset % scenePixelWidth;
+							break;
+						case 2: // South - scene scrolls up
+							scrollY = sceneScrollOffset % scenePixelHeight;
+							break;
+						case 3: // West - scene scrolls right
+							scrollX = -(sceneScrollOffset % scenePixelWidth);
+							break;
+					}
+
+					// Normalize scroll to positive values within cache bounds
+					const sourceX = ((scrollX % scenePixelWidth) + scenePixelWidth) % scenePixelWidth;
+					const sourceY = ((scrollY % scenePixelHeight) + scenePixelHeight) % scenePixelHeight;
+
+					// Draw the visible portion from cache (single drawImage call!)
+					ctx.drawImage(sceneCache.canvas, sourceX, sourceY, canvasWidth, canvasHeight, 0, 0, canvasWidth, canvasHeight);
+				}
+			}
 
 			if (spriteLayout.length === 0) {
 				// Empty sprite - checkerboard background shows through automatically
@@ -505,7 +732,14 @@ export const SpriteCanvas = memo(
 			showExactSize,
 			thing,
 			outfitData,
-			renderMode
+			renderMode,
+			sceneTiles,
+			sceneWidth,
+			sceneHeight,
+			sceneScrollOffset,
+			patternX,
+			getSprite,
+			smooth
 		]);
 
 		const exactSizeCenter = useMemo(() => {
@@ -516,11 +750,23 @@ export const SpriteCanvas = memo(
 			const pixelsWidth = thing.width * SPRITE_SIZE;
 			const pixelsHeight = thing.height * SPRITE_SIZE;
 
-			const exactSizeCenterX = pixelsWidth - exactSize / 2;
-			const exactSizeCenterY = pixelsHeight - exactSize / 2;
+			// Base exact size center (bottom-right of outfit area)
+			let exactSizeCenterX = pixelsWidth - exactSize / 2;
+			let exactSizeCenterY = pixelsHeight - exactSize / 2;
+
+			// When scene is enabled, outfit is offset to center of scene
+			// Adjust exact size center to match
+			if (sceneTiles && sceneWidth > 0 && sceneHeight > 0 && thing.category === 'outfit') {
+				const centerTileX = Math.floor(sceneWidth / 2);
+				const centerTileY = Math.floor(sceneHeight / 2);
+				const offsetX = centerTileX * SPRITE_SIZE - (thing.width - 1) * SPRITE_SIZE;
+				const offsetY = centerTileY * SPRITE_SIZE - (thing.height - 1) * SPRITE_SIZE;
+				exactSizeCenterX += offsetX;
+				exactSizeCenterY += offsetY;
+			}
 
 			return { x: exactSizeCenterX, y: exactSizeCenterY };
-		}, [thing]);
+		}, [thing, sceneTiles, sceneWidth, sceneHeight]);
 
 		const handleMouseDown = useCallback(
 			(e: React.MouseEvent) => {
@@ -966,8 +1212,12 @@ export const SpriteCanvas = memo(
 						ref={canvasRef}
 						width={canvasWidth}
 						height={canvasHeight}
-						style={{ imageRendering: 'pixelated' }}
 						className={cn(className, 'block w-full h-full')}
+						style={{
+							// OTClient's GL_LINEAR = bilinear interpolation when scaling
+							// 'auto' enables browser's smooth scaling, 'pixelated' keeps sharp pixels
+							imageRendering: smooth ? 'auto' : 'pixelated'
+						}}
 					/>
 					<canvas
 						width={canvasWidth}
@@ -977,8 +1227,8 @@ export const SpriteCanvas = memo(
 						onMouseDown={handleMouseDown}
 						onMouseLeave={handleMouseLeave}
 						onDoubleClick={handleMouseDoubleClick}
-						style={{ imageRendering: 'pixelated' }}
 						className="absolute inset-0 w-full h-full"
+						style={{ imageRendering: smooth ? 'auto' : 'pixelated' }}
 						onContextMenu={(e) => {
 							// Prevent context menu on middle mouse button
 							if (e.button === 1) {

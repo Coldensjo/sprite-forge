@@ -2,7 +2,9 @@ import type { CommitLog } from '@/lib/versionControl';
 
 import { useState, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
-import { Clock, Trash2, Package } from 'lucide-react';
+import { invoke } from '@tauri-apps/api/core';
+import { revealItemInDir } from '@tauri-apps/plugin-opener';
+import { Clock, Trash2, Package, FolderOpen } from 'lucide-react';
 import { getCommitHistory, cleanOldVersions } from '@/lib/versionControl';
 
 import { Input } from './ui/input';
@@ -126,11 +128,30 @@ export const VersionHistoryDialog = ({ open, onOpenChange }: VersionHistoryDialo
 		return 'Just now';
 	};
 
+	const handleOpenSettingsFolder = async () => {
+		try {
+			const configDir = await invoke<string>('get_config_dir_path');
+			await revealItemInDir(configDir);
+		} catch (err) {
+			toast({
+				variant: 'destructive',
+				title: 'Failed to open folder',
+				description: err instanceof Error ? err.message : 'Unknown error'
+			});
+		}
+	};
+
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
 			<DialogContent className="max-w-3xl max-h-[80vh] flex flex-col">
 				<DialogHeader>
-					<DialogTitle>Version History</DialogTitle>
+					<div className="flex items-center justify-between">
+						<DialogTitle>Version History</DialogTitle>
+						<Button size="sm" variant="outline" className="h-8 text-xs" onClick={handleOpenSettingsFolder}>
+							<FolderOpen className="h-3 w-3 mr-1" />
+							Open Settings Folder
+						</Button>
+					</div>
 					<DialogDescription>View and manage compilation history with version control</DialogDescription>
 				</DialogHeader>
 

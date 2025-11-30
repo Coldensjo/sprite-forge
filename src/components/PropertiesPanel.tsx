@@ -2,6 +2,7 @@ import type React from 'react';
 import { cn } from '@/lib/utils';
 import { ThingCategory } from '@/lib/tibia';
 import { MarketCategory } from '@/lib/tibia';
+import { invoke } from '@tauri-apps/api/core';
 import { useTibiaData } from '@/contexts/TibiaDataContext';
 import { useRef, useState, useEffect, useCallback } from 'react';
 import {
@@ -12,11 +13,13 @@ import {
 	Plus,
 	Pause,
 	Undo2,
+	Blend,
 	ZoomIn,
 	ZoomOut,
 	ArrowUp,
 	Shuffle,
 	Compass,
+	TreePine,
 	SkipBack,
 	ChevronUp,
 	ArrowDown,
@@ -56,6 +59,15 @@ import {
 	AlertDialogContent,
 	AlertDialogDescription
 } from './ui/alert-dialog';
+
+interface SceneItem {
+	id: number;
+	count?: number;
+}
+
+interface SceneTile {
+	items: SceneItem[];
+}
 
 interface ItemPropertiesState {
 	zoom: number;
@@ -441,6 +453,49 @@ export const PropertiesPanel = () => {
 		addons: [false, false] // [addon1, addon2]
 	});
 
+	// Scene preview state (for outfit scene background)
+	const [showScene, setShowScene] = useState(false);
+	const [showSmooth, setShowSmooth] = useState(false);
+	const [defaultSceneTiles, setDefaultSceneTiles] = useState<null | SceneTile[][]>(null);
+	const [sceneSize, setSceneSize] = useState({ width: 0, height: 0 });
+	const [sceneScrollOffset, setSceneScrollOffset] = useState(0);
+	const sceneScrollRef = useRef(0);
+
+	// Load default scene when showScene is enabled
+	useEffect(() => {
+		if (showScene && !defaultSceneTiles) {
+			loadDefaultScene();
+		}
+	}, [showScene]);
+
+	const loadDefaultScene = async () => {
+		try {
+			const config = await invoke<{ default_scene?: string }>('get_config');
+			if (config.default_scene) {
+				const content = await invoke<string>('load_scene', { name: config.default_scene });
+				const scene = JSON.parse(content);
+				setDefaultSceneTiles(scene.tiles);
+				setSceneSize({ width: scene.width, height: scene.height });
+			} else {
+				// Load public default scene if no configured default exists
+				try {
+					const response = await fetch('/default-scene.json');
+					if (response.ok) {
+						const scene = await response.json();
+						if (scene.tiles && scene.width && scene.height) {
+							setDefaultSceneTiles(scene.tiles);
+							setSceneSize({ width: scene.width, height: scene.height });
+						}
+					}
+				} catch (fetchError) {
+					console.error('Failed to load public default scene:', fetchError);
+				}
+			}
+		} catch (e) {
+			console.error('Failed to load default scene:', e);
+		}
+	};
+
 	const handleFrameGroupChange = (index: number) => {
 		setSelectedFrameGroup(index);
 		selectedFrameGroupRef.current = index;
@@ -731,6 +786,15 @@ export const PropertiesPanel = () => {
 		const elapsed = time - state.lastTime;
 		state.lastTime = time;
 
+		// Update scene scroll when scene is visible (smooth scrolling at ~60fps)
+		if (showScene && defaultSceneTiles) {
+			// Scroll speed: ~1 pixel per frame at 60fps = ~60 pixels per second
+			// Slower speed to better match outfit walking animation
+			const scrollSpeed = elapsed * 0.06; // pixels per millisecond
+			sceneScrollRef.current += scrollSpeed;
+			setSceneScrollOffset(Math.floor(sceneScrollRef.current));
+		}
+
 		if (state.durations.length === 0) return;
 
 		// Logic from Animator.as update()
@@ -918,6 +982,9 @@ export const PropertiesPanel = () => {
 			if (isOutfit) {
 				setCurrentFrame(0);
 			}
+			// Reset scene scroll when stopping
+			sceneScrollRef.current = 0;
+			setSceneScrollOffset(0);
 		}
 	};
 
@@ -1494,6 +1561,28 @@ export const PropertiesPanel = () => {
 												<Undo2 className="h-3 w-3 text-muted-foreground" />
 											</Button>
 										</div>
+										<div className="flex flex-col gap-1 bg-secondary/90 backdrop-blur-sm rounded-md px-1 py-0.5 border border-border/50 shadow-lg">
+											{isOutfit && (
+												<Button
+													size="icon"
+													onClick={() => setShowScene(!showScene)}
+													variant={showScene ? 'secondary' : 'ghost'}
+													title={showScene ? 'Hide Scene' : 'Show Scene'}
+													className={cn('h-6 w-6 p-0', showScene ? 'bg-primary/20 hover:bg-primary/30' : 'hover:bg-secondary/50')}
+												>
+													<TreePine className="h-3 w-3 text-muted-foreground" />
+												</Button>
+											)}
+											<Button
+												size="icon"
+												onClick={() => setShowSmooth(!showSmooth)}
+												variant={showSmooth ? 'secondary' : 'ghost'}
+												title={showSmooth ? 'Disable Smoothing' : 'Enable Smoothing'}
+												className={cn('h-6 w-6 p-0', showSmooth ? 'bg-primary/20 hover:bg-primary/30' : 'hover:bg-secondary/50')}
+											>
+												<Blend className="h-3 w-3 text-muted-foreground" />
+											</Button>
+										</div>
 									</div>
 
 									{/* Sprite Canvas */}
@@ -1509,15 +1598,20 @@ export const PropertiesPanel = () => {
 												patternY={patternY}
 												patternZ={patternZ}
 												showGrid={showGrid}
+												smooth={showSmooth}
 												frame={currentFrame}
 												layer={currentLayer}
 												isPanEnabled={isPanEnabled}
+												sceneWidth={sceneSize.width}
 												showExactSize={showExactSize}
+												sceneHeight={sceneSize.height}
 												onSpriteDrop={handleSpriteDrop}
 												onSpriteHover={handleSpriteHover}
+												sceneScrollOffset={sceneScrollOffset}
 												onSpriteDoubleClick={handleSpriteDoubleClick}
 												outfitData={isOutfit ? outfitData : undefined}
 												onMiddleMousePanChange={setIsMiddleMousePanning}
+												sceneTiles={showScene ? defaultSceneTiles : undefined}
 												renderMode={isMissile || isOutfit ? 'preview' : 'full'}
 												onPanChange={(x, y) => {
 													setPanX(x);

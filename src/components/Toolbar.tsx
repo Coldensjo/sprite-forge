@@ -1,12 +1,26 @@
-import { useState } from 'react';
 import { cn } from '@/lib/utils';
+import { useState, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useTibiaData } from '@/contexts/TibiaDataContext';
-import { loadTibiaData, optimizeSprites } from '@/lib/tibia';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { usePanelSettings } from '@/contexts/PanelSettingsContext';
-import { X, Eye, List, Info, Minus, Square, Search, Palette, History, Sparkles, HardDrive, FolderOpen } from 'lucide-react';
+import { loadTibiaData, type ThingType, optimizeSprites } from '@/lib/tibia';
+import {
+	X,
+	Eye,
+	List,
+	Info,
+	Minus,
+	Square,
+	Search,
+	Palette,
+	History,
+	Grid3x3,
+	Sparkles,
+	HardDrive,
+	FolderOpen
+} from 'lucide-react';
 
 import { Button } from './ui/button';
 import { LoadingDialog } from './LoadingDialog';
@@ -14,6 +28,7 @@ import { FolderSelectDialog } from './FolderSelectDialog';
 import { ThemeSettingsDialog } from './ThemeSettingsDialog';
 import { VersionHistoryDialog } from './VersionHistoryDialog';
 import { SpriteOptimizerDialog } from './SpriteOptimizerDialog';
+import { SceneEditorDialog } from './SceneEditor/SceneEditorDialog';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { LoadOptions, OpenAssetFilesDialog } from './OpenAssetFilesDialog';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from './ui/tooltip';
@@ -34,8 +49,22 @@ export const Toolbar = () => {
 	const [optimizerResult, setOptimizerResult] = useState<null | { oldTotal: number; newTotal: number; removedCount: number }>(
 		null
 	);
+	const [sceneEditorOpen, setSceneEditorOpen] = useState(false);
+	const [itemToAdd, setItemToAdd] = useState<null | ThingType>(null);
 
 	const [originalSprPath, setOriginalSprPath] = useState<null | string>(null);
+
+	useEffect(() => {
+		const handleOpenScene = (e: CustomEvent<{ item: ThingType }>) => {
+			setItemToAdd(e.detail.item);
+			setSceneEditorOpen(true);
+		};
+
+		window.addEventListener('open-scene-editor', handleOpenScene as EventListener);
+		return () => {
+			window.removeEventListener('open-scene-editor', handleOpenScene as EventListener);
+		};
+	}, []);
 
 	const handleOptimize = () => {
 		setOptimizerOpen(true);
@@ -324,6 +353,17 @@ export const Toolbar = () => {
 						<Sparkles className="h-3.5 w-3.5 mr-1.5" />
 						Optimize
 					</Button>
+					<Button
+						size="sm"
+						variant="ghost"
+						disabled={!data}
+						className="h-8 text-xs font-medium"
+						onClick={() => setSceneEditorOpen(true)}
+						onMouseDown={(e) => e.stopPropagation()}
+					>
+						<Grid3x3 className="h-3.5 w-3.5 mr-1.5" />
+						Scene
+					</Button>
 				</div>
 
 				<div className="h-5 w-px bg-border/50 flex-shrink-0" />
@@ -358,7 +398,7 @@ export const Toolbar = () => {
 								});
 
 								// Listen for creation success/error
-								newWindow.once('tauri://error', (error) => {
+								newWindow.once('tauri://error', () => {
 									toast({
 										title: 'Error',
 										variant: 'destructive',
@@ -573,6 +613,12 @@ export const Toolbar = () => {
 					if (isOptimizing) return;
 					setOptimizerOpen(open);
 				}}
+			/>
+			<SceneEditorDialog
+				itemToAdd={itemToAdd}
+				open={sceneEditorOpen}
+				onOpenChange={setSceneEditorOpen}
+				onItemAdded={() => setItemToAdd(null)}
 			/>
 		</>
 	);

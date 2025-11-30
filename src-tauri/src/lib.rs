@@ -534,6 +534,7 @@ struct AppConfig {
     last_folder: Option<String>,
     favorite_folders: Vec<FavoriteFolder>,
     panel_settings: Option<PanelSettings>,
+    default_scene: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
@@ -661,6 +662,71 @@ fn write_json_file(path: String, content: String) -> Result<(), String> {
 fn delete_file(path: String) -> Result<(), String> {
     fs::remove_file(&path)
         .map_err(|e| format!("Failed to delete file {}: {}", path, e))
+}
+
+#[tauri::command]
+fn save_scene(name: String, content: String) -> Result<String, String> {
+    let mut scenes_dir = get_config_dir()?;
+    scenes_dir.push("scenes");
+    fs::create_dir_all(&scenes_dir)
+        .map_err(|e| format!("Failed to create scenes directory: {}", e))?;
+    
+    // Sanitize filename to prevent directory traversal or invalid characters
+    let safe_name = name.replace(|c: char| !c.is_alphanumeric() && c != '-' && c != '_', "_");
+    let file_path = scenes_dir.join(format!("{}.json", safe_name));
+    
+    fs::write(&file_path, content)
+        .map_err(|e| format!("Failed to write scene file: {}", e))?;
+        
+    Ok(file_path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+fn list_scenes() -> Result<Vec<String>, String> {
+    let mut scenes_dir = get_config_dir()?;
+    scenes_dir.push("scenes");
+    
+    if !scenes_dir.exists() {
+        return Ok(Vec::new());
+    }
+    
+    let mut scenes = Vec::new();
+    for entry in fs::read_dir(scenes_dir).map_err(|e| format!("Failed to read scenes dir: {}", e))? {
+        let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
+        let path = entry.path();
+        if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("json") {
+            if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
+                scenes.push(stem.to_string());
+            }
+        }
+    }
+    scenes.sort();
+    Ok(scenes)
+}
+
+#[tauri::command]
+fn load_scene(name: String) -> Result<String, String> {
+    let mut scenes_dir = get_config_dir()?;
+    scenes_dir.push("scenes");
+    let safe_name = name.replace(|c: char| !c.is_alphanumeric() && c != '-' && c != '_', "_");
+    let file_path = scenes_dir.join(format!("{}.json", safe_name));
+    
+    fs::read_to_string(&file_path)
+        .map_err(|e| format!("Failed to read scene file: {}", e))
+}
+
+#[tauri::command]
+fn delete_scene(name: String) -> Result<(), String> {
+    let mut scenes_dir = get_config_dir()?;
+    scenes_dir.push("scenes");
+    let safe_name = name.replace(|c: char| !c.is_alphanumeric() && c != '-' && c != '_', "_");
+    let file_path = scenes_dir.join(format!("{}.json", safe_name));
+    
+    if file_path.exists() {
+        fs::remove_file(&file_path)
+            .map_err(|e| format!("Failed to delete scene file: {}", e))?;
+    }
+    Ok(())
 }
 
 // DAT/SPR Writer Commands
@@ -932,6 +998,10 @@ pub fn run() {
             ensure_versions_dir,
             write_json_file,
             delete_file,
+            save_scene,
+            list_scenes,
+            load_scene,
+            delete_scene,
             write_dat,
             write_spr,
             update_spr_sprites,
