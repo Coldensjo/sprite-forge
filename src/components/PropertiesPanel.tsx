@@ -229,6 +229,8 @@ export const PropertiesPanel = () => {
 			setSelectedFrameGroup(initialGroup);
 			selectedFrameGroupRef.current = initialGroup;
 			markUnsavedChanges(openedItemId, openedItemCategory, false);
+			// Store original state for comparison and reset
+			originalItemRef.current = { ...initialItem };
 		} else {
 			originalItemRef.current = null;
 			setDraftItem(null);
@@ -286,12 +288,19 @@ export const PropertiesPanel = () => {
 	};
 
 	const handleDiscardChanges = () => {
-		if (!item || !openedItemId || !openedItemCategory) return;
+		if (!originalItemRef.current || !openedItemId || !openedItemCategory) return;
 
-		originalItemRef.current = { ...item };
-		setDraftItem({ ...item });
+		// Reset to the original transformed state (not raw item)
+		setDraftItem({ ...originalItemRef.current });
 		setHasChanges(false);
 		markUnsavedChanges(openedItemId, openedItemCategory, false);
+
+		// Reset frame group selection to initial state for outfits
+		if (originalItemRef.current.category === ThingCategory.OUTFIT) {
+			const initialGroup = originalItemRef.current.frameGroupsData?.length > 1 ? 1 : 0;
+			setSelectedFrameGroup(initialGroup);
+			selectedFrameGroupRef.current = initialGroup;
+		}
 	};
 
 	const hasPropertyChanged = (property: string): boolean => {
@@ -664,9 +673,20 @@ export const PropertiesPanel = () => {
 	};
 
 	const handleResetSprites = () => {
-		if (item && draftItem) {
-			handlePropertyChange('spriteIndex', [...item.spriteIndex]);
+		if (!item || !draftItem) return;
+
+		// For outfits with frameGroupsData, get sprites from the correct frame group
+		if (item.category === ThingCategory.OUTFIT && item.frameGroupsData) {
+			const currentGroupIndex = selectedFrameGroupRef.current;
+			const originalGroup = item.frameGroupsData[currentGroupIndex];
+			if (originalGroup) {
+				handlePropertyChange('spriteIndex', [...originalGroup.spriteIndex]);
+				return;
+			}
 		}
+
+		// Fallback for non-outfit items
+		handlePropertyChange('spriteIndex', [...item.spriteIndex]);
 	};
 
 	const [hoveredSpriteId, setHoveredSpriteId] = useState<null | number>(null);
