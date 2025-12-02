@@ -4,6 +4,7 @@
  */
 
 import * as lz4 from 'lz4js';
+import { join } from '@tauri-apps/api/path';
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
 import { logger, logError, EventCode } from '@/lib/debug';
@@ -110,7 +111,7 @@ function parseOtml(content: string): Record<string, string> {
  */
 export async function readOtfiFile(folderPath: string): Promise<null | OtfiData> {
 	// Try different OTFI file naming patterns (Object Builder uses both)
-	const patterns = [`${folderPath}\\Tibia.otfi`, `${folderPath}\\Tibia.dat.otfi`];
+	const patterns = [await join(folderPath, 'Tibia.otfi'), await join(folderPath, 'Tibia.dat.otfi')];
 
 	for (const path of patterns) {
 		try {
@@ -315,8 +316,8 @@ export async function selectTibiaFolder(): Promise<null | { datPath: string; spr
 	}
 
 	// Construct paths for Tibia.dat and Tibia.spr
-	const datPath = `${selected}\\Tibia.dat`;
-	const sprPath = `${selected}\\Tibia.spr`;
+	const datPath = await join(selected, 'Tibia.dat');
+	const sprPath = await join(selected, 'Tibia.spr');
 
 	return { datPath, sprPath };
 }

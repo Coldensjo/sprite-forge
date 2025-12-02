@@ -1,4 +1,5 @@
 import { cn } from '@/lib/utils';
+import { join } from '@tauri-apps/api/path';
 import { useState, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { getCurrentWindow } from '@tauri-apps/api/window';
@@ -133,8 +134,8 @@ export const Toolbar = () => {
 			setError(null);
 			setOriginalSprPath(null); // Reset original path on new load
 
-			const datPath = `${selectedPath}\\Tibia.dat`;
-			const sprPath = `${selectedPath}\\Tibia.spr`;
+			const datPath = await join(selectedPath, 'Tibia.dat');
+			const sprPath = await join(selectedPath, 'Tibia.spr');
 
 			const tibiaData = await loadTibiaData(
 				datPath,

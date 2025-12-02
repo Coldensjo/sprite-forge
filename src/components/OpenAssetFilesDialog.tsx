@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { join } from '@tauri-apps/api/path';
 import { X, Info, Image, Loader2, Package, Settings, FileText, FolderOpen, AlertCircle, CheckCircle2 } from 'lucide-react';
 import {
 	readOtfiFile,
@@ -68,8 +69,8 @@ export const OpenAssetFilesDialog = ({ open, onLoad, onBrowse, initialPath, onOp
 		setFileInfo({ otfi: null, error: null, version: null, datHeader: null, sprHeader: null });
 
 		try {
-			const datPath = `${folderPath}\\Tibia.dat`;
-			const sprPath = `${folderPath}\\Tibia.spr`;
+			const datPath = await join(folderPath, 'Tibia.dat');
+			const sprPath = await join(folderPath, 'Tibia.spr');
 
 			// Read all files in parallel
 			const [datHeader, sprHeaderResult, otfi] = await Promise.all([
