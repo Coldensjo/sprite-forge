@@ -9,15 +9,13 @@ jobs:
   release:
     permissions:
       contents: write
-    strategy:
-      fail-fast: false
-      matrix:
-        platform: [windows-latest]
-    runs-on: ${{ matrix.platform }}
+    runs-on: windows-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v1
@@ -38,7 +36,6 @@ jobs:
       - name: Rust setup
         uses: dtolnay/rust-toolchain@stable
         with:
-          # Those targets are usually included on windows-latest but it's good to be safe
           targets: x86_64-pc-windows-msvc
 
       - name: Rust cache
@@ -46,15 +43,57 @@ jobs:
         with:
           workspaces: src-tauri
 
-      - name: Tauri Action
+      - name: Get version from tag
+        id: version
+        shell: bash
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Build Tauri app (without release)
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
+
+      - name: Copy portable exe
+        run: |
+          copy "src-tauri\target\release\sprite-forge.exe" "src-tauri\target\release\sprite-forge-portable.exe"
+
+      - name: Read signature file
+        id: signature
+        shell: bash
+        run: |
+          SIG=$(cat "src-tauri/target/release/bundle/nsis/sprite-forge_${{ steps.version.outputs.version }}_x64-setup.nsis.zip.sig")
+          echo "signature=$SIG" >> $GITHUB_OUTPUT
+
+      - name: Create release and upload assets
+        uses: softprops/action-gh-release@v1
         with:
-          tagName: v__VERSION__ # the action automatically replaces __VERSION__ with the app version
-          releaseName: 'Sprite Forge v__VERSION__'
-          releaseBody: 'See the assets to download this version and install.'
-          releaseDraft: true
-          prerelease: false
+          name: 'Sprite Forge v${{ steps.version.outputs.version }}'
+          body: 'See the assets to download this version and install.'
+          files: |
+            src-tauri/target/release/bundle/nsis/sprite-forge_${{ steps.version.outputs.version }}_x64-setup.exe
+            src-tauri/target/release/bundle/nsis/sprite-forge_${{ steps.version.outputs.version }}_x64-setup.nsis.zip
+            src-tauri/target/release/sprite-forge-portable.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update updater.json
+        shell: bash
+        run: |
+          cat > public/updater.json << EOF
+          {
+            "url": "https://github.com/Frenvius/sprite-forge/releases/download/v${{ steps.version.outputs.version }}/sprite-forge_${{ steps.version.outputs.version }}_x64-setup.nsis.zip",
+            "version": "${{ steps.version.outputs.version }}",
+            "signature": "${{ steps.signature.outputs.signature }}"
+          }
+          EOF
+
+      - name: Commit updater.json
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add public/updater.json
+          git commit -m "chore: update updater.json for v${{ steps.version.outputs.version }}"
+          git push origin HEAD:main

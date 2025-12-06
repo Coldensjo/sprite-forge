@@ -39,7 +39,13 @@
 	},
 	"bundle": {
 		"active": true,
-		"targets": ["app", "appimage"],
+		"targets": ["nsis"],
+		"windows": {
+			"nsis": {
+				"installerIcon": "icons/icon.ico",
+				"installMode": "currentUser"
+			}
+		},
 		"icon": [
 			"icons/32x32.png",
 			"icons/128x128.png",
@@ -52,7 +58,10 @@
 	},
 	"plugins": {
 		"updater": {
-			"pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEE0MDc0OTY2MzQ3MTA1QTkKUldTcEJYRTBaa2tIcERmaTdIdGd6dkZkNkk2c2VEZmdPNHZFTEthVU9qdXVJSWpCcENwVjJzVDUK"
+			"pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEE0MDc0OTY2MzQ3MTA1QTkKUldTcEJYRTBaa2tIcERmaTdIdGd6dkZkNkk2c2VEZmdPNHZFTEthVU9qdXVJSWpCcENwVjJzVDUK",
+			"endpoints": [
+				"https://raw.githubusercontent.com/Frenvius/sprite-forge/main/public/updater.json"
+			]
 		}
 	}
 }
