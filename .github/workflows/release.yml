@@ -43,10 +43,12 @@ jobs:
         with:
           workspaces: src-tauri
 
-      - name: Get version from tag
+      - name: Get version
         id: version
         shell: bash
-        run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+        run: |
+          VERSION=$(grep -o '"version": "[^"]*"' src-tauri/tauri.conf.json | head -1 | cut -d'"' -f4)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Build Tauri app (without release)
         uses: tauri-apps/tauri-action@v0
