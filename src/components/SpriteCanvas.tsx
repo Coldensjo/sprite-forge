@@ -5,7 +5,7 @@ import { blendOutfit } from '@/lib/tibia/outfit';
 import { useDragDrop } from '@/contexts/DragDropContext';
 import { useTibiaData } from '@/contexts/TibiaDataContext';
 import { memo, useRef, useMemo, useState, useEffect, useCallback } from 'react';
-import { SPRITE_SIZE, getSpriteIndex, type ThingType, isValidSpriteId } from '@/lib/tibia';
+import { SPRITE_SIZE, getSpriteIndex, type ThingType, isValidSpriteId, importObjectSheet } from '@/lib/tibia';
 
 interface SceneItem {
 	id: number;
@@ -95,7 +95,7 @@ export const SpriteCanvas = memo(
 	}: SpriteCanvasProps) => {
 		const canvasRef = useRef<HTMLCanvasElement>(null);
 		const containerRef = useRef<HTMLDivElement>(null);
-		const { data, getSprite, spriteLoadVersion, notifySpritesLoaded } = useTibiaData();
+		const { data, getSprite, spriteLoadVersion, notifyDataChanged, notifySpriteImport, notifySpritesLoaded } = useTibiaData();
 		const { dragType, isDragging, draggedItem } = useDragDrop();
 		const [isLoading, setIsLoading] = useState(false);
 		const [isPanning, setIsPanning] = useState(false);
@@ -305,7 +305,8 @@ export const SpriteCanvas = memo(
 			outfitData,
 			sceneTiles,
 			sceneWidth,
-			sceneHeight
+			sceneHeight,
+			spriteLoadVersion // Force recalculation if sprites/data reload (e.g. after import)
 		]);
 
 		// Offscreen canvas for compositing ImageData
@@ -338,7 +339,7 @@ export const SpriteCanvas = memo(
 
 							// Collect all sprites for multi-tile items
 							for (const spriteId of sceneThing.spriteIndex) {
-								if (isValidSpriteId(spriteId, data.spritesCount)) {
+								if (isValidSpriteId(spriteId)) {
 									spriteIds.add(spriteId);
 								}
 							}
@@ -443,7 +444,7 @@ export const SpriteCanvas = memo(
 													const spriteIdx = (itemHeight - h - 1) * itemWidth + (itemWidth - w - 1);
 													const sceneSpriteId = sceneThing.spriteIndex[spriteIdx];
 
-													if (isValidSpriteId(sceneSpriteId, data?.spritesCount)) {
+													if (isValidSpriteId(sceneSpriteId)) {
 														const sceneSprite = getSprite(sceneSpriteId);
 														if (sceneSprite && !sceneSprite.isEmpty) {
 															if (!sceneSprite.imageData) {
@@ -520,7 +521,7 @@ export const SpriteCanvas = memo(
 
 				// First pass: Collect and organize sprites
 				for (const { layer, x: posX, y: posY, patternY, spriteId: currentSpriteId } of spriteLayout) {
-					const isValid = isValidSpriteId(currentSpriteId, data?.spritesCount);
+					const isValid = isValidSpriteId(currentSpriteId);
 					if (!isValid) {
 						loadedSprites++;
 						continue;
@@ -613,7 +614,7 @@ export const SpriteCanvas = memo(
 			} else {
 				// Standard Rendering
 				for (const { x: posX, y: posY, spriteId: currentSpriteId } of spriteLayout) {
-					const isValid = isValidSpriteId(currentSpriteId, data?.spritesCount);
+					const isValid = isValidSpriteId(currentSpriteId);
 
 					if (!isValid) {
 						loadedSprites++;
@@ -981,14 +982,28 @@ export const SpriteCanvas = memo(
 		}, [canvasWidth, canvasHeight, scale, exactSizeCenter, panX, panY, renderMode]);
 
 		// Drag and Drop handlers
+		const handleDragEnter = (e: React.DragEvent) => {
+			if (e.dataTransfer.types.includes('Files')) {
+				e.preventDefault();
+				e.dataTransfer.dropEffect = 'copy';
+			}
+		};
+
 		const handleDragOver = (e: React.DragEvent) => {
+			// Allow file drops indiscriminately
+			if (e.dataTransfer.types.includes('Files')) {
+				e.preventDefault();
+				e.dataTransfer.dropEffect = 'copy';
+				return;
+			}
+
 			if (!onSpriteDrop || !thing || !canvasRef.current) {
-				console.log('DragOver blocked:', { thing: !!thing, canvas: !!canvasRef.current, onSpriteDrop: !!onSpriteDrop });
+				// console.log('DragOver blocked:', { thing: !!thing, canvas: !!canvasRef.current, onSpriteDrop: !!onSpriteDrop });
 				return;
 			}
 			e.preventDefault();
 			e.dataTransfer.dropEffect = 'copy';
-			console.log('DragOver allowed');
+			// console.log('DragOver allowed');
 
 			const canvas = canvasRef.current;
 			const rect = canvas.getBoundingClientRect();
@@ -1098,7 +1113,31 @@ export const SpriteCanvas = memo(
 			setHoveredSlot(null);
 		}, [onSpriteHover]);
 
-		const handleDrop = (e: React.DragEvent) => {
+		const handleDrop = async (e: React.DragEvent) => {
+			// Check for file drop first
+			if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+				if (thing && data) {
+					e.preventDefault();
+					setHighlightedSlot(null);
+					const file = e.dataTransfer.files[0];
+					console.log('Drag & Drop: File dropped on canvas', file.name, 'size:', file.size);
+
+					// Use new binary IPC import - returns sprites directly in cache
+					const result = await importObjectSheet(thing, data, file);
+
+					if (result.success && result.updatedThing) {
+						// Notify with actual sprite IDs for proper re-renders
+						notifySpritesLoaded();
+						if (notifyDataChanged && result.spriteIds) {
+							notifyDataChanged(result.spriteIds);
+						}
+						// Notify SpriteList to go to last page to show new sprites
+						notifySpriteImport();
+					}
+				}
+				return;
+			}
+
 			if (!onSpriteDrop || !thing || !canvasRef.current || !highlightedSlot) return;
 			e.preventDefault();
 			setHighlightedSlot(null);
@@ -1198,6 +1237,7 @@ export const SpriteCanvas = memo(
 				ref={containerRef}
 				onDrop={handleDrop}
 				onDragOver={handleDragOver}
+				onDragEnter={handleDragEnter}
 				onDragLeave={handleDragLeave}
 				style={{ cursor: isPanning ? 'grabbing' : onPanChange && (isPanEnabled || isPanning) ? 'grab' : 'default' }}
 				className={cn(

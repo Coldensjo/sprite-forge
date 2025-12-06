@@ -109,14 +109,15 @@ All colors MUST be HSL.
 		@apply border-border;
 	}
 
+	html,
 	body {
-		@apply bg-background text-foreground;
-		font-family:
-			'Inter',
-			-apple-system,
-			BlinkMacSystemFont,
-			'Segoe UI',
-			sans-serif;
+		@apply text-foreground;
+		background: transparent !important;
+		font-family: 'Inter',
+		-apple-system,
+		BlinkMacSystemFont,
+		'Segoe UI',
+		sans-serif;
 	}
 
 	code,
@@ -138,7 +139,7 @@ All colors MUST be HSL.
 	::-webkit-scrollbar-thumb {
 		background: hsl(var(--border));
 		border-radius: 5px;
-		border: 2px solid hsl(var(--background)); /* Creates padding effect */
+		border: 2px solid hsl(var(--background));
 	}
 
 	::-webkit-scrollbar-thumb:hover {

@@ -38,6 +38,7 @@ export const SpriteList = () => {
 		notifyDataChanged,
 		notifySpritesLoaded,
 		highlightedSpriteId,
+		spriteImportVersion,
 		setHighlightedSpriteId
 	} = useTibiaData();
 	const { startDrag } = useDragDrop();
@@ -93,6 +94,19 @@ export const SpriteList = () => {
 	useEffect(() => {
 		setInputValue(highlightedSpriteId ? String(highlightedSpriteId) : '');
 	}, [highlightedSpriteId]);
+
+	// Navigate to last page when new sprites are imported
+	useEffect(() => {
+		if (spriteImportVersion > 0 && totalPages > 0) {
+			setCurrentPage(totalPages);
+			// Also highlight the last sprite
+			if (allSpriteIds.length > 0) {
+				const lastSpriteId = allSpriteIds[allSpriteIds.length - 1];
+				setHighlightedSpriteId(lastSpriteId);
+				setSelectedSpriteIds(new Set([lastSpriteId]));
+			}
+		}
+	}, [spriteImportVersion, totalPages, allSpriteIds, setHighlightedSpriteId]);
 
 	// Load sprites for current page + prefetch ahead
 	useEffect(() => {
@@ -154,6 +168,7 @@ export const SpriteList = () => {
 			const firstSpriteId = allSpriteIds[start];
 			if (firstSpriteId !== undefined) {
 				setHighlightedSpriteId(firstSpriteId);
+				setSelectedSpriteIds(new Set([firstSpriteId]));
 			}
 		}
 	};

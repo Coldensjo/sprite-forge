@@ -147,23 +147,34 @@ impl SprFileReader {
 /// Global SPR file manager state
 pub struct SprManager {
     readers: HashMap<String, SprFileReader>,
+    overrides: HashMap<String, HashMap<u32, SpriteData>>,
 }
 
 impl SprManager {
     pub fn new() -> Self {
         Self {
             readers: HashMap::new(),
+            overrides: HashMap::new(),
         }
     }
 
     pub fn open_file(&mut self, path: String, extended: bool) -> Result<SprHeader, String> {
         let reader = SprFileReader::open(&path, extended)?;
         let header = reader.get_header().clone();
-        self.readers.insert(path, reader);
+        self.readers.insert(path.clone(), reader);
+        // Initialize overrides for this path if not exists
+        self.overrides.entry(path).or_insert_with(HashMap::new);
         Ok(header)
     }
 
     pub fn read_sprite(&mut self, path: &str, id: u32) -> Result<SpriteData, String> {
+        // Check overrides first
+        if let Some(path_overrides) = self.overrides.get(path) {
+            if let Some(sprite) = path_overrides.get(&id) {
+                return Ok(sprite.clone());
+            }
+        }
+
         let reader = self.readers.get_mut(path)
             .ok_or_else(|| format!("SPR file not open: {}", path))?;
         reader.read_sprite(id)
@@ -184,173 +195,79 @@ impl SprManager {
 
     /// Read multiple sprites at once (batch operation)
     pub fn read_sprites_batch(&mut self, path: &str, start_id: u32, count: u32) -> Result<Vec<SpriteData>, String> {
-        let reader = self.readers.get_mut(path)
+        // Create the full range of requested IDs
+        let end_id = start_id + count - 1;
+        
+        let reader = self.readers.get(path)
             .ok_or_else(|| format!("SPR file not open: {}", path))?;
+        let file_max_id = reader.get_header().sprite_count;
 
-        let max_id = reader.get_header().sprite_count;
-        let end_id = (start_id + count - 1).min(max_id);
+        // Identify which sprites are overridden and which need file access
+        let mut file_ids = Vec::new();
+        let mut result_map = HashMap::new();
         
-        if start_id > end_id {
-            return Ok(Vec::new());
-        }
-
-        let actual_count = end_id - start_id + 1;
-        let mut sprites = Vec::with_capacity(actual_count as usize);
-
-        // OPTIMIZATION: Read all addresses in one go
-        let start_offset = reader.header_size + ((start_id - 1) as u64 * 4);
-        
-        reader.file.seek(SeekFrom::Start(start_offset))
-            .map_err(|e| format!("Failed to seek to address table: {}", e))?;
-
-        let mut addresses_buf = vec![0u8; (actual_count * 4) as usize];
-        reader.file.read_exact(&mut addresses_buf)
-            .map_err(|e| format!("Failed to read address table: {}", e))?;
-
-        // 1. Collect all valid addresses and find min/max file positions
-        let mut valid_sprites = Vec::with_capacity(actual_count as usize);
-        let mut min_pos = u64::MAX;
-        let mut max_pos = 0;
-
-        for i in 0..actual_count {
-            let offset = (i * 4) as usize;
-            let address = u32::from_le_bytes([
-                addresses_buf[offset],
-                addresses_buf[offset + 1],
-                addresses_buf[offset + 2],
-                addresses_buf[offset + 3],
-            ]);
-
-            if address != 0 {
-                let pos = address as u64;
-                if pos < min_pos { min_pos = pos; }
-                // We don't know the length yet, but we know it starts here.
-                // We'll update max_pos roughly or during the read.
-                // For now, just track the start.
-                if pos > max_pos { max_pos = pos; }
-                
-                valid_sprites.push((start_id + i, pos));
-            } else {
-                // Empty sprite
-                sprites.push(SpriteData {
-                    id: start_id + i,
-                    is_empty: true,
-                    compressed_pixels: Vec::new(),
-                });
-            }
-        }
-
-        if valid_sprites.is_empty() {
-            return Ok(sprites);
-        }
-
-        // Sort by file position to read sequentially
-        valid_sprites.sort_by_key(|k| k.1);
-
-        // 2. Strategy Decision:
-        // If the data is dense (file size of range < 2 * sum of individual reads), read the whole block.
-        // Otherwise, read individually but sequentially.
-        
-        // Heuristic: If the span covers less than 10MB, just read it all. 
-        // Most sprite pages are dense.
-        let span_size = if valid_sprites.len() > 0 {
-            // Estimate end of last sprite (address + 3 header + ~8KB max sprite size safety margin)
-            (max_pos + 8192) - min_pos
-        } else {
-            0
-        };
-
-        // 10MB limit for bulk read
-        if span_size < 10 * 1024 * 1024 {
-            // BULK READ STRATEGY
-            reader.file.seek(SeekFrom::Start(min_pos))
-                .map_err(|e| format!("Failed to seek to data block: {}", e))?;
-
-            let mut file_buf = vec![0u8; span_size as usize];
-            // Read as much as possible, ignore EOF error if we try to read past it
-            let bytes_read = reader.file.read(&mut file_buf)
-                .map_err(|e| format!("Failed to read data block: {}", e))?;
-            
-            // Parse from memory buffer
-            for (id, pos) in valid_sprites {
-                let local_offset = (pos - min_pos) as usize;
-                
-                if local_offset + 5 > bytes_read {
-                    // Should not happen if estimation is correct, but safety first
-                    continue;
-                }
-
-                // Skip 3 bytes RGB (pos + 3)
-                let len_offset = local_offset + 3;
-                let length = u16::from_le_bytes([
-                    file_buf[len_offset],
-                    file_buf[len_offset + 1]
-                ]);
-
-                if length == 0 {
-                    sprites.push(SpriteData { id, is_empty: true, compressed_pixels: Vec::new() });
-                    continue;
-                }
-
-                let data_offset = len_offset + 2;
-                let data_end = data_offset + length as usize;
-
-                if data_end <= bytes_read {
-                    sprites.push(SpriteData {
-                        id,
-                        is_empty: false,
-                        compressed_pixels: file_buf[data_offset..data_end].to_vec(),
-                    });
+        if let Some(path_overrides) = self.overrides.get(path) {
+            for id in start_id..=end_id {
+                if let Some(sprite) = path_overrides.get(&id) {
+                    result_map.insert(id, sprite.clone());
+                } else if id <= file_max_id {
+                    file_ids.push(id);
                 }
             }
         } else {
-            // SEQUENTIAL READ STRATEGY (Fallback for sparse data)
-            // We already sorted valid_sprites by position, so seeks are forward-only
-            let mut current_pos = reader.file.stream_position()
-                .map_err(|e| format!("Failed to get stream pos: {}", e))?;
-
-            for (id, pos) in valid_sprites {
-                let target_pos = pos + 3; // Skip RGB
-                
-                if current_pos != target_pos {
-                    reader.file.seek(SeekFrom::Start(target_pos))
-                        .map_err(|e| format!("Failed to seek: {}", e))?;
-                    current_pos = target_pos;
+             for id in start_id..=end_id {
+                if id <= file_max_id {
+                    file_ids.push(id);
                 }
-
-                let mut len_buf = [0u8; 2];
-                reader.file.read_exact(&mut len_buf)
-                    .map_err(|e| format!("Failed to read length: {}", e))?;
-                current_pos += 2;
-                
-                let length = u16::from_le_bytes(len_buf);
-
-                if length == 0 {
-                    sprites.push(SpriteData { id, is_empty: true, compressed_pixels: Vec::new() });
-                    continue;
-                }
-
-                let mut pixels = vec![0u8; length as usize];
-                reader.file.read_exact(&mut pixels)
-                    .map_err(|e| format!("Failed to read pixels: {}", e))?;
-                current_pos += length as u64;
-
-                sprites.push(SpriteData {
-                    id,
-                    is_empty: false,
-                    compressed_pixels: pixels,
-                });
             }
         }
+        
+        // If we have IDs to read from file
+        if !file_ids.is_empty() {
+             let reader = self.readers.get_mut(path).unwrap(); // valid because checked max_id above
+             // Use internal logic similar to original batch read but only for active file_ids
+             // Note: Original batch read was optimized for contiguous range. 
+             // Since we might have holes due to overrides, we can fallback to read_sprites_list logic for the file_ids
+             // But we need to implement partial reading here to avoid duplication.
+             
+             // Reuse read_sprites_list logic since it handles non-contiguous
+             // We can just call self.read_sprites_list internally if we could split borrows, 
+             // but self is borrowed. So we must use the reader directly.
+             
+             // Simplest approach: Use the sequential reader logic from before or the "list" logic
+             // Let's implement a private helper on reader to read a list of IDs?
+             // Or copy the logic from read_sprites_list here for the file_ids subset.
+             
+             // Actually, the original read_sprites_batch assumes contiguous range for optimization.
+             // If we have only few overrides, it's mostly contiguous.
+             // Let's construct a list of ranges?
+             
+             // To keep it simple and safe:
+             // 1. We already have the logic in `read_sprites_list` which uses `self.readers`.
+             //    But we can't call `self.read_sprites_list` while holding `self`.
+             // 2. We can implement `read_sprites_list` on `SprFileReader`.
+             // 3. Or just implement the logic inline here.
+             
+             // Let's use `read_sprites_list` on `self` isn't possible?
+             // Actually `self.readers` is a field. We can get mutable reference.
+        }
 
-        Ok(sprites)
+        // Re-implementation using `read_sprites_list` logic inline for `file_ids` 
+        // because we can't easily share code without refactoring SprFileReader.
+        
+        // ... Wait, I can just call `read_sprites_list` (public) on `self`?
+        // `read_sprites_batch` takes `&mut self`.
+        // `read_sprites_list` takes `&mut self`.
+        // Yes I can call it recursively IF I resolve the overrides first?
+        // No, `read_sprites_list` will also check overrides if I update it.
+        // So `read_sprites_batch` can just delegate to `read_sprites_list`.
+        
+        let ids: Vec<u32> = (start_id..=end_id).collect();
+        self.read_sprites_list(path, ids)
     }
 
     /// Read a list of specific sprite IDs efficiently
     pub fn read_sprites_list(&mut self, path: &str, ids: Vec<u32>) -> Result<Vec<SpriteData>, String> {
-        let reader = self.readers.get_mut(path)
-            .ok_or_else(|| format!("SPR file not open: {}", path))?;
-
         if ids.is_empty() {
             return Ok(Vec::new());
         }
@@ -360,25 +277,48 @@ impl SprManager {
         sorted_ids.sort_unstable();
         sorted_ids.dedup();
 
-        // Filter valid IDs
+        let reader = self.readers.get_mut(path)
+            .ok_or_else(|| format!("SPR file not open: {}", path))?;
         let max_id = reader.get_header().sprite_count;
-        sorted_ids.retain(|&id| id > 0 && id <= max_id);
 
-        if sorted_ids.is_empty() {
-            return Ok(Vec::new());
+        // Split IDs into file_ids and overridden_sprites
+        // Note: New sprites from import will have IDs > max_id, so we must check overrides BEFORE validating against max_id.
+        let mut file_ids = Vec::new();
+        let mut result_sprites = Vec::new();
+        
+        let path_overrides = self.overrides.get(path);
+
+        for id in sorted_ids {
+            // 1. Check overrides first (covers both replaced existing sprites and new appended sprites)
+            if let Some(overrides) = path_overrides {
+                if let Some(sprite) = overrides.get(&id) {
+                    result_sprites.push(sprite.clone());
+                    continue;
+                }
+            }
+
+            // 2. If not overridden, check if it's a valid file ID
+            if id > 0 && id <= max_id {
+                file_ids.push(id);
+            }
+            // Else: ID is out of range and not overridden -> invalid, ignored
         }
 
-        let mut sprites = Vec::with_capacity(sorted_ids.len());
+        if file_ids.is_empty() {
+             return Ok(result_sprites);
+        }
+
+        // Use reader to get remaining sprites
+        let reader = self.readers.get_mut(path).unwrap(); // valid
+
+        let mut sprites = Vec::with_capacity(file_ids.len());
 
         // OPTIMIZATION: Read all addresses for the requested IDs
-        // We can't read a single block of addresses because they might be scattered.
-        // However, we can group them into chunks if they are close.
-        
         // Group IDs into chunks where gaps are small (< 100 IDs)
         let mut chunks: Vec<Vec<u32>> = Vec::new();
         let mut current_chunk: Vec<u32> = Vec::new();
         
-        for &id in &sorted_ids {
+        for &id in &file_ids {
             if current_chunk.is_empty() {
                 current_chunk.push(id);
             } else {
@@ -535,7 +475,19 @@ impl SprManager {
             }
         }
 
-        Ok(sprites)
+        // Combine results
+        result_sprites.extend(sprites);
+        Ok(result_sprites)
+    }
+
+    /// Update sprite data in memory (override)
+    pub fn update_sprite(&mut self, path: &str, id: u32, sprite: SpriteData) -> Result<(), String> {
+        if id == 0 { return Err("Invalid sprite ID 0".to_string()); }
+        
+        self.overrides.entry(path.to_string())
+            .or_insert_with(HashMap::new)
+            .insert(id, sprite);
+        Ok(())
     }
 
     /// Read a list of sprites and return them as a compact binary buffer
@@ -614,12 +566,18 @@ impl SprManager {
 
     /// Pack sprites with RGBA pixels and then LZ4 compress for fast IPC transfer
     /// LZ4 is very fast to decompress (~2GB/s) while providing ~5x compression on RGBA data
-    fn pack_sprites_rgba_lz4(sprites: Vec<SpriteData>, transparent: bool) -> Vec<u8> {
+    /// Uses LZ4 frame format which is compatible with lz4js on the frontend
+    pub fn pack_sprites_rgba_lz4(sprites: Vec<SpriteData>, transparent: bool) -> Vec<u8> {
         // First, pack to uncompressed RGBA format
         let uncompressed = Self::pack_sprites_rgba(sprites, transparent);
 
-        // Then compress with LZ4 (prepend size for decompression)
-        lz4_flex::compress_prepend_size(&uncompressed)
+        // Then compress with LZ4 frame format (compatible with lz4js which expects frame format)
+        use lz4_flex::frame::FrameEncoder;
+        use std::io::Write;
+
+        let mut encoder = FrameEncoder::new(Vec::new());
+        encoder.write_all(&uncompressed).expect("LZ4 encoding failed");
+        encoder.finish().expect("LZ4 finish failed")
     }
 
     /// Helper to pack sprites with decompressed RGBA pixels
@@ -684,7 +642,7 @@ impl SprManager {
 /// - Colored pixels: RGB or RGBA bytes follow (depending on transparent flag)
 ///
 /// Output: 4096 bytes of RGBA data (32x32 pixels, 4 bytes per pixel)
-fn decompress_to_rgba(compressed: &[u8], transparent: bool) -> Vec<u8> {
+pub fn decompress_to_rgba(compressed: &[u8], transparent: bool) -> Vec<u8> {
     let mut pixels = vec![0u8; SPRITE_DATA_SIZE];
     let mut write_pos = 0;
     let mut read_pos = 0;

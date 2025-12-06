@@ -19,7 +19,7 @@ function collectSceneSpriteIds(
 				if (!thing) continue;
 				// Collect first sprite (for simple rendering)
 				const spriteId = thing.spriteIndex[0];
-				if (isValidSpriteId(spriteId, spritesCount)) {
+				if (isValidSpriteId(spriteId)) {
 					spriteIds.add(spriteId);
 				}
 			}
@@ -115,7 +115,7 @@ export const SceneCanvas = memo(({ width, tiles, height, scale = 1, onTileClick 
 					// Simple rendering of first sprite of the item
 					// TODO: Handle multi-sprite items, animations, etc.
 					const spriteIndex = thing.spriteIndex[0];
-					if (isValidSpriteId(spriteIndex, data?.spritesCount)) {
+					if (isValidSpriteId(spriteIndex)) {
 						const sprite = getSprite(spriteIndex);
 						if (sprite && !sprite.isEmpty) {
 							if (!sprite.imageData) {

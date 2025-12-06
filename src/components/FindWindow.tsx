@@ -368,7 +368,7 @@ export const FindWindow = () => {
 				const thing = resultThings.get(key);
 				if (thing && thing.spriteIndex) {
 					for (const spriteId of thing.spriteIndex) {
-						if (isValidSpriteId(spriteId, data.spritesCount)) {
+						if (isValidSpriteId(spriteId)) {
 							idsToLoad.push(spriteId);
 						}
 					}
@@ -461,39 +461,78 @@ export const FindWindow = () => {
 		};
 	}, [handleClose]);
 
+	const isMac = navigator.userAgent.includes('Mac');
+
 	return (
-		<div className="h-screen w-screen flex flex-col bg-background">
-			<div data-tauri-drag-region className="h-8 bg-toolbar-bg border-b border-border/50 flex items-center justify-between px-4">
-				<span className="text-sm font-medium">Find</span>
-				<div className="flex items-center gap-1">
-					<Button
-						size="icon"
-						variant="ghost"
-						onClick={handleMinimize}
-						onMouseDown={(e) => e.stopPropagation()}
-						className="h-8 w-8 hover:bg-secondary/50"
-					>
-						<Minus className="h-4 w-4" />
-					</Button>
-					<Button
-						size="icon"
-						variant="ghost"
-						onClick={handleMaximize}
-						onMouseDown={(e) => e.stopPropagation()}
-						className="h-8 w-8 hover:bg-secondary/50"
-					>
-						<Square className="h-3.5 w-3.5" />
-					</Button>
-					<Button
-						size="icon"
-						variant="ghost"
-						onClick={handleClose}
-						onMouseDown={(e) => e.stopPropagation()}
-						className="h-8 w-8 hover:bg-destructive/20 hover:text-destructive"
-					>
-						<X className="h-4 w-4" />
-					</Button>
-				</div>
+		<div
+			className={`h-screen w-screen flex flex-col bg-background ${isMac ? 'rounded-xl overflow-hidden border border-white/10 shadow-2xl' : ''}`}
+		>
+			<div
+				data-tauri-drag-region
+				className="h-8 bg-toolbar-bg border-b border-border/50 flex items-center justify-between px-4 relative"
+			>
+				{isMac ? (
+					<>
+						<div className="flex items-center gap-2 group">
+							<div
+								onClick={handleClose}
+								onMouseDown={(e) => e.stopPropagation()}
+								className="w-3 h-3 rounded-full bg-[#FF5F56] hover:bg-[#FF5F56]/80 cursor-pointer flex items-center justify-center border border-black/10 transition-colors"
+							>
+								<X className="w-2 h-2 text-black/50 opacity-0 group-hover:opacity-100" />
+							</div>
+							<div
+								onClick={handleMinimize}
+								onMouseDown={(e) => e.stopPropagation()}
+								className="w-3 h-3 rounded-full bg-[#FFBD2E] hover:bg-[#FFBD2E]/80 cursor-pointer flex items-center justify-center border border-black/10 transition-colors"
+							>
+								<Minus className="w-2 h-2 text-black/50 opacity-0 group-hover:opacity-100" />
+							</div>
+							<div
+								onClick={handleMaximize}
+								onMouseDown={(e) => e.stopPropagation()}
+								className="w-3 h-3 rounded-full bg-[#27C93F] hover:bg-[#27C93F]/80 cursor-pointer flex items-center justify-center border border-black/10 transition-colors"
+							>
+								<Square className="w-2 h-2 text-black/50 opacity-0 group-hover:opacity-100" />
+							</div>
+						</div>
+						<span className="text-sm font-medium absolute left-1/2 -translate-x-1/2">Find</span>
+						<div></div>
+					</>
+				) : (
+					<>
+						<span className="text-sm font-medium">Find</span>
+						<div className="flex items-center gap-1">
+							<Button
+								size="icon"
+								variant="ghost"
+								onClick={handleMinimize}
+								onMouseDown={(e) => e.stopPropagation()}
+								className="h-8 w-8 hover:bg-secondary/50"
+							>
+								<Minus className="h-4 w-4" />
+							</Button>
+							<Button
+								size="icon"
+								variant="ghost"
+								onClick={handleMaximize}
+								onMouseDown={(e) => e.stopPropagation()}
+								className="h-8 w-8 hover:bg-secondary/50"
+							>
+								<Square className="h-3.5 w-3.5" />
+							</Button>
+							<Button
+								size="icon"
+								variant="ghost"
+								onClick={handleClose}
+								onMouseDown={(e) => e.stopPropagation()}
+								className="h-8 w-8 hover:bg-destructive/20 hover:text-destructive"
+							>
+								<X className="h-4 w-4" />
+							</Button>
+						</div>
+					</>
+				)}
 			</div>
 
 			<Tabs defaultValue="objects" className="flex-1 flex flex-col overflow-hidden">

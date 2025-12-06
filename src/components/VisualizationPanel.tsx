@@ -320,7 +320,14 @@ export const VisualizationPanel = () => {
 							}
 						/>
 					) : (
-						<div className="text-muted-foreground text-xs">No sprite</div>
+						<SpriteCanvas
+							scale={1}
+							showEmpty
+							renderMode="preview"
+							thing={displayThing!} // Assume displayThing exists but is empty
+							width={displayThing?.width || 1}
+							height={displayThing?.height || 1}
+						/>
 					)}
 				</CheckerBoard>
 

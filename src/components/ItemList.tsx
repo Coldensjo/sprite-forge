@@ -1,6 +1,8 @@
 import { cn } from '@/lib/utils';
+import { useToast } from '@/hooks/use-toast';
 import { logger, EventCode } from '@/lib/debug';
 import { useTibiaData } from '@/contexts/TibiaDataContext';
+import { exportObjectSheet, importObjectSheet } from '@/lib/tibia';
 import { useRef, useMemo, useState, useEffect, useCallback } from 'react';
 import { ContextMenu, ContextMenuItem, ContextMenuContent, ContextMenuTrigger } from '@/components/ui/context-menu';
 import { DropdownMenu, DropdownMenuItem, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -22,12 +24,16 @@ import {
 	Square,
 	Circle,
 	Trash2,
+	Upload,
 	Package,
 	SkipBack,
+	Download,
+	Clipboard,
 	LayoutGrid,
 	ChevronLeft,
 	SkipForward,
-	ChevronRight
+	ChevronRight,
+	ClipboardPaste
 } from 'lucide-react';
 
 import { Input } from './ui/input';
@@ -43,6 +49,7 @@ type ViewMode = 'list' | 'grid' | 'large';
 export const ItemList = () => {
 	const {
 		data,
+		updateThing,
 		openedItemId,
 		updateCounter,
 		setOpenedItemId,
@@ -51,16 +58,20 @@ export const ItemList = () => {
 		highlightedItemId,
 		hasUnsavedChanges,
 		notifyDataChanged,
+		markUnsavedChanges,
 		setSelectedCategory,
 		notifySpritesLoaded,
 		setHighlightedItemId
 	} = useTibiaData();
+	const { toast } = useToast();
 	const [currentPage, setCurrentPage] = useState<number>(1);
+	const [copiedProperties, setCopiedProperties] = useState<null | Partial<ThingType>>(null);
 	const [inputValue, setInputValue] = useState<string>('');
 	const [viewMode, setViewMode] = useState<ViewMode>('list');
 	const scrollViewportRef = useRef<HTMLDivElement>(null);
 	const shouldScrollToHighlightedRef = useRef(false);
 	const pendingNewItemId = useRef<null | number>(null);
+	const prevCategoryRef = useRef<null | ThingCategory>(null);
 	const itemsPerPage = 100;
 
 	const categoryLabels: Record<ThingCategory, string> = {
@@ -149,17 +160,21 @@ export const ItemList = () => {
 
 	useEffect(() => {
 		if (data) {
-			setCurrentPage(1);
-			// Auto-highlight first item (but don't open it)
-			const firstItemId = allItemIds[0];
-			if (firstItemId !== undefined) {
-				setHighlightedItemId(firstItemId);
-			} else {
-				setHighlightedItemId(null);
+			// Only reset page when category actually changes, not on every data update
+			if (prevCategoryRef.current !== selectedCategory) {
+				prevCategoryRef.current = selectedCategory;
+				setCurrentPage(1);
+				// Auto-highlight first item (but don't open it)
+				const firstItemId = allItemIds[0];
+				if (firstItemId !== undefined) {
+					setHighlightedItemId(firstItemId);
+				} else {
+					setHighlightedItemId(null);
+				}
+				// Keep opened item when category changes - don't clear it
 			}
-			// Keep opened item when category changes - don't clear it
 		}
-	}, [data, selectedCategory, setOpenedItemId]);
+	}, [data, selectedCategory, setHighlightedItemId, allItemIds]);
 
 	// Sync input value with highlighted item
 	useEffect(() => {
@@ -230,7 +245,7 @@ export const ItemList = () => {
 						// Collect from main spriteIndex (covers idle group / non-frame-group items)
 						if (item.spriteIndex && item.spriteIndex.length > 0) {
 							for (const spriteId of item.spriteIndex) {
-								if (spriteId && isValidSpriteId(spriteId, data.spritesCount)) {
+								if (spriteId && isValidSpriteId(spriteId)) {
 									ids.push(spriteId);
 								}
 							}
@@ -240,7 +255,7 @@ export const ItemList = () => {
 							const idleGroup = item.frameGroupsData[0];
 							if (idleGroup?.spriteIndex && idleGroup.spriteIndex.length > 0) {
 								for (const spriteId of idleGroup.spriteIndex) {
-									if (spriteId && isValidSpriteId(spriteId, data.spritesCount)) {
+									if (spriteId && isValidSpriteId(spriteId)) {
 										ids.push(spriteId);
 									}
 								}
@@ -399,7 +414,7 @@ export const ItemList = () => {
 				}
 			}, 50);
 		}
-	}, [currentPage, setHighlightedItemId, setOpenedItemId, updateCounter]);
+	}, [currentPage, setHighlightedItemId, setOpenedItemId]);
 
 	// Scroll highlighted item to center when it changes (only if triggered by input)
 	useEffect(() => {
@@ -555,9 +570,8 @@ export const ItemList = () => {
 
 											// Set pending item ID to highlight after page change
 											pendingNewItemId.current = newId;
-											setCurrentPage(targetPage);
-
 											notifyDataChanged();
+											setCurrentPage(targetPage);
 										}
 									}}
 								>
@@ -636,22 +650,20 @@ export const ItemList = () => {
 													viewMode === 'large' && 'w-32 h-32'
 												)}
 											>
-												{item.spriteIndex && item.spriteIndex.length > 0 ? (
-													<SpriteCanvas
-														showEmpty
-														thing={item}
-														renderMode="list"
-														width={item.width}
-														height={item.height}
-														scale={
-															viewMode === 'list'
-																? 36 / (Math.max(item.width, item.height) * 32)
-																: viewMode === 'grid'
-																	? 48 / (Math.max(item.width, item.height) * 32)
-																	: 128 / (Math.max(item.width, item.height) * 32)
-														}
-													/>
-												) : null}
+												<SpriteCanvas
+													showEmpty
+													thing={item}
+													renderMode="list"
+													width={item.width}
+													height={item.height}
+													scale={
+														viewMode === 'list'
+															? 36 / (Math.max(item.width, item.height) * 32)
+															: viewMode === 'grid'
+																? 48 / (Math.max(item.width, item.height) * 32)
+																: 128 / (Math.max(item.width, item.height) * 32)
+													}
+												/>
 											</CheckerBoard>
 											<div
 												className={cn(
@@ -748,6 +760,58 @@ export const ItemList = () => {
 										>
 											<Copy className="mr-2 h-4 w-4" />
 											<span>Duplicate</span>
+										</ContextMenuItem>
+										<ContextMenuItem
+											onClick={() => {
+												if (item) {
+													// eslint-disable-next-line @typescript-eslint/no-unused-vars
+													const { id: _, category: ___, spriteIndex: __, frameGroupsData: ____, ...properties } = item;
+													setCopiedProperties(properties);
+													toast({ description: 'Properties copied' });
+												}
+											}}
+										>
+											<Clipboard className="mr-2 h-4 w-4" />
+											<span>Copy Properties</span>
+										</ContextMenuItem>
+										<ContextMenuItem
+											disabled={!copiedProperties}
+											onClick={() => {
+												if (item && copiedProperties) {
+													updateThing(id, selectedCategory, copiedProperties);
+													markUnsavedChanges(id, selectedCategory, true);
+													notifyDataChanged([id]);
+													toast({ description: 'Properties pasted' });
+												}
+											}}
+										>
+											<ClipboardPaste className="mr-2 h-4 w-4" />
+											<span>Paste Properties</span>
+										</ContextMenuItem>
+										<ContextMenuItem
+											onClick={() => {
+												if (data && item) {
+													exportObjectSheet(item, data);
+												}
+											}}
+										>
+											<Download className="mr-2 h-4 w-4" />
+											<span>Export Object Sheet</span>
+										</ContextMenuItem>
+										<ContextMenuItem
+											onClick={async () => {
+												if (data && item) {
+													console.log('Context Menu: Import Object Sheet clicked for item', item.id);
+													const success = await importObjectSheet(item, data);
+													if (success) {
+														notifySpritesLoaded(); // Force re-render of canvases
+														notifyDataChanged([item.id]); // Force refresh lists
+													}
+												}
+											}}
+										>
+											<Upload className="mr-2 h-4 w-4" />
+											<span>Import Object Sheet</span>
 										</ContextMenuItem>
 										<ContextMenuItem
 											className="text-destructive focus:text-destructive"

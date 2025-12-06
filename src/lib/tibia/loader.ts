@@ -535,6 +535,37 @@ export function parseRgbaSprites(response: Uint8Array | ArrayBuffer, transparenc
 }
 
 /**
+ * Parse binary response from import_object_sheet_binary command
+ * Format: [JSON len: u32][ThingType JSON bytes][sprites in RGBA format (LZ4 compressed)]
+ *
+ * The sprites portion is LZ4 compressed and follows the parseRgbaSprites format.
+ */
+export function parseImportResponse(buffer: Uint8Array, transparency: boolean): { sprites: Sprite[]; updatedThing: ThingType } {
+	const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+	let offset = 0;
+
+	// Read ThingType JSON length
+	const jsonLen = view.getUint32(offset, true);
+	offset += 4;
+
+	// Read and parse ThingType JSON
+	const jsonBytes = buffer.slice(offset, offset + jsonLen);
+	offset += jsonLen;
+	const updatedThing = JSON.parse(new TextDecoder().decode(jsonBytes)) as ThingType;
+
+	// The remaining bytes are LZ4-compressed sprite data (frame format)
+	const compressedSprites = buffer.slice(offset);
+
+	// Decompress LZ4 frame format
+	const decompressedSprites = lz4.decompress(compressedSprites);
+
+	// Parse sprites using existing parser
+	const sprites = parseRgbaSprites(decompressedSprites, transparency);
+
+	return { sprites, updatedThing };
+}
+
+/**
  * Legacy parser for compressed sprite format
  * Format: [Count: u32] -> ([ID: u32][IsEmpty: u8][Len: u32][Data...])*
  * @deprecated Use parseRgbaSprites with read_sprites_rgba command instead

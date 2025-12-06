@@ -137,7 +137,7 @@ export const ItemPickerDialog = ({ open, onOpenChange, onItemSelect }: ItemPicke
 				for (const item of items) {
 					if (item.spriteIndex) {
 						for (const spriteId of item.spriteIndex) {
-							if (isValidSpriteId(spriteId, data.spritesCount)) {
+							if (isValidSpriteId(spriteId)) {
 								ids.push(spriteId);
 							}
 						}
@@ -147,7 +147,7 @@ export const ItemPickerDialog = ({ open, onOpenChange, onItemSelect }: ItemPicke
 						for (const group of item.frameGroupsData) {
 							if (group.spriteIndex) {
 								for (const spriteId of group.spriteIndex) {
-									if (isValidSpriteId(spriteId, data.spritesCount)) {
+									if (isValidSpriteId(spriteId)) {
 										ids.push(spriteId);
 									}
 								}

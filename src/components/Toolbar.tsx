@@ -52,10 +52,13 @@ export const Toolbar = () => {
 	);
 	const [sceneEditorOpen, setSceneEditorOpen] = useState(false);
 	const [itemToAdd, setItemToAdd] = useState<null | ThingType>(null);
+	const [isMac, setIsMac] = useState(false);
 
 	const [originalSprPath, setOriginalSprPath] = useState<null | string>(null);
 
 	useEffect(() => {
+		setIsMac(navigator.userAgent.includes('Mac'));
+
 		const handleOpenScene = (e: CustomEvent<{ item: ThingType }>) => {
 			setItemToAdd(e.detail.item);
 			setSceneEditorOpen(true);
@@ -299,6 +302,68 @@ export const Toolbar = () => {
 		}
 	};
 
+	const renderWindowControls = () => {
+		if (isMac) {
+			return (
+				<div className="flex items-center gap-2 mr-4 group ml-2">
+					<div
+						onClick={handleClose}
+						onMouseDown={(e) => e.stopPropagation()}
+						className="w-3 h-3 rounded-full bg-[#FF5F56] hover:bg-[#FF5F56]/80 cursor-pointer flex items-center justify-center border border-black/10 transition-colors"
+					>
+						<X className="w-2 h-2 text-black/50 opacity-0 group-hover:opacity-100" />
+					</div>
+					<div
+						onClick={handleMinimize}
+						onMouseDown={(e) => e.stopPropagation()}
+						className="w-3 h-3 rounded-full bg-[#FFBD2E] hover:bg-[#FFBD2E]/80 cursor-pointer flex items-center justify-center border border-black/10 transition-colors"
+					>
+						<Minus className="w-2 h-2 text-black/50 opacity-0 group-hover:opacity-100" />
+					</div>
+					<div
+						onClick={handleMaximize}
+						onMouseDown={(e) => e.stopPropagation()}
+						className="w-3 h-3 rounded-full bg-[#27C93F] hover:bg-[#27C93F]/80 cursor-pointer flex items-center justify-center border border-black/10 transition-colors"
+					>
+						<Square className="w-2 h-2 text-black/50 opacity-0 group-hover:opacity-100" />
+					</div>
+				</div>
+			);
+		}
+
+		return (
+			<div className="ml-2 flex items-center flex-shrink-0">
+				<Button
+					size="icon"
+					variant="ghost"
+					onClick={handleMinimize}
+					onMouseDown={(e) => e.stopPropagation()}
+					className="h-8 w-8 hover:bg-secondary/50"
+				>
+					<Minus className="h-4 w-4" />
+				</Button>
+				<Button
+					size="icon"
+					variant="ghost"
+					onClick={handleMaximize}
+					onMouseDown={(e) => e.stopPropagation()}
+					className="h-8 w-8 hover:bg-secondary/50"
+				>
+					<Square className="h-3.5 w-3.5" />
+				</Button>
+				<Button
+					size="icon"
+					variant="ghost"
+					onClick={handleClose}
+					onMouseDown={(e) => e.stopPropagation()}
+					className="h-8 w-8 hover:bg-destructive/20 hover:text-destructive"
+				>
+					<X className="h-4 w-4" />
+				</Button>
+			</div>
+		);
+	};
+
 	return (
 		<>
 			<LoadingDialog
@@ -309,6 +374,7 @@ export const Toolbar = () => {
 			/>
 
 			<div data-tauri-drag-region className="h-11 bg-toolbar-bg border-b border-border/50 flex items-center px-3 gap-1">
+				{isMac && renderWindowControls()}
 				<div className="flex items-center gap-0.5">
 					<Button
 						size="sm"
@@ -391,11 +457,14 @@ export const Toolbar = () => {
 									height: 600,
 									center: true,
 									minWidth: 700,
+									shadow: false,
 									minHeight: 500,
 									resizable: true,
 									url: 'find.html',
+									transparent: true,
 									decorations: false,
-									title: 'Find - Sprite Forge'
+									title: 'Find - Sprite Forge',
+									backgroundColor: [0, 0, 0, 0]
 								});
 
 								// Listen for creation success/error
@@ -558,35 +627,7 @@ export const Toolbar = () => {
 					)}
 				</div>
 
-				<div className="ml-2 flex items-center flex-shrink-0">
-					<Button
-						size="icon"
-						variant="ghost"
-						onClick={handleMinimize}
-						onMouseDown={(e) => e.stopPropagation()}
-						className="h-8 w-8 hover:bg-secondary/50"
-					>
-						<Minus className="h-4 w-4" />
-					</Button>
-					<Button
-						size="icon"
-						variant="ghost"
-						onClick={handleMaximize}
-						onMouseDown={(e) => e.stopPropagation()}
-						className="h-8 w-8 hover:bg-secondary/50"
-					>
-						<Square className="h-3.5 w-3.5" />
-					</Button>
-					<Button
-						size="icon"
-						variant="ghost"
-						onClick={handleClose}
-						onMouseDown={(e) => e.stopPropagation()}
-						className="h-8 w-8 hover:bg-destructive/20 hover:text-destructive"
-					>
-						<X className="h-4 w-4" />
-					</Button>
-				</div>
+				{!isMac && renderWindowControls()}
 			</div>
 
 			<FolderSelectDialog

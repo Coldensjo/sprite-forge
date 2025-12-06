@@ -2,15 +2,17 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use serde::{Serialize, Deserialize};
+use image::{RgbaImage, imageops, ImageFormat, GenericImageView};
+use std::io::Cursor;
 
 mod spr_manager;
-use spr_manager::{SprManager, SprManagerState, SprHeader, SpriteData, compress_to_rle};
+use spr_manager::{SprManager, SprManagerState, SprHeader, SpriteData, compress_to_rle, decompress_to_rgba};
 
 mod logger;
 use logger::{Logger, LoggerState, EventCode};
 
 mod dat_writer;
-use dat_writer::{write_dat_file, ThingType};
+use dat_writer::{write_dat_file, ThingType, FrameGroup};
 
 mod spr_writer;
 use spr_writer::{write_spr_file, update_sprites_in_spr, SpriteWrite};
@@ -934,6 +936,779 @@ fn get_thing(
         .ok_or_else(|| format!("Thing not found: {} #{}", category, id))
 }
 
+// Helper to calculate dimensions
+fn get_group_dimensions(group: &FrameGroup) -> (u32, u32) {
+    let total_x = (group.pattern_z as u32) * (group.pattern_x as u32) * (group.layers as u32);
+    let total_y = (group.frames as u32) * (group.pattern_y as u32);
+    (total_x, total_y)
+}
+
+// Helper to calculate texture index (position in sheet)
+fn get_texture_index(
+    group: &FrameGroup,
+    layer: u32,
+    pattern_x: u32,
+    pattern_y: u32,
+    pattern_z: u32,
+    frame: u32,
+) -> u32 {
+    (((frame % group.frames as u32) * group.pattern_z as u32 + pattern_z) * group.pattern_y as u32 + pattern_y) * group.pattern_x as u32 * group.layers as u32
+        + pattern_x * group.layers as u32
+        + layer
+}
+
+// Helper to calculate sprite index
+fn get_sprite_index(
+    group: &FrameGroup,
+    width: u32,
+    height: u32,
+    layer: u32,
+    pattern_x: u32,
+    pattern_y: u32,
+    pattern_z: u32,
+    frame: u32,
+) -> usize {
+    let w = group.width as u32;
+    let h = group.height as u32;
+    let l = group.layers as u32;
+    let px = group.pattern_x as u32;
+    let py = group.pattern_y as u32;
+    let pz = group.pattern_z as u32;
+    let f = group.frames as u32;
+    
+    (((
+        (((
+            (frame % f) * pz + pattern_z
+         ) * py + pattern_y
+        ) * px + pattern_x
+       ) * l + layer
+      ) * h + height
+     ) * w + width
+    ) as usize
+}
+
+
+fn create_synthetic_group(thing: &ThingType) -> FrameGroup {
+    FrameGroup {
+        r#type: 0,
+        width: thing.width,
+        height: thing.height,
+        exact_size: thing.exact_size,
+        layers: thing.layers,
+        pattern_x: thing.pattern_x,
+        pattern_y: thing.pattern_y,
+        pattern_z: thing.pattern_z,
+        frames: thing.frames,
+        sprite_index: thing.sprite_index.clone(),
+        is_animation: thing.is_animation,
+        animation_mode: Some(thing.animation_mode),
+        loop_count: Some(thing.loop_count),
+        start_frame: Some(thing.start_frame),
+        frame_durations: Some(thing.frame_durations.clone()),
+    }
+}
+
+#[tauri::command]
+fn export_object_sheet_rust(
+    thing: ThingType,
+    spr_path: String,
+    path: String,
+    transparent: bool,
+    spr_state: tauri::State<SprManagerState>,
+) -> Result<(), String> {
+    let mut manager = spr_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    
+    // ... (group logic) ...
+// 1. Determine frame groups
+    let mut groups: Vec<FrameGroup> = Vec::new();
+    if let Some(ref fgs) = thing.frame_groups_data {
+        if !fgs.is_empty() {
+             groups = fgs.clone();
+             groups.sort_by(|a, b| a.r#type.cmp(&b.r#type));
+        } else {
+             groups.push(create_synthetic_group(&thing));
+        }
+    } else {
+         groups.push(create_synthetic_group(&thing));
+    }
+    
+    // 2. Calculate Sheet Dimensions
+    let mut sheet_total_x = 0;
+    let mut sheet_total_y = 0;
+    let mut max_thing_width = 0;
+    let mut max_thing_height = 0;
+    
+    struct GroupMetric {
+        start_y: u32,
+    }
+    let mut group_metrics = Vec::new();
+    let mut current_y = 0;
+    
+    for group in &groups {
+        let (total_x, total_y) = get_group_dimensions(group);
+        if total_x > sheet_total_x { sheet_total_x = total_x; }
+        
+        group_metrics.push(GroupMetric {
+            start_y: current_y,
+        });
+        
+        current_y += total_y;
+        sheet_total_y += total_y;
+        
+        if (group.width as u32) > max_thing_width { max_thing_width = group.width as u32; }
+        if (group.height as u32) > max_thing_height { max_thing_height = group.height as u32; }
+    }
+    
+    const SPRITE_SIZE: u32 = 32;
+    let texture_width_px = max_thing_width * SPRITE_SIZE;
+    let texture_height_px = max_thing_height * SPRITE_SIZE;
+    
+    let canvas_width = sheet_total_x * texture_width_px;
+    let canvas_height = sheet_total_y * texture_height_px;
+    
+    if canvas_width == 0 || canvas_height == 0 {
+        return Err("Invalid canvas dimensions".to_string());
+    }
+    
+    // 3. Load Sprites
+    let mut sprite_ids = Vec::new();
+    for group in &groups {
+        for f in 0..group.frames {
+            for z in 0..group.pattern_z {
+                for y in 0..group.pattern_y {
+                    for x in 0..group.pattern_x {
+                        for l in 0..group.layers {
+                            for h in 0..group.height {
+                                for w in 0..group.width {
+                                    let index = get_sprite_index(group, w as u32, h as u32, l as u32, x as u32, y as u32, z as u32, f as u32);
+                                    if index < group.sprite_index.len() {
+                                        sprite_ids.push(group.sprite_index[index]);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    // Read sprites from SPR manager (uses cached reader)
+    let sprite_data_list = manager.read_sprites_list(&spr_path, sprite_ids)?;
+    
+    // Map ID -> SpriteData for quick lookup
+    use std::collections::HashMap;
+    let mut sprite_map = HashMap::new();
+    for sprite in sprite_data_list {
+        sprite_map.insert(sprite.id, sprite);
+    }
+    
+    // 4. Draw
+    let mut sheet = RgbaImage::new(canvas_width, canvas_height);
+    
+    for (i, group) in groups.iter().enumerate() {
+        let metrics = &group_metrics[i];
+        let start_y_px = metrics.start_y * texture_height_px;
+        let cell_width = texture_width_px;
+        let cell_height = texture_height_px;
+        
+        for f in 0..group.frames {
+            for z in 0..group.pattern_z {
+                for y in 0..group.pattern_y {
+                    for x in 0..group.pattern_x {
+                        for l in 0..group.layers {
+                             let texture_index = get_texture_index(group, l as u32, x as u32, y as u32, z as u32, f as u32);
+                             
+                             let fx = (texture_index % sheet_total_x) * cell_width;
+                             let fy = (texture_index / sheet_total_x) * cell_height + start_y_px;
+                             
+                             for h in 0..group.height {
+                                 for w in 0..group.width {
+                                     let index = get_sprite_index(group, w as u32, h as u32, l as u32, x as u32, y as u32, z as u32, f as u32);
+                                     if index < group.sprite_index.len() {
+                                         let sprite_id = group.sprite_index[index];
+                                         if let Some(sprite) = sprite_map.get(&sprite_id) {
+                                             if !sprite.is_empty {
+                                                 // Decompress
+                                                 let rgba = decompress_to_rgba(&sprite.compressed_pixels, transparent);
+                                                 if let Some(img_buffer) = RgbaImage::from_raw(SPRITE_SIZE, SPRITE_SIZE, rgba) {
+                                                     // Position
+                                                     let px = ((group.width as u32 - w as u32 - 1) * SPRITE_SIZE);
+                                                     let py = ((group.height as u32 - h as u32 - 1) * SPRITE_SIZE);
+                                                     
+                                                     imageops::overlay(&mut sheet, &img_buffer, (fx + px) as i64, (fy + py) as i64);
+                                                 }
+                                             }
+                                         }
+                                     }
+                                 }
+                             }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    // 5. Output
+    sheet.save(&path).map_err(|e| format!("Failed to save image to {}: {}", path, e))?;
+        
+    Ok(())
+}
+
+#[tauri::command]
+fn import_object_sheet_rust(
+    mut thing: ThingType,
+    spr_path: String,
+    image_path: Option<String>,
+    image_bytes: Option<Vec<u8>>,
+    transparent: bool,
+    next_sprite_id: u32, // ID to start allocating new sprites from
+    spr_state: tauri::State<SprManagerState>,
+) -> Result<ThingType, String> {
+    let mut manager = spr_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    
+    // ... (Loading and Analysis Logic same as before)
+    
+    // 1. Load Image
+    let img = if let Some(path) = image_path {
+        image::open(&path)
+            .map_err(|e| format!("Failed to load image from path: {}", e))?
+            .to_rgba8()
+    } else if let Some(bytes) = image_bytes {
+        image::load_from_memory(&bytes)
+            .map_err(|e| format!("Failed to load image from bytes: {}", e))?
+            .to_rgba8()
+    } else {
+        return Err("No image source provided".to_string());
+    };
+
+    let width = img.width();
+    let height = img.height();
+
+    let cols = width / 32;
+    let rows = height / 32;
+    let total_sprites = cols * rows;
+
+    if total_sprites == 0 {
+        return Err("Image is too small (must be at least 32x32)".to_string());
+    }
+
+    let mut has_mask = false;
+    'mask_check: for pixel in img.pixels() {
+        if pixel[3] == 0 { continue; }
+        let r = pixel[0];
+        let g = pixel[1];
+        let b = pixel[2];
+        let is_red = r > 200 && g < 50 && b < 50;
+        let is_green = r < 50 && g > 200 && b < 50;
+        let is_blue = r < 50 && g < 50 && b > 200;
+        let is_yellow = r > 200 && g > 200 && b < 50;
+        if is_red || is_green || is_blue || is_yellow {
+            has_mask = true;
+            break 'mask_check;
+        }
+    }
+
+    let mut layers = if has_mask { 2 } else { 1 };
+    if total_sprites % layers != 0 { layers = 1; }
+    let sprites_per_layer = total_sprites / layers;
+    
+    let mut pattern_x = 4;
+    let mut frames = 1;
+    if sprites_per_layer % 4 == 0 {
+        pattern_x = 4;
+        frames = sprites_per_layer / 4;
+    } else {
+        pattern_x = 1;
+        frames = sprites_per_layer;
+    }
+    
+    // Adjust logic with strict dimensions
+    let detected_frames = cols; 
+    let detected_rows = rows;
+    
+    frames = detected_frames;
+    
+    if detected_rows % 4 == 0 {
+         pattern_x = 4;
+         layers = detected_rows / 4;
+    } else {
+         pattern_x = detected_rows;
+         layers = 1;
+    }
+    
+    if has_mask && layers < 2 {
+        if detected_rows >= 2 && detected_rows % 2 == 0 {
+             layers = 2;
+             pattern_x = detected_rows / 2;
+        }
+    }
+    if layers > 2 {
+        // Cap? Or allow? Let's leave it as detected for flexibility.
+    }
+
+    let mut group = if let Some(fgs) = &thing.frame_groups_data {
+        if !fgs.is_empty() { fgs[0].clone() } else { create_synthetic_group(&thing) }
+    } else {
+         create_synthetic_group(&thing)
+    };
+    
+    group.width = 1;
+    group.height = 1;
+    group.layers = layers as u8;
+    group.pattern_x = pattern_x as u8;
+    group.pattern_y = 1;
+    group.pattern_z = 1;
+    group.frames = frames as u8;
+
+    let mut current_indices = group.sprite_index.clone();
+    let mut reusable_ids: Vec<u32> = current_indices.iter().cloned().filter(|&id| id != 0).collect();
+    reusable_ids.sort();
+    reusable_ids.dedup();
+    
+    let mut new_sprite_index = Vec::new();
+    let mut id_alloc_idx = 0;
+    
+    // Use Provided Next ID
+    let mut current_next_id = next_sprite_id;
+    
+    for f in 0..frames {
+        for x in 0..pattern_x { 
+             for l in 0..layers {
+                 let img_row = (l as u32 * pattern_x) + x;
+                 let img_col = f;
+                 
+                 let src_x = img_col * 32;
+                 let src_y = img_row * 32;
+                 
+                 let sprite_id = if id_alloc_idx < reusable_ids.len() {
+                     reusable_ids[id_alloc_idx]
+                 } else {
+                     let id = current_next_id;
+                     current_next_id += 1;
+                     id
+                 };
+                 if id_alloc_idx < reusable_ids.len() {
+                     id_alloc_idx += 1;
+                 }
+                 
+                 new_sprite_index.push(sprite_id);
+                 
+                 if src_x + 32 <= width && src_y + 32 <= height {
+                      let sub_img = img.view(src_x, src_y, 32, 32);
+                      let mut sub_img_buffer = sub_img.to_image();
+                      
+                      for pixel in sub_img_buffer.pixels_mut() {
+                          if pixel[3] == 0 { pixel.0 = [0, 0, 0, 0]; }
+                      }
+                      
+                      let raw_pixels = sub_img_buffer.as_raw();
+                      let compressed_pixels = compress_to_rle(raw_pixels, transparent);
+                      
+                      manager.update_sprite(&spr_path, sprite_id, SpriteData {
+                          id: sprite_id,
+                          is_empty: false,
+                          compressed_pixels,
+                      })?;
+                 }
+             }
+        }
+    }
+    
+    group.sprite_index = new_sprite_index;
+    
+    let mut new_thing = thing.clone();
+    new_thing.frame_groups_data = Some(vec![group]);
+    new_thing.width = 1;
+    new_thing.height = 1;
+    new_thing.layers = layers as u8;
+    new_thing.pattern_x = pattern_x as u8;
+    new_thing.pattern_y = 1;
+    new_thing.pattern_z = 1;
+    new_thing.frames = frames as u8;
+    new_thing.sprite_index = new_thing.frame_groups_data.as_ref().unwrap()[0].sprite_index.clone();
+
+    Ok(new_thing)
+}
+
+/// Import object sheet with binary response - returns both ThingType and sprites in one call
+/// This eliminates the need for a second IPC call to reload sprites
+/// Response format: [JSON len: u32][ThingType JSON][sprites in RGBA format (LZ4 compressed)]
+#[tauri::command]
+fn import_object_sheet_binary(
+    image_bytes: Vec<u8>,
+    thing: ThingType,
+    spr_path: String,
+    transparent: bool,
+    next_sprite_id: u32,
+    version: u32, // DAT version to determine frame groups support (>= 1057)
+    spr_state: tauri::State<SprManagerState>,
+) -> Result<tauri::ipc::Response, String> {
+    let mut manager = spr_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+
+    // 1. Load image from bytes
+    let img = image::load_from_memory(&image_bytes)
+        .map_err(|e| format!("Failed to load image from bytes: {}", e))?
+        .to_rgba8();
+
+    let img_width = img.width();
+    let img_height = img.height();
+
+    if img_width < 32 || img_height < 32 {
+        return Err("Image is too small (must be at least 32x32)".to_string());
+    }
+
+    // 2. Detect if this is an outfit (special handling)
+    let is_outfit = thing.category == "outfit";
+
+    // Variables we'll calculate
+    let tile_size: u32;
+    let layers: u8;
+    let pattern_x: u8;
+    let pattern_y: u8;
+    let pattern_z: u8;
+    let frames: u8;
+    let thing_width: u8;
+    let thing_height: u8;
+
+    if is_outfit {
+        // OUTFIT-SPECIFIC DETECTION
+        // Step 1: Detect tile size (32, 64, or 96) based on valid column counts
+        tile_size = if img_width % 64 == 0 && img_height % 64 == 0 {
+            let cols_64 = img_width / 64;
+            if cols_64 == 4 || cols_64 == 8 || cols_64 == 16 { 64 }
+            else if img_width % 96 == 0 && img_height % 96 == 0 {
+                let cols_96 = img_width / 96;
+                if cols_96 == 4 || cols_96 == 8 || cols_96 == 16 { 96 } else { 32 }
+            } else { 32 }
+        } else if img_width % 96 == 0 && img_height % 96 == 0 {
+            let cols_96 = img_width / 96;
+            if cols_96 == 4 || cols_96 == 8 || cols_96 == 16 { 96 } else { 32 }
+        } else { 32 };
+
+        let cols = img_width / tile_size;
+        let rows = img_height / tile_size;
+
+        // Step 2: Detect layers and mount from column count
+        // 4 cols = no mask (layers=1), no mount (patternZ=1)
+        // 8 cols = has mask (layers=2), no mount (patternZ=1)
+        // 16 cols = has mask (layers=2), has mount (patternZ=2)
+        let (detected_layers, detected_pattern_z) = match cols {
+            4 => (1u8, 1u8),
+            8 => (2u8, 1u8),
+            16 => (2u8, 2u8),
+            _ => return Err(format!("Invalid outfit column count: {}. Expected 4, 8, or 16", cols)),
+        };
+        layers = detected_layers;
+        pattern_z = detected_pattern_z;
+
+        // Step 3: Detect frames and addons from row count
+        // Formula: rows = frames × patternY
+        // Use version to determine max frames: version >= 1057 supports 9 frames, otherwise max 3
+        let max_frames: u32 = if version >= 1057 { 9 } else { 3 };
+
+        // Try to detect frames/patternY from image dimensions
+        // Priority: prefer combinations that make sense for the version
+        let (detected_frames, detected_pattern_y) = {
+            let mut best_match: Option<(u8, u8)> = None;
+
+            // Try frame counts from max down to 1
+            for try_frames in (1..=max_frames).rev() {
+                if rows % try_frames == 0 {
+                    let addon_count = rows / try_frames;
+                    // patternY (addons) can be 1, 2, or 3
+                    if addon_count >= 1 && addon_count <= 3 {
+                        // Valid combination found
+                        // Prefer 3 frames for standard animation if it works
+                        if try_frames == 3 || best_match.is_none() {
+                            best_match = Some((try_frames as u8, addon_count as u8));
+                            if try_frames == 3 {
+                                break; // 3 frames is preferred for standard outfits
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Fallback to original values if no valid combination found
+            best_match.unwrap_or((thing.frames, thing.pattern_y))
+        };
+
+        frames = detected_frames;
+        pattern_y = detected_pattern_y;
+
+        // Outfits always have 4 directions
+        pattern_x = 4;
+
+        // Multi-tile size
+        thing_width = (tile_size / 32) as u8;
+        thing_height = (tile_size / 32) as u8;
+
+        println!("Outfit import: tile_size={}, cols={}, rows={}, layers={}, pattern_x={}, pattern_y={}, pattern_z={}, frames={}, thing_size={}x{}",
+                 tile_size, cols, rows, layers, pattern_x, pattern_y, pattern_z, frames, thing_width, thing_height);
+    } else {
+        // NON-OUTFIT: Use original simple detection
+        tile_size = 32;
+        thing_width = 1;
+        thing_height = 1;
+
+        let cols = img_width / 32;
+        let rows = img_height / 32;
+
+        // Detect mask colors
+        let mut has_mask = false;
+        'mask_check: for pixel in img.pixels() {
+            if pixel[3] == 0 { continue; }
+            let r = pixel[0];
+            let g = pixel[1];
+            let b = pixel[2];
+            let is_red = r > 200 && g < 50 && b < 50;
+            let is_green = r < 50 && g > 200 && b < 50;
+            let is_blue = r < 50 && g < 50 && b > 200;
+            let is_yellow = r > 200 && g > 200 && b < 50;
+            if is_red || is_green || is_blue || is_yellow {
+                has_mask = true;
+                break 'mask_check;
+            }
+        }
+
+        layers = if has_mask { 2 } else { 1 };
+        frames = cols as u8;
+        pattern_x = rows as u8;
+        pattern_y = 1;
+        pattern_z = 1;
+    }
+
+    // 3. Collect reusable sprite IDs from existing frame groups
+    let mut reusable_ids: Vec<u32> = Vec::new();
+    if let Some(fgs) = &thing.frame_groups_data {
+        for fg in fgs {
+            for &id in &fg.sprite_index {
+                if id != 0 {
+                    reusable_ids.push(id);
+                }
+            }
+        }
+    }
+    reusable_ids.sort();
+    reusable_ids.dedup();
+
+    // 4. Extract sprites following Tibia's index formula order
+    // index = ((((frame * patternZ + pz) * patternY + py) * patternX + px) * layers + layer) * height + h) * width + w
+    let mut new_sprite_index = Vec::new();
+    let mut sprites_data: Vec<SpriteData> = Vec::new();
+    let mut id_alloc_idx = 0;
+    let mut current_next_id = next_sprite_id;
+
+    for frame in 0..frames {
+        for pz in 0..pattern_z {
+            for py in 0..pattern_y {
+                for px in 0..pattern_x {
+                    for layer in 0..layers {
+                        for h in 0..thing_height {
+                            for w in 0..thing_width {
+                                // Calculate image coordinates
+                                let img_row = if is_outfit {
+                                    // Outfit: row = frame * patternY + py (addon)
+                                    (frame as u32) * (pattern_y as u32) + (py as u32)
+                                } else {
+                                    // Non-outfit: original formula
+                                    (layer as u32) * (pattern_x as u32) + (px as u32)
+                                };
+
+                                let img_col = if is_outfit {
+                                    // Outfit: col = pz * (directions * layers) + px * layers + layer
+                                    (pz as u32) * (pattern_x as u32) * (layers as u32)
+                                        + (px as u32) * (layers as u32)
+                                        + (layer as u32)
+                                } else {
+                                    frame as u32
+                                };
+
+                                // Pixel coordinates (for multi-tile, extract each 32x32 sub-tile)
+                                // Tibia stores multi-tile sprites in REVERSE order (bottom-right first)
+                                // So sprite index [0] = bottom-right, but in image it's at top-left
+                                // We need to reverse the extraction: w=0 extracts from right side, h=0 from bottom
+                                let reversed_w = (thing_width - 1 - w) as u32;
+                                let reversed_h = (thing_height - 1 - h) as u32;
+                                let src_x = img_col * tile_size + reversed_w * 32;
+                                let src_y = img_row * tile_size + reversed_h * 32;
+
+                                // Extract 32x32 sprite - check bounds first
+                                if src_x + 32 <= img_width && src_y + 32 <= img_height {
+                                    let sub_img = img.view(src_x, src_y, 32, 32);
+                                    let mut sub_img_buffer = sub_img.to_image();
+
+                                    // Normalize transparent pixels
+                                    for pixel in sub_img_buffer.pixels_mut() {
+                                        if pixel[3] == 0 { pixel.0 = [0, 0, 0, 0]; }
+                                    }
+
+                                    let raw_pixels = sub_img_buffer.as_raw();
+
+                                    // Check if sprite is completely empty (all transparent)
+                                    let is_empty = raw_pixels.chunks(4).all(|p| p[3] == 0);
+
+                                    if is_empty {
+                                        // Empty sprite = use sprite ID 0 (Tibia convention)
+                                        new_sprite_index.push(0);
+                                    } else {
+                                        // Allocate new sprite ID for non-empty sprite
+                                        let sprite_id = if id_alloc_idx < reusable_ids.len() {
+                                            let id = reusable_ids[id_alloc_idx];
+                                            id_alloc_idx += 1;
+                                            id
+                                        } else {
+                                            let id = current_next_id;
+                                            current_next_id += 1;
+                                            id
+                                        };
+
+                                        let compressed_pixels = compress_to_rle(raw_pixels, transparent);
+
+                                        let sprite_data = SpriteData {
+                                            id: sprite_id,
+                                            is_empty: false,
+                                            compressed_pixels,
+                                        };
+
+                                        // Store in overrides
+                                        manager.update_sprite(&spr_path, sprite_id, sprite_data.clone())?;
+
+                                        // Collect for response
+                                        sprites_data.push(sprite_data);
+
+                                        new_sprite_index.push(sprite_id);
+                                    }
+                                } else {
+                                    // Out of bounds = empty sprite (use ID 0)
+                                    new_sprite_index.push(0);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 5. Build frame groups (only if version >= 1057 supports them)
+    // Frame groups are only supported for outfits in version 10.57 (1057) and above
+    let has_frame_groups = version >= 1057;
+
+    println!("Frame groups check: version={}, has_frame_groups={}", version, has_frame_groups);
+
+    let sprites_per_frame = (pattern_x as usize) * (pattern_y as usize) * (pattern_z as usize)
+                          * (layers as usize) * (thing_height as usize) * (thing_width as usize);
+
+    let frame_groups: Option<Vec<FrameGroup>> = if has_frame_groups {
+        // VERSION >= 1057: Create frame groups
+        let mut groups = Vec::new();
+
+        if is_outfit && frames > 1 {
+            // Outfit with multiple frames: split into Idle (frame 0) and Walking (frames 1+)
+            let idle_group = FrameGroup {
+                r#type: 0, // Idle
+                width: thing_width,
+                height: thing_height,
+                exact_size: tile_size as u8,
+                layers,
+                pattern_x,
+                pattern_y,
+                pattern_z,
+                frames: 1,
+                sprite_index: new_sprite_index[0..sprites_per_frame].to_vec(),
+                is_animation: false,
+                animation_mode: Some(0),
+                loop_count: Some(0),
+                start_frame: Some(0),
+                frame_durations: Some(vec![]),
+            };
+            groups.push(idle_group);
+
+            let walking_frames = frames - 1;
+            if walking_frames > 0 {
+                let walking_group = FrameGroup {
+                    r#type: 1, // Walking
+                    width: thing_width,
+                    height: thing_height,
+                    exact_size: tile_size as u8,
+                    layers,
+                    pattern_x,
+                    pattern_y,
+                    pattern_z,
+                    frames: walking_frames,
+                    sprite_index: new_sprite_index[sprites_per_frame..].to_vec(),
+                    is_animation: true,
+                    animation_mode: Some(0),
+                    loop_count: Some(-1),
+                    start_frame: Some(0),
+                    frame_durations: Some(vec![]),
+                };
+                groups.push(walking_group);
+            }
+        } else {
+            // Single frame group for non-outfits or single-frame outfits
+            let group = FrameGroup {
+                r#type: 0,
+                width: thing_width,
+                height: thing_height,
+                exact_size: tile_size as u8,
+                layers,
+                pattern_x,
+                pattern_y,
+                pattern_z,
+                frames,
+                sprite_index: new_sprite_index.clone(),
+                is_animation: frames > 1,
+                animation_mode: Some(0),
+                loop_count: Some(if frames > 1 { -1 } else { 0 }),
+                start_frame: Some(0),
+                frame_durations: Some(vec![]),
+            };
+            groups.push(group);
+        }
+        Some(groups)
+    } else {
+        // VERSION < 1057: No frame groups - all frames in single sprite_index array
+        None
+    };
+
+    // 6. Build updated ThingType
+    let mut new_thing = thing.clone();
+    new_thing.frame_groups_data = frame_groups;
+    new_thing.width = thing_width;
+    new_thing.height = thing_height;
+    new_thing.exact_size = tile_size as u8;
+    new_thing.layers = layers;
+    new_thing.pattern_x = pattern_x;
+    new_thing.pattern_y = pattern_y;
+    new_thing.pattern_z = pattern_z;
+    new_thing.frames = frames;
+    new_thing.is_animation = frames > 1;
+    // For legacy compatibility, use all sprites in sprite_index
+    new_thing.sprite_index = new_sprite_index;
+
+    // 7. Serialize ThingType to JSON
+    let thing_json = serde_json::to_vec(&new_thing)
+        .map_err(|e| format!("JSON serialize error: {}", e))?;
+
+    // 8. Pack sprites to RGBA format (for immediate frontend cache population)
+    let sprites_buffer = SprManager::pack_sprites_rgba_lz4(sprites_data, transparent);
+
+    // 9. Build response: [JSON len: u32][JSON bytes][sprites buffer (already LZ4)]
+    // Note: sprites_buffer is already LZ4 compressed, so we DON'T compress again
+    // But we need the frontend to decompress the sprites separately from the JSON
+    // So let's NOT LZ4 the whole thing - just prepend JSON
+    let mut result = Vec::with_capacity(4 + thing_json.len() + sprites_buffer.len());
+    result.extend_from_slice(&(thing_json.len() as u32).to_le_bytes());
+    result.extend_from_slice(&thing_json);
+    result.extend_from_slice(&sprites_buffer);
+
+    Ok(tauri::ipc::Response::new(result))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Initialize SPR manager state
@@ -956,7 +1731,7 @@ pub fn run() {
         }
     }
 
-    tauri::Builder::default()
+tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .manage(spr_manager)
@@ -1013,8 +1788,32 @@ pub fn run() {
             clear_dat_data,
             get_thing,
             optimize_sprites_rust,
-            apply_optimization
+            apply_optimization,
+            export_object_sheet_rust,
+            import_object_sheet_rust,
+            import_object_sheet_binary
         ])
+        .setup(|app| {
+            #[cfg(target_os = "macos")]
+            {
+                use tauri::{Manager, Listener};
+                use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial};
+
+                // Apply vibrancy to main window
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = apply_vibrancy(&window, NSVisualEffectMaterial::HudWindow, None, Some(12.0));
+                }
+
+                // Listen for new windows and apply vibrancy to them too
+                let app_handle = app.handle().clone();
+                app.listen("tauri://webview-created", move |_event| {
+                    if let Some(window) = app_handle.get_webview_window("find") {
+                        let _ = apply_vibrancy(&window, NSVisualEffectMaterial::HudWindow, None, Some(12.0));
+                    }
+                });
+            }
+            Ok(())
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

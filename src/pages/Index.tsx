@@ -9,8 +9,12 @@ import { VisualizationPanel } from '@/components/VisualizationPanel';
 const Index = () => {
 	const { settings } = usePanelSettings();
 
+	const isMac = navigator.userAgent.includes('Mac');
+
 	return (
-		<div className="h-screen flex flex-col bg-background">
+		<div
+			className={`h-screen flex flex-col bg-background ${isMac ? 'rounded-xl overflow-hidden border border-white/10 shadow-2xl' : ''}`}
+		>
 			<Toolbar />
 
 			<div className="flex-1 flex overflow-hidden p-2 gap-2">

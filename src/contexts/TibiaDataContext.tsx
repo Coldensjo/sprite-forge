@@ -13,7 +13,10 @@ interface TibiaDataContextType {
 	openedItems: ThingType[];
 	spriteLoadVersion: number;
 	openedItemId: null | number;
+	// Sprite import notification - triggers SpriteList to go to last page
+	spriteImportVersion: number;
 	openedSpriteId: null | number;
+	notifySpriteImport: () => void;
 	selectedCategory: ThingCategory;
 	notifySpritesLoaded: () => void;
 	hasModifiedItems: () => boolean;
@@ -57,6 +60,10 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 	const [isLoading, setIsLoading] = useState(false);
 	const [loadingProgress, setLoadingProgress] = useState<null | { stage: string; total: number; current: number }>(null);
 	const [error, setError] = useState<null | string>(null);
+	// Counter to force re-renders when data is mutated in place
+	const [updateCounter, setUpdateCounter] = useState(0);
+	// Counter to notify SpriteList about new sprite imports (go to last page)
+	const [spriteImportVersion, setSpriteImportVersion] = useState(0);
 	// Load initial state from localStorage
 	const loadOpenedItemsState = (): {
 		openedId: null | number;
@@ -276,28 +283,32 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 		(id: number): null | ThingType => {
 			return data?.items.get(id) || null;
 		},
-		[data]
+
+		[data, updateCounter]
 	);
 
 	const getOutfit = useCallback(
 		(id: number): null | ThingType => {
 			return data?.outfits.get(id) || null;
 		},
-		[data]
+
+		[data, updateCounter]
 	);
 
 	const getEffect = useCallback(
 		(id: number): null | ThingType => {
 			return data?.effects.get(id) || null;
 		},
-		[data]
+
+		[data, updateCounter]
 	);
 
 	const getMissile = useCallback(
 		(id: number): null | ThingType => {
 			return data?.missiles.get(id) || null;
 		},
-		[data]
+
+		[data, updateCounter]
 	);
 
 	const getThing = useCallback(
@@ -409,8 +420,6 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 		}
 	}, [data, getThing]);
 
-	const [updateCounter, setUpdateCounter] = useState(0);
-
 	const updateThing = useCallback(
 		(id: number, category: ThingCategory, updates: Partial<ThingType>) => {
 			if (!data) return;
@@ -490,6 +499,10 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 			}
 			return v + 1;
 		});
+	}, []);
+
+	const notifySpriteImport = useCallback(() => {
+		setSpriteImportVersion((v) => v + 1);
 	}, []);
 
 	const notifyDataChanged = useCallback(
@@ -642,9 +655,12 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 				notifyDataChanged,
 				openedItemCategory,
 				markUnsavedChanges,
+				notifySpriteImport,
 				setSelectedCategory,
 				notifySpritesLoaded,
 				highlightedSpriteId,
+				// Sprite import notification
+				spriteImportVersion,
 				setHighlightedItemId,
 				// Compile tracking
 				modifiedSinceCompile,

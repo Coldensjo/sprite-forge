@@ -151,13 +151,26 @@ export const PropertiesPanel = () => {
 	// Initialize draft when item changes
 	useEffect(() => {
 		if (item && openedItemId && openedItemCategory) {
+			console.log('PropertiesPanel useEffect triggered:', {
+				updateCounter,
+				reason: 'item/updateCounter changed',
+				itemFromContext: {
+					id: item.id,
+					frames: item.frames,
+					spriteIndexLength: item.spriteIndex?.length,
+					spriteIndexFirst20: item.spriteIndex?.slice(0, 20)
+				}
+			});
+
 			let initialItem = { ...item };
 			let initialGroup = 0;
 
-			// For outfits, ensure frameGroupsData exists (initialize if missing)
+			// For outfits, initialize frameGroupsData only for versions that support it (>= 1057)
 			if (item.category === ThingCategory.OUTFIT) {
-				if (!initialItem.frameGroupsData || initialItem.frameGroupsData.length === 0) {
-					// Create default frame group from item properties
+				const versionSupportsFrameGroups = (data?.version.value || 0) >= 1057;
+
+				if (versionSupportsFrameGroups && (!initialItem.frameGroupsData || initialItem.frameGroupsData.length === 0)) {
+					// Create default frame group from item properties (version >= 1057 only)
 					initialItem.frameGroupsData = [
 						{
 							type: 0, // Idle
@@ -181,7 +194,7 @@ export const PropertiesPanel = () => {
 
 				// Default to Walking group (index 1) for outfits if available
 				// This matches Object Builder behavior and ensures animation controller shows up
-				if (initialItem.frameGroupsData.length > 1) {
+				if (initialItem.frameGroupsData && initialItem.frameGroupsData.length > 1) {
 					initialGroup = 1;
 					const group = initialItem.frameGroupsData[1];
 					initialItem = {
@@ -201,7 +214,7 @@ export const PropertiesPanel = () => {
 						animationMode: group.animationMode || 0,
 						frameDurations: group.frameDurations || []
 					};
-				} else if (initialItem.frameGroupsData.length === 1) {
+				} else if (initialItem.frameGroupsData && initialItem.frameGroupsData.length === 1) {
 					// Load the first (and only) frame group
 					const group = initialItem.frameGroupsData[0];
 					initialItem = {
@@ -222,7 +235,24 @@ export const PropertiesPanel = () => {
 						frameDurations: group.frameDurations || []
 					};
 				}
+				// For version < 1057 (no frame groups), use top-level properties directly
 			}
+
+			console.log('PropertiesPanel draftItem set:', {
+				updateCounter,
+				id: initialItem.id,
+				width: initialItem.width,
+				frames: initialItem.frames,
+				layers: initialItem.layers,
+				height: initialItem.height,
+				category: initialItem.category,
+				patternX: initialItem.patternX,
+				patternY: initialItem.patternY,
+				patternZ: initialItem.patternZ,
+				source: 'useEffect initialization',
+				spriteIndexLength: initialItem.spriteIndex?.length,
+				spriteIndexFirst20: initialItem.spriteIndex?.slice(0, 20)
+			});
 
 			setDraftItem(initialItem);
 			setHasChanges(false);
@@ -405,6 +435,9 @@ export const PropertiesPanel = () => {
 	const isItem = itemCategory === ThingCategory.ITEM;
 	const isOutfit = itemCategory === ThingCategory.OUTFIT;
 	const isMissile = itemCategory === ThingCategory.MISSILE;
+
+	// Frame groups are only supported for outfits in version >= 1057 (10.57)
+	const supportsFrameGroups = clientVersion >= 1057;
 
 	// Version-specific visibility checks
 	const showPatternZ = clientVersion >= 755;
@@ -1639,7 +1672,36 @@ export const PropertiesPanel = () => {
 												}}
 											/>
 										) : (
-											<div className="text-muted-foreground text-xs">No sprite</div>
+											<SpriteCanvas
+												showEmpty
+												panX={panX}
+												panY={panY}
+												scale={zoom}
+												thing={draftItem}
+												patternX={patternX}
+												patternY={patternY}
+												patternZ={patternZ}
+												showGrid={showGrid}
+												smooth={showSmooth}
+												frame={currentFrame}
+												layer={currentLayer}
+												isPanEnabled={isPanEnabled}
+												sceneWidth={sceneSize.width}
+												showExactSize={showExactSize}
+												sceneHeight={sceneSize.height}
+												onSpriteDrop={handleSpriteDrop}
+												onSpriteHover={handleSpriteHover}
+												sceneScrollOffset={sceneScrollOffset}
+												onSpriteDoubleClick={handleSpriteDoubleClick}
+												outfitData={isOutfit ? outfitData : undefined}
+												onMiddleMousePanChange={setIsMiddleMousePanning}
+												sceneTiles={showScene ? defaultSceneTiles : undefined}
+												renderMode={isMissile || isOutfit ? 'preview' : 'full'}
+												onPanChange={(x, y) => {
+													setPanX(x);
+													setPanY(y);
+												}}
+											/>
 										)}
 									</CheckerBoard>
 
@@ -1711,7 +1773,7 @@ export const PropertiesPanel = () => {
 										<div className="w-0.5 h-3 bg-primary rounded-full" />
 										<h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Dimensions</h3>
 									</div>
-									{isOutfit && draftItem && (
+									{isOutfit && draftItem && supportsFrameGroups && (
 										<div className="flex items-center gap-2">
 											<Label className="text-[10px] text-muted-foreground whitespace-nowrap">Frame Group</Label>
 											<Select

@@ -10,6 +10,7 @@
 		"frontendDist": "../dist"
 	},
 	"app": {
+		"macOSPrivateApi": true,
 		"windows": [
 			{
 				"label": "main",
@@ -20,7 +21,16 @@
 				"minHeight": 800,
 				"resizable": true,
 				"fullscreen": false,
-				"decorations": false
+				"decorations": false,
+				"transparent": true,
+				"shadow": false,
+				"dragDropEnabled": false,
+				"backgroundColor": [
+					0,
+					0,
+					0,
+					0
+				]
 			}
 		],
 		"security": {
