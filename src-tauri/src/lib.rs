@@ -1117,10 +1117,18 @@ fn export_object_sheet_rust(
                 for y in 0..group.pattern_y {
                     for x in 0..group.pattern_x {
                         for l in 0..group.layers {
-                             let texture_index = get_texture_index(group, l as u32, x as u32, y as u32, z as u32, f as u32);
-                             
-                             let fx = (texture_index % sheet_total_x) * cell_width;
-                             let fy = (texture_index / sheet_total_x) * cell_height + start_y_px;
+                             // Calculate column: pz * (pX * layers) + px * layers + layer
+                             // This places mount variations horizontally after base outfit
+                             let col = (z as u32) * (group.pattern_x as u32) * (group.layers as u32)
+                                     + (x as u32) * (group.layers as u32)
+                                     + (l as u32);
+
+                             // Calculate row: frame * patternY + addon
+                             // This places addons vertically, grouped by frame
+                             let row = (f as u32) * (group.pattern_y as u32) + (y as u32);
+
+                             let fx = col * cell_width;
+                             let fy = row * cell_height + start_y_px;
                              
                              for h in 0..group.height {
                                  for w in 0..group.width {
