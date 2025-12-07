@@ -74,14 +74,15 @@ jobs:
 
       - name: Sign update bundle
         shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
         run: |
           VERSION="${{ steps.version.outputs.version }}"
           NSIS_DIR="src-tauri/target/release/bundle/nsis"
 
-          # Sign the zip file
-          echo "${{ secrets.TAURI_PRIVATE_KEY }}" > /tmp/private.key
-          bun tauri signer sign -k /tmp/private.key -p "${{ secrets.TAURI_KEY_PASSWORD }}" "$NSIS_DIR/sprite-forge_${VERSION}_x64-setup.nsis.zip"
-          rm /tmp/private.key
+          # Sign the zip file using environment variables
+          bun tauri signer sign "$NSIS_DIR/sprite-forge_${VERSION}_x64-setup.nsis.zip"
 
       - name: Read signature file
         id: signature
