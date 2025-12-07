@@ -61,6 +61,14 @@ jobs:
         run: |
           copy "src-tauri\target\release\sprite-forge.exe" "src-tauri\target\release\sprite-forge-portable.exe"
 
+      - name: List bundle contents (debug)
+        shell: bash
+        run: |
+          echo "=== Bundle NSIS directory ==="
+          ls -la src-tauri/target/release/bundle/nsis/ || echo "NSIS directory not found"
+          echo "=== All sig files ==="
+          find src-tauri/target/release/bundle -name "*.sig" 2>/dev/null || echo "No sig files found"
+
       - name: Read signature file
         id: signature
         shell: bash
