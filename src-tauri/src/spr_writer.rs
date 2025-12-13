@@ -240,5 +240,9 @@ pub fn update_sprites_in_spr(
             .map_err(|e| format!("Failed to write sprite address: {}", e))?;
     }
 
+    // Flush to ensure data is written to disk
+    file.flush()
+        .map_err(|e| format!("Failed to flush SPR file: {}", e))?;
+
     Ok(())
 }
