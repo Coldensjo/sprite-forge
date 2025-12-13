@@ -25,8 +25,6 @@ if (typeof window !== 'undefined') {
 		},
 		false
 	);
-
-	console.log('[DnD] Global drag handlers initialized for Tauri');
 }
 
 createRoot(document.getElementById('root')!).render(<App />);

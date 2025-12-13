@@ -1,9 +1,10 @@
 import { cn } from '@/lib/utils';
-import { Loader2 } from 'lucide-react';
 import { logger, EventCode } from '@/lib/debug';
 import { blendOutfit } from '@/lib/tibia/outfit';
+import { Loader2, ImagePlus } from 'lucide-react';
 import { useDragDrop } from '@/contexts/DragDropContext';
 import { useTibiaData } from '@/contexts/TibiaDataContext';
+import { listen, TauriEvent } from '@tauri-apps/api/event';
 import { memo, useRef, useMemo, useState, useEffect, useCallback } from 'react';
 import { SPRITE_SIZE, getSpriteIndex, type ThingType, isValidSpriteId, importObjectSheet } from '@/lib/tibia';
 
@@ -41,6 +42,8 @@ interface SpriteCanvasProps {
 	isPanEnabled?: boolean;
 
 	showExactSize?: boolean;
+	// Enable file drop functionality (only for PropertiesPanel sprite editor)
+	allowFileDrop?: boolean;
 	sceneScrollOffset?: number;
 	// Scene preview props (for outfit scene background)
 	sceneTiles?: null | SceneTile[][];
@@ -91,6 +94,7 @@ export const SpriteCanvas = memo(
 		isPanEnabled = false,
 		showExactSize = false,
 		sceneScrollOffset = 0,
+		allowFileDrop = false,
 		onMiddleMousePanChange
 	}: SpriteCanvasProps) => {
 		const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -101,10 +105,13 @@ export const SpriteCanvas = memo(
 		const [isPanning, setIsPanning] = useState(false);
 		const [panStart, setPanStart] = useState({ x: 0, y: 0 });
 
-		// Highlight state for drag and drop
+		// Highlight state for internal sprite-to-sprite drag and drop
 		const [highlightedSlot, setHighlightedSlot] = useState<null | { x: number; y: number; w: number; h: number }>(null);
 		// Hover state for visual feedback
 		const [hoveredSlot, setHoveredSlot] = useState<null | { x: number; y: number; w: number; h: number }>(null);
+		// File drag states for Tauri file drops
+		const [isFileDragging, setIsFileDragging] = useState(false); // True when image file is being dragged in window (shows glowing border)
+		const [isFileDragOver, setIsFileDragOver] = useState(false); // True when drag is over this canvas (shows overlay with icon)
 		// Ref to track highlight for drop logic (persists across re-renders)
 		const currentHighlightRef = useRef<null | { x: number; y: number; w: number; h: number }>(null);
 
@@ -929,6 +936,99 @@ export const SpriteCanvas = memo(
 			};
 		}, [isDragging, dragType, draggedItem, thing, canvasWidth, canvasHeight, onSpriteDrop, frame, layer]);
 
+		// Track if current drag contains an image file (set on DRAG_ENTER, cleared on DRAG_LEAVE/DRAG_DROP)
+		const isDraggingImageRef = useRef(false);
+
+		// Tauri native file drop event handlers (works on Windows, macOS, Linux)
+		// This replaces HTML5 dataTransfer.files which doesn't work on Windows in Tauri
+		// Only enable when allowFileDrop is true (PropertiesPanel only)
+		useEffect(() => {
+			const containerElement = containerRef.current;
+			// Only enable file drops when explicitly allowed (PropertiesPanel canvas)
+			if (!containerElement || !allowFileDrop) return;
+
+			// Helper to check if position is within container bounds
+			const isPositionInContainer = (x: number, y: number): boolean => {
+				const rect = containerElement.getBoundingClientRect();
+				return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
+			};
+
+			// Listen for drag-enter to check if it's an image file
+			const unlistenEnter = listen<{ paths: string[]; position: { x: number; y: number } }>(TauriEvent.DRAG_ENTER, (event) => {
+				const { paths } = event.payload;
+				const hasImage = paths?.some((p) => /\.(png|bmp|jpg|jpeg)$/i.test(p)) ?? false;
+				isDraggingImageRef.current = hasImage;
+				setIsFileDragging(hasImage);
+			});
+
+			// Listen for Tauri drag-drop event
+			const unlistenDrop = listen<{ paths: string[]; position: { x: number; y: number } }>(
+				TauriEvent.DRAG_DROP,
+				async (event) => {
+					const { paths, position } = event.payload;
+					isDraggingImageRef.current = false;
+					setIsFileDragging(false);
+					setIsFileDragOver(false);
+
+					if (!paths || paths.length === 0) return;
+
+					// Check if drop position is within this canvas container
+					if (!isPositionInContainer(position.x, position.y)) return;
+
+					// Filter for image files only
+					const imagePath = paths.find((p) => /\.(png|bmp|jpg|jpeg)$/i.test(p));
+					if (!imagePath) return;
+
+					// Need thing and data to import
+					if (!thing || !data) {
+						return;
+					}
+
+					// Import the sprite sheet using the file path
+					const result = await importObjectSheet(thing, data, imagePath);
+					if (result.success && result.updatedThing) {
+						notifySpritesLoaded();
+						if (notifyDataChanged && result.spriteIds) {
+							notifyDataChanged(result.spriteIds);
+						}
+						notifySpriteImport();
+					}
+				}
+			);
+
+			// Listen for drag-over to show visual feedback
+			const unlistenOver = listen<{ position: { x: number; y: number } }>(TauriEvent.DRAG_OVER, (event) => {
+				const { position } = event.payload;
+
+				// Only show feedback if dragging an image file
+				if (!isDraggingImageRef.current) {
+					setIsFileDragOver(false);
+					return;
+				}
+
+				// Check if position is over this canvas
+				if (isPositionInContainer(position.x, position.y)) {
+					setIsFileDragOver(true);
+				} else {
+					setIsFileDragOver(false);
+				}
+			});
+
+			// Listen for drag-leave to clear overlay
+			const unlistenLeave = listen(TauriEvent.DRAG_LEAVE, () => {
+				isDraggingImageRef.current = false;
+				setIsFileDragging(false);
+				setIsFileDragOver(false);
+			});
+
+			return () => {
+				unlistenEnter.then((fn) => fn());
+				unlistenDrop.then((fn) => fn());
+				unlistenOver.then((fn) => fn());
+				unlistenLeave.then((fn) => fn());
+			};
+		}, [thing, data, allowFileDrop, notifySpritesLoaded, notifyDataChanged, notifySpriteImport]);
+
 		const transformStyle = useMemo(() => {
 			const baseStyle = {
 				maxWidth: '100%',
@@ -981,19 +1081,18 @@ export const SpriteCanvas = memo(
 			};
 		}, [canvasWidth, canvasHeight, scale, exactSizeCenter, panX, panY, renderMode]);
 
-		// Drag and Drop handlers
+		// Drag and Drop handlers for internal sprite-to-sprite drops
+		// File drops are handled by Tauri's native events (see useEffect above)
 		const handleDragEnter = (e: React.DragEvent) => {
+			// File drops are handled by Tauri native events, not HTML5
 			if (e.dataTransfer.types.includes('Files')) {
-				e.preventDefault();
-				e.dataTransfer.dropEffect = 'copy';
+				return;
 			}
 		};
 
 		const handleDragOver = (e: React.DragEvent) => {
-			// Allow file drops indiscriminately
+			// File drops are handled by Tauri native events, not HTML5
 			if (e.dataTransfer.types.includes('Files')) {
-				e.preventDefault();
-				e.dataTransfer.dropEffect = 'copy';
 				return;
 			}
 
@@ -1114,27 +1213,12 @@ export const SpriteCanvas = memo(
 		}, [onSpriteHover]);
 
 		const handleDrop = async (e: React.DragEvent) => {
-			// Check for file drop first
+			// File drops are now handled by Tauri's native drag-drop events (see useEffect above)
+			// This allows file drops to work on Windows where HTML5 dataTransfer.files is empty
+			// Only handle internal sprite-to-sprite drops here
 			if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-				if (thing && data) {
-					e.preventDefault();
-					setHighlightedSlot(null);
-					const file = e.dataTransfer.files[0];
-					console.log('Drag & Drop: File dropped on canvas', file.name, 'size:', file.size);
-
-					// Use new binary IPC import - returns sprites directly in cache
-					const result = await importObjectSheet(thing, data, file);
-
-					if (result.success && result.updatedThing) {
-						// Notify with actual sprite IDs for proper re-renders
-						notifySpritesLoaded();
-						if (notifyDataChanged && result.spriteIds) {
-							notifyDataChanged(result.spriteIds);
-						}
-						// Notify SpriteList to go to last page to show new sprites
-						notifySpriteImport();
-					}
-				}
+				// Ignore - handled by Tauri event listener
+				e.preventDefault();
 				return;
 			}
 
@@ -1244,7 +1328,6 @@ export const SpriteCanvas = memo(
 					'relative flex items-center justify-center',
 					// Ensure it fills the parent (CheckerBoard)
 					'w-full h-full'
-					// renderMode === 'list' && 'w-full h-full flex items-center justify-center overflow-hidden'
 				)}
 			>
 				<div className="relative" style={transformStyle}>
@@ -1286,6 +1369,17 @@ export const SpriteCanvas = memo(
 						}}
 					>
 						<Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+					</div>
+				)}
+				{/* Glowing border when dragging image file into window (not yet over canvas) */}
+				{isFileDragging && !isFileDragOver && allowFileDrop && (
+					<div className="absolute inset-0 z-10 pointer-events-none rounded-lg border-2 border-primary animate-pulse shadow-[0_0_20px_rgba(59,130,246,0.5)]" />
+				)}
+				{/* Full overlay when dragging over this canvas */}
+				{isFileDragOver && (
+					<div className="absolute inset-0 flex flex-col items-center justify-center bg-primary/20 backdrop-blur-[1px] z-10 pointer-events-none rounded-lg border-2 border-dashed border-primary">
+						<ImagePlus className="w-12 h-12 text-primary mb-2" />
+						<span className="text-primary font-medium text-sm">Drop image to import</span>
 					</div>
 				)}
 			</div>

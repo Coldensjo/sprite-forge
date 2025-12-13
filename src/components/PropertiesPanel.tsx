@@ -1646,6 +1646,7 @@ export const PropertiesPanel = () => {
 												panX={panX}
 												panY={panY}
 												scale={zoom}
+												allowFileDrop
 												thing={draftItem}
 												patternX={patternX}
 												patternY={patternY}
@@ -1677,6 +1678,7 @@ export const PropertiesPanel = () => {
 												panX={panX}
 												panY={panY}
 												scale={zoom}
+												allowFileDrop
 												thing={draftItem}
 												patternX={patternX}
 												patternY={patternY}
