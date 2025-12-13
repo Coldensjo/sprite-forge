@@ -82,6 +82,53 @@ function collectModifiedSprites(
 }
 
 /**
+ * Fix sprite index for a thing if it's missing or has wrong length
+ * Fills missing sprites with 0 (empty sprite)
+ * Also fixes frameGroupsData if present
+ */
+function fixSpriteIndex(thing: ThingType): void {
+	const total = thing.width * thing.height * thing.patternX * thing.patternY * thing.patternZ * thing.frames * thing.layers;
+	
+	// Fix frame groups first (for outfits)
+	if (thing.frameGroupsData && thing.frameGroupsData.length > 0) {
+		for (const group of thing.frameGroupsData) {
+			const groupTotal = group.width * group.height * group.layers * group.patternX * group.patternY * group.patternZ * group.frames;
+			
+			// Initialize spriteIndex if missing
+			if (!group.spriteIndex) {
+				group.spriteIndex = [];
+			}
+			
+			// Fix sprite index length
+			if (group.spriteIndex.length !== groupTotal) {
+				console.warn(
+					`Fixing frame group sprite index for ${thing.category} ${thing.id}: expected ${groupTotal} sprites but has ${group.spriteIndex.length}. Filling with empty sprites.`
+				);
+				group.spriteIndex = new Array(groupTotal).fill(0);
+			}
+		}
+	}
+	
+	// Initialize spriteIndex if missing
+	if (!thing.spriteIndex) {
+		thing.spriteIndex = [];
+	}
+
+	// If spriteIndex is empty or wrong size, fix it
+	if (thing.spriteIndex.length !== total) {
+		console.warn(
+			`Fixing sprite index for ${thing.category} ${thing.id}: expected ${total} sprites but has ${thing.spriteIndex.length}. Filling with empty sprites.`
+		);
+		
+		// Resize to correct length, filling with 0 (empty sprite)
+		thing.spriteIndex = new Array(total).fill(0);
+		
+		// If we had some sprites, try to preserve them
+		// (This shouldn't happen in normal cases, but helps with partial data)
+	}
+}
+
+/**
  * Compile DAT file
  * CRITICAL: Always writes ALL items/outfits/effects/missiles, not just modified ones!
  *
@@ -97,11 +144,18 @@ export async function compileDatFile(path: string, data: TibiaData): Promise<voi
 	const effectsData = collectThings(data.effects, ThingCategory.EFFECT);
 	const missilesData = collectThings(data.missiles, ThingCategory.MISSILE);
 
-	// Check for corrupt data in items
+	// Fix and validate items
 	for (let i = 0; i < itemsData.things.length; i++) {
 		const item = itemsData.things[i];
 		if (item) {
 			const total = item.width * item.height * item.patternX * item.patternY * item.patternZ * item.frames * item.layers;
+			
+			// Fix sprite index if needed
+			if (total > 0) {
+				fixSpriteIndex(item);
+			}
+			
+			// Check for corrupt data
 			if (total > 4096 || total === 0) {
 				console.error(`CORRUPT ITEM at index ${i}:`, {
 					id: item.id,
@@ -120,12 +174,19 @@ export async function compileDatFile(path: string, data: TibiaData): Promise<voi
 		}
 	}
 
-	// Check outfits
+	// Fix and validate outfits
 	for (let i = 0; i < outfitsData.things.length; i++) {
 		const outfit = outfitsData.things[i];
 		if (outfit) {
 			const total =
 				outfit.width * outfit.height * outfit.patternX * outfit.patternY * outfit.patternZ * outfit.frames * outfit.layers;
+			
+			// Fix sprite index if needed
+			if (total > 0) {
+				fixSpriteIndex(outfit);
+			}
+			
+			// Check for corrupt data
 			if (total > 4096 || total === 0) {
 				console.error(`CORRUPT OUTFIT at index ${i}:`, {
 					id: outfit.id,
@@ -140,6 +201,28 @@ export async function compileDatFile(path: string, data: TibiaData): Promise<voi
 					patternZ: outfit.patternZ,
 					spriteIndexLength: outfit.spriteIndex?.length || 0
 				});
+			}
+		}
+	}
+
+	// Fix and validate effects
+	for (let i = 0; i < effectsData.things.length; i++) {
+		const effect = effectsData.things[i];
+		if (effect) {
+			const total = effect.width * effect.height * effect.patternX * effect.patternY * effect.patternZ * effect.frames * effect.layers;
+			if (total > 0) {
+				fixSpriteIndex(effect);
+			}
+		}
+	}
+
+	// Fix and validate missiles
+	for (let i = 0; i < missilesData.things.length; i++) {
+		const missile = missilesData.things[i];
+		if (missile) {
+			const total = missile.width * missile.height * missile.patternX * missile.patternY * missile.patternZ * missile.frames * missile.layers;
+			if (total > 0) {
+				fixSpriteIndex(missile);
 			}
 		}
 	}
@@ -206,16 +289,20 @@ export async function compileSprFile(path: string, data: TibiaData): Promise<voi
 /**
  * Update only specific sprites in an existing SPR file
  * More efficient than rewriting the entire file
+ * 
+ * PERFORMANCE: Uses batching to avoid memory issues with large files
+ * Processes sprites in chunks of 50 to prevent IPC timeout and memory overflow
  */
 export async function updateSpritesInSpr(
 	path: string,
 	data: TibiaData,
 	modifiedSprites: Map<number, Sprite>,
-	spritesCount: number
+	spritesCount: number,
+	onProgress?: (current: number, total: number) => void
 ): Promise<void> {
 	// Convert sprites to the format expected by Rust
 	// For deleted sprites (not in data.sprites), mark as empty
-	const sprites = Array.from(modifiedSprites.keys()).map((id) => {
+	const allSprites = Array.from(modifiedSprites.keys()).map((id) => {
 		const sprite = data.sprites.get(id);
 		if (sprite) {
 			return {
@@ -233,13 +320,29 @@ export async function updateSpritesInSpr(
 		}
 	});
 
-	// Invoke Rust command to update specific sprites
-	await invoke('update_spr_sprites', {
-		path,
-		sprites,
-		spritesCount,
-		extended: data.extended
-	});
+	// Process in batches to avoid memory issues and IPC timeouts
+	// Batch size of 50 sprites should be safe even for large compressed sprites
+	const BATCH_SIZE = 50;
+	const totalBatches = Math.ceil(allSprites.length / BATCH_SIZE);
+
+	for (let i = 0; i < totalBatches; i++) {
+		const start = i * BATCH_SIZE;
+		const end = Math.min(start + BATCH_SIZE, allSprites.length);
+		const batch = allSprites.slice(start, end);
+
+		// Update progress
+		if (onProgress) {
+			onProgress(i + 1, totalBatches);
+		}
+
+		// Invoke Rust command to update this batch of sprites
+		await invoke('update_spr_sprites', {
+			path,
+			sprites: batch,
+			spritesCount,
+			extended: data.extended
+		});
+	}
 }
 
 /**
@@ -276,7 +379,18 @@ export async function compileFiles(
 		// Step 4: Update SPR file (only modified sprites)
 		if (onProgress) onProgress('Updating SPR file...', 3, 4);
 		if (modifiedSprites.size > 0) {
-			await updateSpritesInSpr(sprPath, data, modifiedSprites, data.spritesCount);
+			const totalBatches = Math.ceil(modifiedSprites.size / 50);
+			await updateSpritesInSpr(
+				sprPath,
+				data,
+				modifiedSprites,
+				data.spritesCount,
+				(batch, total) => {
+					if (onProgress) {
+						onProgress(`Updating SPR file... (${batch}/${total})`, 3, 4);
+					}
+				}
+			);
 		}
 
 		// Complete

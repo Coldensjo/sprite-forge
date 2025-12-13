@@ -275,6 +275,7 @@ export const Toolbar = () => {
 			});
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Failed to compile files';
+			console.error('Compile error details:', err);
 
 			// Check for permission errors
 			const isPermissionError =
@@ -282,6 +283,13 @@ export const Toolbar = () => {
 				errorMessage.includes('Access denied') ||
 				errorMessage.includes('Permission denied') ||
 				errorMessage.includes('os error 5');
+
+			// Check for memory/timeout errors
+			const isMemoryError =
+				errorMessage.includes('out of memory') ||
+				errorMessage.includes('allocation') ||
+				errorMessage.includes('too large') ||
+				errorMessage.includes('timeout');
 
 			if (isPermissionError) {
 				toast({
@@ -291,12 +299,20 @@ export const Toolbar = () => {
 					description:
 						'Cannot write to files. Please run the application as Administrator or move the files to a writable location (e.g., Documents folder).'
 				});
+			} else if (isMemoryError) {
+				toast({
+					duration: 10000,
+					variant: 'destructive',
+					title: 'Compile failed',
+					description:
+						'File is too large or system ran out of memory. Try closing other applications or compiling fewer changes at once.'
+				});
 			} else {
 				toast({
 					duration: 7000,
 					variant: 'destructive',
 					title: 'Compile failed',
-					description: errorMessage
+					description: errorMessage || 'An unknown error occurred during compilation. Check the console for details.'
 				});
 			}
 		}
