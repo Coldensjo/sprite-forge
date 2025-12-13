@@ -88,17 +88,18 @@ function collectModifiedSprites(
  */
 function fixSpriteIndex(thing: ThingType): void {
 	const total = thing.width * thing.height * thing.patternX * thing.patternY * thing.patternZ * thing.frames * thing.layers;
-	
+
 	// Fix frame groups first (for outfits)
 	if (thing.frameGroupsData && thing.frameGroupsData.length > 0) {
 		for (const group of thing.frameGroupsData) {
-			const groupTotal = group.width * group.height * group.layers * group.patternX * group.patternY * group.patternZ * group.frames;
-			
+			const groupTotal =
+				group.width * group.height * group.layers * group.patternX * group.patternY * group.patternZ * group.frames;
+
 			// Initialize spriteIndex if missing
 			if (!group.spriteIndex) {
 				group.spriteIndex = [];
 			}
-			
+
 			// Fix sprite index length
 			if (group.spriteIndex.length !== groupTotal) {
 				console.warn(
@@ -108,7 +109,7 @@ function fixSpriteIndex(thing: ThingType): void {
 			}
 		}
 	}
-	
+
 	// Initialize spriteIndex if missing
 	if (!thing.spriteIndex) {
 		thing.spriteIndex = [];
@@ -119,10 +120,10 @@ function fixSpriteIndex(thing: ThingType): void {
 		console.warn(
 			`Fixing sprite index for ${thing.category} ${thing.id}: expected ${total} sprites but has ${thing.spriteIndex.length}. Filling with empty sprites.`
 		);
-		
+
 		// Resize to correct length, filling with 0 (empty sprite)
 		thing.spriteIndex = new Array(total).fill(0);
-		
+
 		// If we had some sprites, try to preserve them
 		// (This shouldn't happen in normal cases, but helps with partial data)
 	}
@@ -149,12 +150,12 @@ export async function compileDatFile(path: string, data: TibiaData): Promise<voi
 		const item = itemsData.things[i];
 		if (item) {
 			const total = item.width * item.height * item.patternX * item.patternY * item.patternZ * item.frames * item.layers;
-			
+
 			// Fix sprite index if needed
 			if (total > 0) {
 				fixSpriteIndex(item);
 			}
-			
+
 			// Check for corrupt data
 			if (total > 4096 || total === 0) {
 				console.error(`CORRUPT ITEM at index ${i}:`, {
@@ -180,12 +181,12 @@ export async function compileDatFile(path: string, data: TibiaData): Promise<voi
 		if (outfit) {
 			const total =
 				outfit.width * outfit.height * outfit.patternX * outfit.patternY * outfit.patternZ * outfit.frames * outfit.layers;
-			
+
 			// Fix sprite index if needed
 			if (total > 0) {
 				fixSpriteIndex(outfit);
 			}
-			
+
 			// Check for corrupt data
 			if (total > 4096 || total === 0) {
 				console.error(`CORRUPT OUTFIT at index ${i}:`, {
@@ -209,7 +210,8 @@ export async function compileDatFile(path: string, data: TibiaData): Promise<voi
 	for (let i = 0; i < effectsData.things.length; i++) {
 		const effect = effectsData.things[i];
 		if (effect) {
-			const total = effect.width * effect.height * effect.patternX * effect.patternY * effect.patternZ * effect.frames * effect.layers;
+			const total =
+				effect.width * effect.height * effect.patternX * effect.patternY * effect.patternZ * effect.frames * effect.layers;
 			if (total > 0) {
 				fixSpriteIndex(effect);
 			}
@@ -220,7 +222,8 @@ export async function compileDatFile(path: string, data: TibiaData): Promise<voi
 	for (let i = 0; i < missilesData.things.length; i++) {
 		const missile = missilesData.things[i];
 		if (missile) {
-			const total = missile.width * missile.height * missile.patternX * missile.patternY * missile.patternZ * missile.frames * missile.layers;
+			const total =
+				missile.width * missile.height * missile.patternX * missile.patternY * missile.patternZ * missile.frames * missile.layers;
 			if (total > 0) {
 				fixSpriteIndex(missile);
 			}
@@ -287,20 +290,68 @@ export async function compileSprFile(path: string, data: TibiaData): Promise<voi
 }
 
 /**
+ * Encode sprites into a binary buffer for efficient IPC transfer
+ * Binary format: [Count: u32] + for each sprite: [ID: u32][IsEmpty: u8][Len: u32][Data...]
+ *
+ * This follows CLAUDE.md RULE #1: Never use JSON for large data transfers
+ */
+function encodeSpritesForUpdate(sprites: Array<{ id: number; isEmpty: boolean; compressedPixels: Uint8Array }>): Uint8Array {
+	// Calculate total buffer size
+	let totalSize = 4; // sprite count (u32)
+	for (const sprite of sprites) {
+		totalSize += 4 + 1 + 4; // id (u32) + isEmpty (u8) + compressedLen (u32)
+		if (!sprite.isEmpty && sprite.compressedPixels?.length > 0) {
+			totalSize += sprite.compressedPixels.length;
+		}
+	}
+
+	const buffer = new ArrayBuffer(totalSize);
+	const view = new DataView(buffer);
+	const bytes = new Uint8Array(buffer);
+	let offset = 0;
+
+	// Write sprite count
+	view.setUint32(offset, sprites.length, true); // little-endian
+	offset += 4;
+
+	// Write each sprite
+	for (const sprite of sprites) {
+		// ID (u32)
+		view.setUint32(offset, sprite.id, true);
+		offset += 4;
+
+		// IsEmpty (u8)
+		view.setUint8(offset, sprite.isEmpty ? 1 : 0);
+		offset += 1;
+
+		// Compressed length (u32)
+		const len = sprite.isEmpty ? 0 : (sprite.compressedPixels?.length ?? 0);
+		view.setUint32(offset, len, true);
+		offset += 4;
+
+		// Compressed pixels (if not empty)
+		if (len > 0) {
+			bytes.set(sprite.compressedPixels, offset);
+			offset += len;
+		}
+	}
+
+	return bytes;
+}
+
+/**
  * Update only specific sprites in an existing SPR file
  * More efficient than rewriting the entire file
- * 
- * PERFORMANCE: Uses batching to avoid memory issues with large files
- * Processes sprites in chunks of 50 to prevent IPC timeout and memory overflow
+ *
+ * PERFORMANCE: Uses binary IPC buffer for fast transfer (single call, no batching needed)
  */
 export async function updateSpritesInSpr(
 	path: string,
 	data: TibiaData,
 	modifiedSprites: Map<number, Sprite>,
-	spritesCount: number,
-	onProgress?: (current: number, total: number) => void
+	spritesCount: number
 ): Promise<void> {
-	// Convert sprites to the format expected by Rust
+	// Convert sprites to the format for binary encoding
 	// For deleted sprites (not in data.sprites), mark as empty
 	const allSprites = Array.from(modifiedSprites.keys()).map((id) => {
 		const sprite = data.sprites.get(id);
@@ -308,7 +359,7 @@ export async function updateSpritesInSpr(
 			return {
 				id: sprite.id,
 				isEmpty: sprite.isEmpty,
-				compressedPixels: sprite.compressedPixels
+				compressedPixels: sprite.compressedPixels ?? new Uint8Array(0)
 			};
 		} else {
 			// Sprite was deleted - write as empty
@@ -320,29 +371,16 @@ export async function updateSpritesInSpr(
 		}
 	});
 
-	// Process in batches to avoid memory issues and IPC timeouts
-	// Batch size of 50 sprites should be safe even for large compressed sprites
-	const BATCH_SIZE = 50;
-	const totalBatches = Math.ceil(allSprites.length / BATCH_SIZE);
+	// Encode sprites to binary buffer
+	const buffer = encodeSpritesForUpdate(allSprites);
 
-	for (let i = 0; i < totalBatches; i++) {
-		const start = i * BATCH_SIZE;
-		const end = Math.min(start + BATCH_SIZE, allSprites.length);
-		const batch = allSprites.slice(start, end);
-
-		// Update progress
-		if (onProgress) {
-			onProgress(i + 1, totalBatches);
-		}
-
-		// Invoke Rust command to update this batch of sprites
-		await invoke('update_spr_sprites', {
-			path,
-			sprites: batch,
-			spritesCount,
-			extended: data.extended
-		});
-	}
+	// Single IPC call with binary buffer - no batching needed
+	await invoke('update_spr_sprites_bin', {
+		path,
+		spritesCount,
+		extended: data.extended,
+		buffer: Array.from(buffer) // Tauri expects array for Vec<u8>
+	});
 }
 
 /**
@@ -377,20 +415,10 @@ export async function compileFiles(
 		await compileDatFile(datPath, data);
 
 		// Step 4: Update SPR file (only modified sprites)
+		// Uses binary IPC for fast single-call transfer
 		if (onProgress) onProgress('Updating SPR file...', 3, 4);
 		if (modifiedSprites.size > 0) {
-			const totalBatches = Math.ceil(modifiedSprites.size / 50);
-			await updateSpritesInSpr(
-				sprPath,
-				data,
-				modifiedSprites,
-				data.spritesCount,
-				(batch, total) => {
-					if (onProgress) {
-						onProgress(`Updating SPR file... (${batch}/${total})`, 3, 4);
-					}
-				}
-			);
+			await updateSpritesInSpr(sprPath, data, modifiedSprites, data.spritesCount);
 		}
 
 		// Complete

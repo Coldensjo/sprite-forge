@@ -789,6 +789,97 @@ fn update_spr_sprites(
     update_sprites_in_spr(&path, extended, sprites, sprites_count)
 }
 
+/// Parse binary buffer into Vec<SpriteWrite>
+/// Binary format: [Count: u32] + for each sprite: [ID: u32][IsEmpty: u8][Len: u32][Data...]
+fn parse_sprites_buffer(buffer: &[u8]) -> Result<Vec<SpriteWrite>, String> {
+    if buffer.len() < 4 {
+        return Err("Buffer too small to contain sprite count".to_string());
+    }
+
+    let mut offset = 0;
+
+    // Read sprite count
+    let count = u32::from_le_bytes(
+        buffer[offset..offset + 4]
+            .try_into()
+            .map_err(|_| "Failed to read sprite count")?,
+    ) as usize;
+    offset += 4;
+
+    let mut sprites = Vec::with_capacity(count);
+
+    for i in 0..count {
+        // Check we have enough bytes for header (id + is_empty + len = 9 bytes)
+        if offset + 9 > buffer.len() {
+            return Err(format!(
+                "Buffer truncated at sprite {}: need {} bytes, have {}",
+                i,
+                offset + 9,
+                buffer.len()
+            ));
+        }
+
+        // Read ID (u32)
+        let id = u32::from_le_bytes(
+            buffer[offset..offset + 4]
+                .try_into()
+                .map_err(|_| format!("Failed to read sprite {} ID", i))?,
+        );
+        offset += 4;
+
+        // Read IsEmpty (u8)
+        let is_empty = buffer[offset] == 1;
+        offset += 1;
+
+        // Read compressed length (u32)
+        let compressed_len = u32::from_le_bytes(
+            buffer[offset..offset + 4]
+                .try_into()
+                .map_err(|_| format!("Failed to read sprite {} compressed length", i))?,
+        ) as usize;
+        offset += 4;
+
+        // Read compressed pixels
+        let compressed_pixels = if compressed_len > 0 {
+            if offset + compressed_len > buffer.len() {
+                return Err(format!(
+                    "Buffer truncated at sprite {} data: need {} bytes, have {}",
+                    i,
+                    offset + compressed_len,
+                    buffer.len()
+                ));
+            }
+            buffer[offset..offset + compressed_len].to_vec()
+        } else {
+            Vec::new()
+        };
+        offset += compressed_len;
+
+        sprites.push(SpriteWrite {
+            id,
+            is_empty,
+            compressed_pixels,
+        });
+    }
+
+    Ok(sprites)
+}
+
+/// Update sprites in SPR file using binary buffer (fast IPC)
+#[tauri::command]
+fn update_spr_sprites_bin(
+    path: String,
+    extended: bool,
+    buffer: Vec<u8>,
+    sprites_count: u32,
+) -> Result<(), String> {
+    // Parse binary buffer into sprites
+    let sprites = parse_sprites_buffer(&buffer)?;
+
+    // Call existing writer
+    update_sprites_in_spr(&path, extended, sprites, sprites_count)
+}
+
 // DAT Manager Commands
 
 #[tauri::command]
@@ -1788,6 +1879,7 @@ tauri::Builder::default()
             write_dat,
             write_spr,
             update_spr_sprites,
+            update_spr_sprites_bin,
             store_dat_data,
             load_dat_file,
             parse_dat_file_bin,
@@ -1825,4 +1917,3 @@ tauri::Builder::default()
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
-
