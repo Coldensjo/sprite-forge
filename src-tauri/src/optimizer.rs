@@ -1,8 +1,6 @@
 use std::collections::{HashMap, HashSet};
-use std::sync::{Arc, Mutex};
-use tauri::State;
 use sha1::{Sha1, Digest};
-use crate::spr_manager::{SprManager, SpriteData, SprManagerState, SprFileReader};
+use crate::spr_manager::{SprManagerState, SprFileReader};
 use crate::spr_writer::SpriteWrite;
 
 #[derive(serde::Serialize)]
@@ -21,7 +19,7 @@ pub async fn optimize_sprites_rust(
     path: String,
     used_ids_blob: Vec<u8>,
     extended: bool,
-    spr_state: tauri::State<'_, SprManagerState>,
+    _spr_state: tauri::State<'_, SprManagerState>,
 ) -> Result<OptimizationResult, String> {
     // 1. Read all sprites using a local reader (avoids locking the shared manager)
     // We run this in a blocking task to avoid blocking the async runtime
@@ -139,7 +137,7 @@ pub async fn optimize_sprites_rust(
             .tempfile()
             .map_err(|e| format!("Failed to create temp file: {}", e))?;
             
-        let temp_path_str = temp_file.path().to_string_lossy().to_string();
+        let _temp_path_str = temp_file.path().to_string_lossy().to_string();
         
         let sprites_to_write: Vec<SpriteWrite> = new_sprites.into_iter().map(|(id, pixels)| {
             SpriteWrite {

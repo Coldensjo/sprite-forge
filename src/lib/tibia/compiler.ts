@@ -256,35 +256,29 @@ export async function compileDatFile(path: string, data: TibiaData): Promise<voi
 
 /**
  * Compile SPR file (full write)
+ * This copies the original SPR file while applying any sprite modifications.
+ * This is essential because most sprites are lazy-loaded and not in memory.
  */
 export async function compileSprFile(path: string, data: TibiaData): Promise<void> {
-	// Collect all sprites, filling gaps with empty sprites
-	const sprites = [];
-	for (let id = 1; id <= data.spritesCount; id++) {
-		const sprite = data.sprites.get(id);
-		if (sprite) {
-			// Use compressedPixels if available, otherwise sprite wasn't modified
-			// (Sprites loaded via RGBA don't have compressedPixels until modified)
-			sprites.push({
+	// Collect only the sprites that are in the cache (modified ones)
+	// Unmodified sprites will be copied from the original file by Rust
+	const modifications = [];
+	for (const sprite of data.sprites.values()) {
+		if (sprite.compressedPixels && sprite.compressedPixels.length > 0) {
+			modifications.push({
 				id: sprite.id,
 				isEmpty: sprite.isEmpty,
-				compressedPixels: sprite.compressedPixels || new Uint8Array(0)
-			});
-		} else {
-			// Create empty sprite for deleted IDs
-			sprites.push({
-				id: id,
-				isEmpty: true,
-				compressedPixels: new Uint8Array(0)
+				compressedPixels: sprite.compressedPixels
 			});
 		}
 	}
 
-	// Invoke Rust command to write SPR file
-	await invoke('write_spr', {
-		path,
-		sprites,
+	// Use the new Rust command that copies from source + applies modifications
+	await invoke('copy_spr_file_with_mods', {
+		modifications,
+		destPath: path,
 		extended: data.extended,
+		sourcePath: data.sprPath,
 		signature: data.version.sprSignature
 	});
 }
@@ -344,6 +338,8 @@ function encodeSpritesForUpdate(sprites: Array<{ id: number; isEmpty: boolean; c
  * More efficient than rewriting the entire file
  *
  * PERFORMANCE: Uses binary IPC buffer for fast transfer (single call, no batching needed)
+ *
+ * NOTE: If sprite count changes, this will fail and fall back to full rewrite automatically.
  */
 export async function updateSpritesInSpr(
 	path: string,
@@ -374,13 +370,26 @@ export async function updateSpritesInSpr(
 	// Encode sprites to binary buffer
 	const buffer = encodeSpritesForUpdate(allSprites);
 
-	// Single IPC call with binary buffer - no batching needed
-	await invoke('update_spr_sprites_bin', {
-		path,
-		spritesCount,
-		extended: data.extended,
-		buffer: Array.from(buffer) // Tauri expects array for Vec<u8>
-	});
+	try {
+		// Single IPC call with binary buffer - no batching needed
+		await invoke('update_spr_sprites_bin', {
+			path,
+			spritesCount,
+			extended: data.extended,
+			buffer: Array.from(buffer) // Tauri expects array for Vec<u8>
+		});
+	} catch (error) {
+		// If Rust returns FULL_REWRITE_REQUIRED error, fall back to full rewrite
+		if (error instanceof Error && error.message.includes('FULL_REWRITE_REQUIRED')) {
+			console.log('Sprite count changed, falling back to full SPR rewrite...');
+			await compileSprFile(path, data);
+		} else if (typeof error === 'string' && error.includes('FULL_REWRITE_REQUIRED')) {
+			console.log('Sprite count changed, falling back to full SPR rewrite...');
+			await compileSprFile(path, data);
+		} else {
+			throw error;
+		}
+	}
 }
 
 /**

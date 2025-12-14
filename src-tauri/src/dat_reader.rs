@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::io::{self, Read, BufReader, Seek, SeekFrom};
+use std::io::{self, Read, BufReader};
 use crate::dat_writer::{ThingType, FrameDuration, FrameGroup};
 
 // Binary encoding for fast IPC transfer (no JSON serialization)

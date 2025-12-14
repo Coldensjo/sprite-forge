@@ -724,8 +724,9 @@ impl<W: Write> DatWriter<W> {
         Ok(())
     }
 
-    // Write properties for OUTFITS/EFFECTS/MISSILES ONLY (version 6: 10.10 - 10.56)
-    // These categories only support 3 properties: hasLight, hasOffset, animateAlways
+    // Write properties for OUTFITS/EFFECTS/MISSILES ONLY (version 6: 10.10 - 10.56+)
+    // These categories only support limited properties: hasLight, hasOffset, animateAlways
+    // Effects also support topEffect
     fn write_non_item_properties_v6(&mut self, thing: &ThingType) -> io::Result<()> {
         if thing.has_light {
             self.write_u8(MetadataFlags6::HAS_LIGHT)?;
@@ -743,6 +744,11 @@ impl<W: Write> DatWriter<W> {
             self.write_u8(MetadataFlags6::ANIMATE_ALWAYS)?;
         }
 
+        // topEffect is ONLY for effects (matching Object Builder behavior)
+        if thing.top_effect && thing.category == "effect" {
+            self.write_u8(MetadataFlags6::TOP_EFFECT)?;
+        }
+
         // Last flag
         self.write_u8(MetadataFlags6::LAST_FLAG)?;
         Ok(())
@@ -752,64 +758,101 @@ impl<W: Write> DatWriter<W> {
         // For version >= 10.57 (1057) outfits use frame groups
         if self.frame_groups && thing.category == "outfit" {
             if let Some(groups) = &thing.frame_groups_data {
-                // Write group count
-                self.write_u8(groups.len() as u8)?;
-                
-                for group in groups {
-                    // Write group type
-                    self.write_u8(group.r#type)?;
+                if !groups.is_empty() {
+                    // Write group count
+                    self.write_u8(groups.len() as u8)?;
                     
-                    // Write texture data for group
-                    self.write_u8(group.width)?;
-                    self.write_u8(group.height)?;
-                    
-                    if group.width > 1 || group.height > 1 {
-                        self.write_u8(group.exact_size)?;
-                    }
-                    
-                    self.write_u8(group.layers)?;
-                    self.write_u8(group.pattern_x)?;
-                    self.write_u8(group.pattern_y)?;
-                    self.write_u8(group.pattern_z)?;
-                    self.write_u8(group.frames)?;
-                    
-                    // Write animation data if frames > 1
-                    if group.frames > 1 && self.frame_durations {
-                        self.write_u8(group.animation_mode.unwrap_or(0))?;
-                        self.write_i32_le(group.loop_count.unwrap_or(0))?;
-                        self.write_i8(group.start_frame.unwrap_or(0))?;
+                    for (group_idx, group) in groups.iter().enumerate() {
+                        // Validate sprite index length for this group
+                        let expected_sprites = group.width as usize
+                            * group.height as usize
+                            * group.layers as usize
+                            * group.pattern_x as usize
+                            * group.pattern_y as usize
+                            * group.pattern_z as usize
+                            * group.frames as usize;
                         
-                        // Write frame durations
-                        if let Some(durations) = &group.frame_durations {
-                            for fd in durations {
-                                self.write_u32_le(fd.minimum)?;
-                                self.write_u32_le(fd.maximum)?;
+                        if group.sprite_index.len() != expected_sprites {
+                            return Err(io::Error::new(
+                                io::ErrorKind::InvalidData,
+                                format!(
+                                    "Outfit ID {} frame group {} sprite index mismatch: expected {} but has {}",
+                                    thing.id,
+                                    group_idx,
+                                    expected_sprites,
+                                    group.sprite_index.len()
+                                )
+                            ));
+                        }
+                        
+                        // Write group type using loop index (matching Object Builder behavior)
+                        // Object Builder always writes 0, 1, 2... based on position, not stored type
+                        // Exception: if single group, write type 1 (Walking)
+                        let group_type = if groups.len() < 2 { 1 } else { group_idx as u8 };
+                        
+                        self.write_u8(group_type)?;
+                        
+                        // Write texture data for group
+                        self.write_u8(group.width)?;
+                        self.write_u8(group.height)?;
+                        
+                        if group.width > 1 || group.height > 1 {
+                            self.write_u8(group.exact_size)?;
+                        }
+                        
+                        self.write_u8(group.layers)?;
+                        self.write_u8(group.pattern_x)?;
+                        self.write_u8(group.pattern_y)?;
+                        self.write_u8(group.pattern_z)?;
+                        self.write_u8(group.frames)?;
+                        
+                        // Write animation data if frames > 1 and version supports frame durations
+                        // This MUST match the reader logic exactly
+                        if group.frames > 1 && self.frame_durations {
+                            self.write_u8(group.animation_mode.unwrap_or(0))?;
+                            self.write_i32_le(group.loop_count.unwrap_or(0))?;
+                            self.write_i8(group.start_frame.unwrap_or(0))?;
+                            
+                            // CRITICAL: Write EXACTLY group.frames frame durations
+                            // The reader expects this exact count
+                            for i in 0..group.frames {
+                                if let Some(durations) = &group.frame_durations {
+                                    if (i as usize) < durations.len() {
+                                        self.write_u32_le(durations[i as usize].minimum)?;
+                                        self.write_u32_le(durations[i as usize].maximum)?;
+                                    } else {
+                                        // Fallback: use default duration
+                                        self.write_u32_le(100)?;
+                                        self.write_u32_le(100)?;
+                                    }
+                                } else {
+                                    // No durations array - use default
+                                    self.write_u32_le(100)?;
+                                    self.write_u32_le(100)?;
+                                }
                             }
-                        } else {
-                            // Default durations if missing
-                            for _ in 0..group.frames {
-                                self.write_u32_le(100)?;
-                                self.write_u32_le(100)?;
+                        }
+                        
+                        // Write sprite indices
+                        for &sprite_id in &group.sprite_index {
+                            if self.extended {
+                                self.write_u32_le(sprite_id)?;
+                            } else {
+                                self.write_u16_le(sprite_id as u16)?;
                             }
                         }
                     }
-                    
-                    // Write sprite indices
-                    for &sprite_id in &group.sprite_index {
-                        if self.extended {
-                            self.write_u32_le(sprite_id)?;
-                        } else {
-                            self.write_u16_le(sprite_id as u16)?;
-                        }
-                    }
+                    return Ok(());
                 }
-                return Ok(());
             }
 
-            // Fallback: Write group count (we only write 1 group - the DEFAULT)
+            // Fallback for outfits without frame_groups_data: 
+            // Write as a single group then continue to regular texture pattern writing
+            // WARNING: This should rarely happen for 10.57+ outfits - they should have frame_groups_data
+            eprintln!("WARNING: Outfit {} using fallback (no frame_groups_data)! This may cause corruption.", thing.id);
             self.write_u8(1)?;
-            // Write group type (0 = DEFAULT/IDLE)
-            self.write_u8(0)?;
+            // Write group type (1 = Walking for single group, matching Object Builder)
+            self.write_u8(1)?;
         }
 
         // Write texture data
@@ -826,16 +869,23 @@ impl<W: Write> DatWriter<W> {
         self.write_u8(thing.pattern_z)?;
         self.write_u8(thing.frames)?;
 
-        // Write animation data if frames > 1
+        // Write animation data if frames > 1 and version supports frame durations
+        // This MUST match the reader logic exactly
         if thing.frames > 1 && self.frame_durations {
             self.write_u8(thing.animation_mode)?;
             self.write_i32_le(thing.loop_count)?;
             self.write_i8(thing.start_frame)?;
 
-            // Write frame durations
-            for fd in &thing.frame_durations {
-                self.write_u32_le(fd.minimum)?;
-                self.write_u32_le(fd.maximum)?;
+            // CRITICAL: Write EXACTLY thing.frames frame durations
+            for i in 0..thing.frames {
+                if (i as usize) < thing.frame_durations.len() {
+                    self.write_u32_le(thing.frame_durations[i as usize].minimum)?;
+                    self.write_u32_le(thing.frame_durations[i as usize].maximum)?;
+                } else {
+                    // Fallback: write default durations
+                    self.write_u32_le(100)?;
+                    self.write_u32_le(100)?;
+                }
             }
         }
 
@@ -852,43 +902,52 @@ impl<W: Write> DatWriter<W> {
     }
 
     pub fn write_thing(&mut self, thing: &ThingType) -> io::Result<()> {
-        // CRITICAL VALIDATION: Calculate total sprites to detect corrupt data
-        let total_sprites = thing.width as u32
-            * thing.height as u32
-            * thing.pattern_x as u32
-            * thing.pattern_y as u32
-            * thing.pattern_z as u32
-            * thing.frames as u32
-            * thing.layers as u32;
+        // For outfits with frame groups (version >= 1057), sprite validation is done per-group
+        // in write_texture_patterns. For all other things, validate here.
+        let uses_frame_groups = self.frame_groups 
+            && thing.category == "outfit" 
+            && thing.frame_groups_data.is_some() 
+            && !thing.frame_groups_data.as_ref().unwrap().is_empty();
 
-        if total_sprites > 4096 {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!(
-                    "Thing ID {} ({}) has {} sprites ({}×{}×{}×{}×{}×{}×{}) which exceeds the limit of 4096. Sprite index length: {}",
-                    thing.id,
-                    thing.category,
-                    total_sprites,
-                    thing.width, thing.height,
-                    thing.pattern_x, thing.pattern_y, thing.pattern_z,
-                    thing.frames, thing.layers,
-                    thing.sprite_index.len()
-                )
-            ));
-        }
+        if !uses_frame_groups {
+            // CRITICAL VALIDATION: Calculate total sprites to detect corrupt data
+            let total_sprites = thing.width as u32
+                * thing.height as u32
+                * thing.pattern_x as u32
+                * thing.pattern_y as u32
+                * thing.pattern_z as u32
+                * thing.frames as u32
+                * thing.layers as u32;
 
-        // Validate sprite index length matches calculated total
-        if thing.sprite_index.len() != total_sprites as usize {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!(
-                    "Thing ID {} ({}) sprite index length mismatch: expected {} sprites but array has {} entries",
-                    thing.id,
-                    thing.category,
-                    total_sprites,
-                    thing.sprite_index.len()
-                )
-            ));
+            if total_sprites > 4096 {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!(
+                        "Thing ID {} ({}) has {} sprites ({}×{}×{}×{}×{}×{}×{}) which exceeds the limit of 4096. Sprite index length: {}",
+                        thing.id,
+                        thing.category,
+                        total_sprites,
+                        thing.width, thing.height,
+                        thing.pattern_x, thing.pattern_y, thing.pattern_z,
+                        thing.frames, thing.layers,
+                        thing.sprite_index.len()
+                    )
+                ));
+            }
+
+            // Validate sprite index length matches calculated total
+            if thing.sprite_index.len() != total_sprites as usize {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!(
+                        "Thing ID {} ({}) sprite index length mismatch: expected {} sprites but array has {} entries",
+                        thing.id,
+                        thing.category,
+                        total_sprites,
+                        thing.sprite_index.len()
+                    )
+                ));
+            }
         }
 
         // Write properties based on category and version
@@ -941,12 +1000,8 @@ pub fn write_dat_file(
     effects: Vec<ThingType>,
     missiles: Vec<ThingType>,
 ) -> Result<(), String> {
-
-
     let file = File::create(path).map_err(|e| format!("Failed to create file: {}", e))?;
     let mut writer = DatWriter::new(file, version, extended, frame_durations);
-
-    // Write header - CRITICAL: Use maxId, not array length!
     writer
         .write_header(
             signature,

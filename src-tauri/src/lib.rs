@@ -2,8 +2,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use serde::{Serialize, Deserialize};
-use image::{RgbaImage, imageops, ImageFormat, GenericImageView};
-use std::io::Cursor;
+use image::{RgbaImage, imageops, GenericImageView};
 
 mod spr_manager;
 use spr_manager::{SprManager, SprManagerState, SprHeader, SpriteData, compress_to_rle, decompress_to_rgba};
@@ -15,7 +14,7 @@ mod dat_writer;
 use dat_writer::{write_dat_file, ThingType, FrameGroup};
 
 mod spr_writer;
-use spr_writer::{write_spr_file, update_sprites_in_spr, SpriteWrite};
+use spr_writer::{write_spr_file, update_sprites_in_spr, copy_spr_with_modifications, SpriteWrite};
 
 mod dat_manager;
 use dat_manager::{DatManager, DatManagerState};
@@ -747,25 +746,34 @@ fn write_dat(
     signature: u32,
     version: u32,
     extended: bool,
-    frame_durations: bool,
-    items_min_id: u16,
-    items_max_id: u16,
-    outfits_min_id: u16,
-    outfits_max_id: u16,
-    effects_min_id: u16,
-    effects_max_id: u16,
-    missiles_min_id: u16,
-    missiles_max_id: u16,
+    #[allow(non_snake_case)]
+    frameDurations: bool,
+    #[allow(non_snake_case)]
+    itemsMinId: u16,
+    #[allow(non_snake_case)]
+    itemsMaxId: u16,
+    #[allow(non_snake_case)]
+    outfitsMinId: u16,
+    #[allow(non_snake_case)]
+    outfitsMaxId: u16,
+    #[allow(non_snake_case)]
+    effectsMinId: u16,
+    #[allow(non_snake_case)]
+    effectsMaxId: u16,
+    #[allow(non_snake_case)]
+    missilesMinId: u16,
+    #[allow(non_snake_case)]
+    missilesMaxId: u16,
     items: Vec<ThingType>,
     outfits: Vec<ThingType>,
     effects: Vec<ThingType>,
     missiles: Vec<ThingType>,
 ) -> Result<(), String> {
-    write_dat_file(&path, signature, version, extended, frame_durations,
-                   items_min_id, items_max_id,
-                   outfits_min_id, outfits_max_id,
-                   effects_min_id, effects_max_id,
-                   missiles_min_id, missiles_max_id,
+    write_dat_file(&path, signature, version, extended, frameDurations,
+                   itemsMinId, itemsMaxId,
+                   outfitsMinId, outfitsMaxId,
+                   effectsMinId, effectsMaxId,
+                   missilesMinId, missilesMaxId,
                    items, outfits, effects, missiles)
 }
 
@@ -787,6 +795,18 @@ fn update_spr_sprites(
     sprites_count: u32,
 ) -> Result<(), String> {
     update_sprites_in_spr(&path, extended, sprites, sprites_count)
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+fn copy_spr_file_with_mods(
+    sourcePath: String,
+    destPath: String,
+    extended: bool,
+    signature: u32,
+    modifications: Vec<SpriteWrite>,
+) -> Result<(), String> {
+    copy_spr_with_modifications(&sourcePath, &destPath, extended, signature, modifications)
 }
 
 /// Parse binary buffer into Vec<SpriteWrite>
@@ -1880,6 +1900,7 @@ tauri::Builder::default()
             write_spr,
             update_spr_sprites,
             update_spr_sprites_bin,
+            copy_spr_file_with_mods,
             store_dat_data,
             load_dat_file,
             parse_dat_file_bin,
