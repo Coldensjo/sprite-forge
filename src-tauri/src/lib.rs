@@ -1933,6 +1933,17 @@ tauri::Builder::default()
                     }
                 });
             }
+
+            // Enable shadows on Windows (since tauri.conf.json has shadow: false for macOS compatibility)
+            #[cfg(target_os = "windows")]
+            {
+                use tauri::Manager;
+
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.set_shadow(true);
+                }
+            }
+
             Ok(())
         })
         .run(tauri::generate_context!())
