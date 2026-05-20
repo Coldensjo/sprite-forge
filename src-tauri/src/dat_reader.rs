@@ -98,6 +98,14 @@ fn encode_thing(buffer: &mut Vec<u8>, thing: &ThingType) {
     if thing.writable || thing.writable_once {
         buffer.extend_from_slice(&thing.max_text_length.to_le_bytes());
     }
+    if thing.has_bones {
+        for i in 0..4 {
+            let x = thing.bones_offset_x.get(i).copied().unwrap_or(0);
+            let y = thing.bones_offset_y.get(i).copied().unwrap_or(0);
+            buffer.extend_from_slice(&x.to_le_bytes());
+            buffer.extend_from_slice(&y.to_le_bytes());
+        }
+    }
 
     // Animation data (only if is_animation AND has frame durations)
     if thing.is_animation && !thing.frame_durations.is_empty() {
@@ -203,6 +211,7 @@ fn encode_flags(thing: &ThingType) -> u64 {
     // Only set is_animation flag if we have actual animation data (frame_durations)
     // This ensures the TypeScript decoder knows whether to expect animation data
     if thing.is_animation && !thing.frame_durations.is_empty() { flags |= 1 << 42; }
+    if thing.has_bones          { flags |= 1 << 43; }
     flags
 }
 
@@ -237,6 +246,9 @@ impl MetadataFlags1 {
     const LYING_OBJECT: u8 = 0x18;
     const ANIMATE_ALWAYS: u8 = 0x19;
     const LENS_HELP: u8 = 0x1A;
+    const WRAPPABLE: u8 = 0x24;
+    const UNWRAPPABLE: u8 = 0x25;
+    const TOP_EFFECT: u8 = 0x26;
     const LAST_FLAG: u8 = 0xFF;
 }
 
@@ -274,6 +286,9 @@ impl MetadataFlags2 {
     const HORIZONTAL: u8 = 0x1B;
     const ANIMATE_ALWAYS: u8 = 0x1C;
     const LENS_HELP: u8 = 0x1D;
+    const WRAPPABLE: u8 = 0x24;
+    const UNWRAPPABLE: u8 = 0x25;
+    const TOP_EFFECT: u8 = 0x26;
     const LAST_FLAG: u8 = 0xFF;
 }
 
@@ -352,6 +367,9 @@ impl MetadataFlags4 {
     const LENS_HELP: u8 = 0x1E;
     const FULL_GROUND: u8 = 0x1F;
     const IGNORE_LOOK: u8 = 0x20;
+    const WRAPPABLE: u8 = 0x24;
+    const UNWRAPPABLE: u8 = 0x25;
+    const HAS_BONES: u8 = 0x27;
     const LAST_FLAG: u8 = 0xFF;
 }
 
@@ -395,6 +413,7 @@ impl MetadataFlags5 {
     const IGNORE_LOOK: u8 = 0x1F;
     const CLOTH: u8 = 0x20;
     const MARKET_ITEM: u8 = 0x21;
+    const HAS_BONES: u8 = 0x27;
     const LAST_FLAG: u8 = 0xFF;
 }
 
@@ -440,16 +459,7 @@ impl MetadataFlags6 {
     const WRAPPABLE: u8 = 0x24;
     const UNWRAPPABLE: u8 = 0x25;
     const TOP_EFFECT: u8 = 0x26;
-    const UPGRADE_CLASSIFICATION: u8 = 0x27;
-    const WEAR_OUT: u8 = 0x28;
-    const CLOCK_EXPIRE: u8 = 0x29;
-    const EXPIRE: u8 = 0x2A;
-    const EXPIRE_STOP: u8 = 0x2B;
-    const PODIUM: u8 = 0x2C;
-    const DECO_KIT: u8 = 0x2D;
-    
-    // Special flags
-    const DEFAULT_ACTION_FILE: u8 = 35; // In file format for v10.10+
+    const HAS_BONES: u8 = 0x27;
     const USABLE: u8 = 0xFE;
     const LAST_FLAG: u8 = 0xFF;
 }
@@ -486,6 +496,17 @@ impl DatReader {
         let mut buf = [0u8; 2];
         self.reader.read_exact(&mut buf)?;
         Ok(u16::from_le_bytes(buf))
+    }
+
+    fn read_bones(&mut self, thing: &mut ThingType) -> io::Result<()> {
+        thing.has_bones = true;
+        thing.bones_offset_x = Vec::with_capacity(4);
+        thing.bones_offset_y = Vec::with_capacity(4);
+        for _ in 0..4 {
+            thing.bones_offset_x.push(self.read_u16_le()? as i16);
+            thing.bones_offset_y.push(self.read_u16_le()? as i16);
+        }
+        Ok(())
     }
 
     fn read_u32_le(&mut self) -> io::Result<u32> {
@@ -652,6 +673,9 @@ impl DatReader {
             wrappable: false,
             unwrappable: false,
             top_effect: false,
+            has_bones: false,
+            bones_offset_x: Vec::new(),
+            bones_offset_y: Vec::new(),
             is_animation: false,
             animation_mode: 0,
             loop_count: 0,
@@ -744,6 +768,9 @@ impl DatReader {
                     thing.is_lens_help = true;
                     thing.lens_help = self.read_u16_le()?;
                 }
+                MetadataFlags1::WRAPPABLE => thing.wrappable = true,
+                MetadataFlags1::UNWRAPPABLE => thing.unwrappable = true,
+                MetadataFlags1::TOP_EFFECT => thing.top_effect = true,
                 0x15 => {
                     // Unknown flag in v1, skip
                 }
@@ -823,6 +850,9 @@ impl DatReader {
                     thing.is_lens_help = true;
                     thing.lens_help = self.read_u16_le()?;
                 }
+                MetadataFlags2::WRAPPABLE => thing.wrappable = true,
+                MetadataFlags2::UNWRAPPABLE => thing.unwrappable = true,
+                MetadataFlags2::TOP_EFFECT => thing.top_effect = true,
                 0x15 => {
                     // Unknown flag in v2, skip
                 }
@@ -986,6 +1016,9 @@ impl DatReader {
                 }
                 MetadataFlags4::FULL_GROUND => thing.is_full_ground = true,
                 MetadataFlags4::IGNORE_LOOK => thing.ignore_look = true,
+                MetadataFlags4::WRAPPABLE => thing.wrappable = true,
+                MetadataFlags4::UNWRAPPABLE => thing.unwrappable = true,
+                MetadataFlags4::HAS_BONES => self.read_bones(thing)?,
                 _ => {
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidData,
@@ -1080,6 +1113,7 @@ impl DatReader {
                     thing.market_restrict_profession = self.read_u16_le()?;
                     thing.market_restrict_level = self.read_u16_le()?;
                 }
+                MetadataFlags5::HAS_BONES => self.read_bones(thing)?,
                 _ => {
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidData,
@@ -1179,28 +1213,7 @@ impl DatReader {
                 MetadataFlags6::WRAPPABLE => thing.wrappable = true,
                 MetadataFlags6::UNWRAPPABLE => thing.unwrappable = true,
                 MetadataFlags6::TOP_EFFECT => thing.top_effect = true,
-                MetadataFlags6::UPGRADE_CLASSIFICATION => {
-                    // Read but ignore for now (u16)
-                    self.read_u16_le()?;
-                }
-                MetadataFlags6::WEAR_OUT => {
-                    // Boolean flag, not stored in ThingType yet
-                }
-                MetadataFlags6::CLOCK_EXPIRE => {
-                    // Boolean flag, not stored in ThingType yet
-                }
-                MetadataFlags6::EXPIRE => {
-                    // Boolean flag, not stored in ThingType yet
-                }
-                MetadataFlags6::EXPIRE_STOP => {
-                    // Boolean flag, not stored in ThingType yet
-                }
-                MetadataFlags6::PODIUM => {
-                    // Boolean flag, not stored in ThingType yet
-                }
-                MetadataFlags6::DECO_KIT => {
-                    // Boolean flag, not stored in ThingType yet
-                }
+                MetadataFlags6::HAS_BONES => self.read_bones(thing)?,
                 MetadataFlags6::USABLE => thing.usable = true,
                 _ => {
                     // Unknown flag, but we should probably continue or error

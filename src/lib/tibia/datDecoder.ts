@@ -58,6 +58,7 @@ const FLAG_WRAPPABLE_HIGH = 1 << 7; // bit 39
 const FLAG_UNWRAPPABLE_HIGH = 1 << 8; // bit 40
 const FLAG_TOP_EFFECT_HIGH = 1 << 9; // bit 41
 const FLAG_IS_ANIMATION_HIGH = 1 << 10; // bit 42
+const FLAG_HAS_BONES_HIGH = 1 << 11; // bit 43
 
 export interface DatParseResult {
 	signature: number;
@@ -232,6 +233,7 @@ function decodeThing(view: DataView, buffer: Uint8Array, offset: number, categor
 	thing.unwrappable = (flagsHigh & FLAG_UNWRAPPABLE_HIGH) !== 0;
 	thing.topEffect = (flagsHigh & FLAG_TOP_EFFECT_HIGH) !== 0;
 	thing.isAnimation = (flagsHigh & FLAG_IS_ANIMATION_HIGH) !== 0;
+	thing.hasBones = (flagsHigh & FLAG_HAS_BONES_HIGH) !== 0;
 
 	// Sprite IDs
 	const spriteCount = view.getUint16(offset, true);
@@ -300,6 +302,16 @@ function decodeThing(view: DataView, buffer: Uint8Array, offset: number, categor
 	if (thing.writable || thing.writableOnce) {
 		thing.maxTextLength = view.getUint16(offset, true);
 		offset += 2;
+	}
+	if (thing.hasBones) {
+		thing.bonesOffsetX = [];
+		thing.bonesOffsetY = [];
+		for (let d = 0; d < 4; d++) {
+			thing.bonesOffsetX.push(view.getInt16(offset, true));
+			offset += 2;
+			thing.bonesOffsetY.push(view.getInt16(offset, true));
+			offset += 2;
+		}
 	}
 
 	// Animation data (only present if isAnimation flag is set)

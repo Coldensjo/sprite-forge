@@ -154,6 +154,10 @@ export interface ThingType {
 	marketShowAs: number;
 	unwrappable: boolean;
 
+	hasBones: boolean;
+	bonesOffsetX: number[];
+	bonesOffsetY: number[];
+
 	// Animation properties
 	isAnimation: boolean;
 	spriteIndex: number[];
@@ -427,6 +431,9 @@ export function createThingType(id: number, category: ThingCategory): ThingType 
 		isContainer: false,
 		floorChange: false,
 		unwrappable: false,
+		hasBones: false,
+		bonesOffsetX: [],
+		bonesOffsetY: [],
 		isAnimation: false,
 		frameDurations: [],
 		writableOnce: false,

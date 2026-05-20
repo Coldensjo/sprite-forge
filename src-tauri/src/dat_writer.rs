@@ -104,6 +104,12 @@ pub struct ThingType {
     pub wrappable: bool,
     pub unwrappable: bool,
     pub top_effect: bool,
+    #[serde(default)]
+    pub has_bones: bool,
+    #[serde(default)]
+    pub bones_offset_x: Vec<i16>,
+    #[serde(default)]
+    pub bones_offset_y: Vec<i16>,
 
     // Animation
     pub is_animation: bool,
@@ -149,6 +155,9 @@ impl MetadataFlags4 {
     const LENS_HELP: u8 = 0x1e;
     const FULL_GROUND: u8 = 0x1f;
     const IGNORE_LOOK: u8 = 0x20;
+    const WRAPPABLE: u8 = 0x24;
+    const UNWRAPPABLE: u8 = 0x25;
+    const HAS_BONES: u8 = 0x27;
     const LAST_FLAG: u8 = 0xff;
 }
 
@@ -188,6 +197,7 @@ impl MetadataFlags5 {
     const IGNORE_LOOK: u8 = 0x1f;
     const CLOTH: u8 = 0x20;
     const MARKET_ITEM: u8 = 0x21;
+    const HAS_BONES: u8 = 0x27;
     const LAST_FLAG: u8 = 0xff;
 }
 
@@ -232,6 +242,7 @@ impl MetadataFlags6 {
     const WRAPPABLE: u8 = 0x24;
     const UNWRAPPABLE: u8 = 0x25;
     const TOP_EFFECT: u8 = 0x26;
+    const HAS_BONES: u8 = 0x27;
     const USABLE: u8 = 0xfe;
     const LAST_FLAG: u8 = 0xff;
 }
@@ -266,6 +277,16 @@ impl<W: Write> DatWriter<W> {
 
     fn write_u16_le(&mut self, value: u16) -> io::Result<()> {
         self.writer.write_all(&value.to_le_bytes())
+    }
+
+    fn write_bones(&mut self, thing: &ThingType) -> io::Result<()> {
+        for i in 0..4 {
+            let x = thing.bones_offset_x.get(i).copied().unwrap_or(0);
+            let y = thing.bones_offset_y.get(i).copied().unwrap_or(0);
+            self.write_u16_le(x as u16)?;
+            self.write_u16_le(y as u16)?;
+        }
+        Ok(())
     }
 
     fn write_u32_le(&mut self, value: u32) -> io::Result<()> {
@@ -400,6 +421,16 @@ impl<W: Write> DatWriter<W> {
         }
         if thing.ignore_look {
             self.write_u8(MetadataFlags4::IGNORE_LOOK)?;
+        }
+        if thing.wrappable {
+            self.write_u8(MetadataFlags4::WRAPPABLE)?;
+        }
+        if thing.unwrappable {
+            self.write_u8(MetadataFlags4::UNWRAPPABLE)?;
+        }
+        if thing.has_bones {
+            self.write_u8(MetadataFlags4::HAS_BONES)?;
+            self.write_bones(thing)?;
         }
 
         // Last flag
@@ -549,6 +580,10 @@ impl<W: Write> DatWriter<W> {
             self.write_string(&thing.market_name)?;
             self.write_u16_le(thing.market_restrict_profession)?;
             self.write_u16_le(thing.market_restrict_level)?;
+        }
+        if thing.has_bones {
+            self.write_u8(MetadataFlags5::HAS_BONES)?;
+            self.write_bones(thing)?;
         }
 
         // Last flag
@@ -714,6 +749,10 @@ impl<W: Write> DatWriter<W> {
         }
         if thing.top_effect {
             self.write_u8(MetadataFlags6::TOP_EFFECT)?;
+        }
+        if thing.has_bones {
+            self.write_u8(MetadataFlags6::HAS_BONES)?;
+            self.write_bones(thing)?;
         }
         if thing.usable {
             self.write_u8(MetadataFlags6::USABLE)?;
