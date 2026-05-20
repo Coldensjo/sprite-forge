@@ -155,4 +155,21 @@ All colors MUST be HSL.
 		-webkit-appearance: none;
 		margin: 0;
 	}
+
+	* {
+		-webkit-user-select: none;
+		user-select: none;
+	}
+
+	html {
+		cursor: default;
+	}
+
+	input,
+	textarea,
+	[contenteditable='true'] {
+		-webkit-user-select: text;
+		user-select: text;
+		cursor: text;
+	}
 }

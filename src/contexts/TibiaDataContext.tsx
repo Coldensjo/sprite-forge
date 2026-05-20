@@ -149,9 +149,7 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
 	const setData = useCallback(
 		async (newData: TibiaData, reader: SpriteReader, skipBackendSync = false) => {
-			// Clean up previous file resources in Rust backend FIRST
-			// This prevents resource leakage when loading new files (file handles + memory)
-			if (data?.sprPath) {
+			if (data?.sprPath && data.sprPath !== newData.sprPath) {
 				try {
 					const { invoke } = await import('@tauri-apps/api/core');
 					await invoke('close_spr_file', { path: data.sprPath });
@@ -160,7 +158,7 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 					console.warn('Failed to close previous SPR file:', e);
 				}
 			}
-			if (data?.datPath) {
+			if (data?.datPath && data.datPath !== newData.datPath) {
 				try {
 					const { invoke } = await import('@tauri-apps/api/core');
 					await invoke('clear_dat_data', { path: data.datPath });
@@ -194,6 +192,7 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 			setOpenedItems([]);
 			setHighlightedItemId(null);
 			setUnsavedChanges(new Set());
+			setSelectedCategoryState(ThingCategory.ITEM);
 
 			// Reset restoration flag BEFORE setting new data
 			hasRestoredRef.current = false;

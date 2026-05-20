@@ -110,6 +110,49 @@ fn encode_thing(buffer: &mut Vec<u8>, thing: &ThingType) {
             buffer.extend_from_slice(&fd.maximum.to_le_bytes());
         }
     }
+
+    match &thing.frame_groups_data {
+        Some(groups) if !groups.is_empty() => {
+            buffer.push(1);
+            buffer.push(groups.len() as u8);
+            for g in groups {
+                buffer.push(g.r#type);
+                buffer.push(g.width);
+                buffer.push(g.height);
+                buffer.push(g.exact_size);
+                buffer.push(g.layers);
+                buffer.push(g.pattern_x);
+                buffer.push(g.pattern_y);
+                buffer.push(g.pattern_z);
+                buffer.push(g.frames);
+
+                buffer.extend_from_slice(&(g.sprite_index.len() as u16).to_le_bytes());
+                for &sid in &g.sprite_index {
+                    buffer.extend_from_slice(&sid.to_le_bytes());
+                }
+
+                let has_anim = g.is_animation
+                    && g.frame_durations.as_ref().map_or(false, |d| !d.is_empty());
+                if has_anim {
+                    let durs = g.frame_durations.as_ref().unwrap();
+                    buffer.push(1);
+                    buffer.push(g.animation_mode.unwrap_or(0));
+                    buffer.extend_from_slice(&g.loop_count.unwrap_or(0).to_le_bytes());
+                    buffer.push(g.start_frame.unwrap_or(0) as u8);
+                    buffer.push(durs.len() as u8);
+                    for fd in durs {
+                        buffer.extend_from_slice(&fd.minimum.to_le_bytes());
+                        buffer.extend_from_slice(&fd.maximum.to_le_bytes());
+                    }
+                } else {
+                    buffer.push(0);
+                }
+            }
+        }
+        _ => {
+            buffer.push(0);
+        }
+    }
 }
 
 /// Encode boolean properties as 64-bit bitfield

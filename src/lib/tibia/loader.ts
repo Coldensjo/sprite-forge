@@ -10,6 +10,7 @@ import { open } from '@tauri-apps/plugin-dialog';
 import { logger, logError, EventCode } from '@/lib/debug';
 
 import { loadDatFile } from './datReader';
+import { decodeDatResponse } from './datDecoder';
 import { SpriteReader } from './spriteReader';
 import { Sprite, TibiaData, ThingType, ClientVersion, CLIENT_VERSIONS } from './types';
 
@@ -322,12 +323,8 @@ export async function selectTibiaFolder(): Promise<null | { datPath: string; spr
 	return { datPath, sprPath };
 }
 
-/**
- * Load complete Tibia client data (.dat + .spr)
- *
- * Uses TypeScript DAT parser to ensure full compatibility with recent fixes
- * (Frame Groups support for 10.57+ outfits)
- */
+let loadEpoch = 0;
+
 export async function loadTibiaData(
 	datPath: string,
 	sprPath: string,
@@ -336,6 +333,7 @@ export async function loadTibiaData(
 	onProgress?: (stage: string, current: number, total: number) => void
 ): Promise<TibiaData> {
 	const startTime = performance.now();
+	const myEpoch = ++loadEpoch;
 
 	// Step 1: Detect version from signature if not provided
 	let detectedVersion = version;
@@ -352,26 +350,19 @@ export async function loadTibiaData(
 	// Use TypeScript parser to ensure we get all data (including frame groups)
 	if (onProgress) onProgress('Loading DAT file...', 0, 100);
 
-	console.log(`[loadTibiaData] Using TypeScript parser for version ${detectedVersion.value}`);
+	console.log(`[loadTibiaData] Using native Rust parser for version ${detectedVersion.value}`);
 
-	// Read raw file buffer
-	const datBuffer = await readBinaryFile(datPath);
-
-	// Parse using updated datReader.ts
-	const datData = await loadDatFile(
-		datBuffer,
-		detectedVersion.supportsExtended,
-		detectedVersion.supportsFrameDurations,
-		(current, total) => {
-			if (onProgress && current % 1000 === 0) {
-				onProgress('Parsing metadata...', Math.floor((current / total) * 50), 100);
-			}
-		},
-		detectedVersion
-	);
+	if (onProgress) onProgress('Parsing metadata...', 10, 100);
+	const datResponse = await invoke<Uint8Array>('parse_dat_file_bin', {
+		path: datPath,
+		version: detectedVersion.value
+	});
+	const datBuf = datResponse instanceof Uint8Array ? datResponse : new Uint8Array(datResponse);
+	const datData = decodeDatResponse(datBuf);
+	if (onProgress) onProgress('Parsing metadata...', 50, 100);
 
 	const datTime = performance.now();
-	console.log(`[loadTibiaData] DAT parsing: ${(datTime - startTime).toFixed(0)}ms`);
+	console.log(`[loadTibiaData] DAT parsing (Rust): ${(datTime - startTime).toFixed(0)}ms`);
 
 	// Step 4: Open SPR file handle in Rust
 	if (onProgress) onProgress('Opening SPR file...', 90, 100);
@@ -398,6 +389,19 @@ export async function loadTibiaData(
 	} catch (err) {
 		logError('Failed to preload sprites', err);
 	}
+
+	setTimeout(() => {
+		if (myEpoch !== loadEpoch) return;
+		void preloadSprites(
+			sprPath,
+			sprData.header.sprite_count,
+			sprData.transparency,
+			sprites,
+			sprData.header.sprite_count,
+			undefined,
+			() => myEpoch === loadEpoch
+		).catch((err) => logError('Background full preload failed', err));
+	}, 400);
 
 	const totalTime = performance.now();
 	console.log(`[loadTibiaData] Total loading time: ${(totalTime - startTime).toFixed(0)}ms`);
@@ -656,7 +660,8 @@ export async function preloadSprites(
 	transparency: boolean,
 	spriteCache: Map<number, Sprite>,
 	count: number = 2000,
-	onProgress?: (loaded: number, total: number) => void
+	onProgress?: (loaded: number, total: number) => void,
+	shouldContinue?: () => boolean
 ): Promise<void> {
 	const BATCH_SIZE = 500; // Load 500 sprites per batch
 	const batches = Math.ceil(Math.min(count, totalSprites) / BATCH_SIZE);
@@ -664,6 +669,11 @@ export async function preloadSprites(
 	logger.log(EventCode.LOADER_READ, { count, batches, preload: true });
 
 	for (let i = 0; i < batches; i++) {
+		if (shouldContinue && !shouldContinue()) {
+			logger.log(EventCode.LOADER_READ, { preload: true, cancelled: true, at: i });
+			return;
+		}
+
 		const startId = i * BATCH_SIZE + 1;
 		const batchCount = Math.min(BATCH_SIZE, totalSprites - startId + 1);
 

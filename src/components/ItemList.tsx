@@ -72,6 +72,7 @@ export const ItemList = () => {
 	const shouldScrollToHighlightedRef = useRef(false);
 	const pendingNewItemId = useRef<null | number>(null);
 	const prevCategoryRef = useRef<null | ThingCategory>(null);
+	const prevDataRef = useRef<null | typeof data>(null);
 	const itemsPerPage = 100;
 
 	const categoryLabels: Record<ThingCategory, string> = {
@@ -160,9 +161,11 @@ export const ItemList = () => {
 
 	useEffect(() => {
 		if (data) {
-			// Only reset page when category actually changes, not on every data update
-			if (prevCategoryRef.current !== selectedCategory) {
+			const categoryChanged = prevCategoryRef.current !== selectedCategory;
+			const dataChanged = prevDataRef.current !== data;
+			if (categoryChanged || dataChanged) {
 				prevCategoryRef.current = selectedCategory;
+				prevDataRef.current = data;
 				setCurrentPage(1);
 				// Auto-highlight first item (but don't open it)
 				const firstItemId = allItemIds[0];

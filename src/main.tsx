@@ -25,6 +25,10 @@ if (typeof window !== 'undefined') {
 		},
 		false
 	);
+
+	document.addEventListener('contextmenu', (e) => {
+		e.preventDefault();
+	});
 }
 
 createRoot(document.getElementById('root')!).render(<App />);

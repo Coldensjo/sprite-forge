@@ -25,6 +25,8 @@ use dat_reader::{DatReader, encode_dat_to_binary};
 mod optimizer;
 use optimizer::{optimize_sprites_rust, apply_optimization};
 
+mod sprite_protocol;
+
 // Wrapper to use serde_bytes for efficient binary transfer
 #[derive(Serialize, Deserialize)]
 struct FileBytes(#[serde(with = "serde_bytes")] Vec<u8>);
@@ -1853,6 +1855,10 @@ pub fn run() {
 tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .register_asynchronous_uri_scheme_protocol(
+            sprite_protocol::SCHEME,
+            sprite_protocol::handle,
+        )
         .manage(spr_manager)
         .manage(logger)
         .manage(dat_manager)
@@ -1914,7 +1920,7 @@ tauri::Builder::default()
             import_object_sheet_rust,
             import_object_sheet_binary
         ])
-        .setup(|app| {
+        .setup(move |app| {
             #[cfg(target_os = "macos")]
             {
                 use tauri::{Manager, Listener};

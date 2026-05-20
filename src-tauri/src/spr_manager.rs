@@ -564,6 +564,54 @@ impl SprManager {
         Ok(Self::pack_sprites_rgba_lz4(sprites, transparent))
     }
 
+    pub fn compose_atlas_png(
+        &mut self,
+        path: &str,
+        start_id: u32,
+        count: u32,
+        cols: u32,
+        transparent: bool,
+    ) -> Result<Vec<u8>, String> {
+        use std::io::Cursor;
+
+        let cols = cols.max(1);
+        let rows = (count + cols - 1) / cols;
+        let atlas_w = cols * SPRITE_SIZE as u32;
+        let atlas_h = rows.max(1) * SPRITE_SIZE as u32;
+
+        let sprites = self.read_sprites_batch(path, start_id, count)?;
+
+        let row_bytes = SPRITE_SIZE * 4;
+        let mut atlas = vec![0u8; (atlas_w * atlas_h * 4) as usize];
+
+        for sprite in sprites {
+            if sprite.is_empty || sprite.id < start_id {
+                continue;
+            }
+            let idx = sprite.id - start_id;
+            if idx >= count {
+                continue;
+            }
+            let dst_x = (idx % cols) * SPRITE_SIZE as u32;
+            let dst_y = (idx / cols) * SPRITE_SIZE as u32;
+            let rgba = decompress_to_rgba(&sprite.compressed_pixels, transparent);
+
+            for y in 0..SPRITE_SIZE as u32 {
+                let src_off = (y as usize) * row_bytes;
+                let dst_off = (((dst_y + y) * atlas_w + dst_x) as usize) * 4;
+                atlas[dst_off..dst_off + row_bytes].copy_from_slice(&rgba[src_off..src_off + row_bytes]);
+            }
+        }
+
+        let img = image::RgbaImage::from_raw(atlas_w, atlas_h, atlas)
+            .ok_or_else(|| "Failed to build atlas image".to_string())?;
+        let mut out = Cursor::new(Vec::new());
+        image::DynamicImage::ImageRgba8(img)
+            .write_to(&mut out, image::ImageOutputFormat::Png)
+            .map_err(|e| format!("PNG encode failed: {}", e))?;
+        Ok(out.into_inner())
+    }
+
     /// Pack sprites with RGBA pixels and then LZ4 compress for fast IPC transfer
     /// LZ4 is very fast to decompress (~2GB/s) while providing ~5x compression on RGBA data
     /// Uses LZ4 frame format which is compatible with lz4js on the frontend

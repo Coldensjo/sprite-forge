@@ -324,5 +324,57 @@ function decodeThing(view: DataView, buffer: Uint8Array, offset: number, categor
 		}
 	}
 
+	const hasFrameGroups = view.getUint8(offset);
+	offset += 1;
+	if (hasFrameGroups === 1) {
+		const groupCount = view.getUint8(offset);
+		offset += 1;
+		thing.frameGroupsData = [];
+		for (let g = 0; g < groupCount; g++) {
+			const type = view.getUint8(offset); offset += 1;
+			const width = view.getUint8(offset); offset += 1;
+			const height = view.getUint8(offset); offset += 1;
+			const exactSize = view.getUint8(offset); offset += 1;
+			const layers = view.getUint8(offset); offset += 1;
+			const patternX = view.getUint8(offset); offset += 1;
+			const patternY = view.getUint8(offset); offset += 1;
+			const patternZ = view.getUint8(offset); offset += 1;
+			const frames = view.getUint8(offset); offset += 1;
+
+			const groupSpriteCount = view.getUint16(offset, true); offset += 2;
+			const spriteIndex: number[] = [];
+			for (let i = 0; i < groupSpriteCount; i++) {
+				spriteIndex.push(view.getUint32(offset, true));
+				offset += 4;
+			}
+
+			const hasAnim = view.getUint8(offset); offset += 1;
+			let isAnimation = false;
+			let animationMode: number | undefined;
+			let loopCount: number | undefined;
+			let startFrame: number | undefined;
+			let frameDurations: { minimum: number; maximum: number }[] | undefined;
+			if (hasAnim === 1) {
+				isAnimation = true;
+				animationMode = view.getUint8(offset); offset += 1;
+				loopCount = view.getInt32(offset, true); offset += 4;
+				startFrame = view.getInt8(offset); offset += 1;
+				const durCount = view.getUint8(offset); offset += 1;
+				frameDurations = [];
+				for (let i = 0; i < durCount; i++) {
+					const minimum = view.getUint32(offset, true); offset += 4;
+					const maximum = view.getUint32(offset, true); offset += 4;
+					frameDurations.push({ minimum, maximum });
+				}
+			}
+
+			thing.frameGroupsData.push({
+				type, width, height, exactSize, layers,
+				patternX, patternY, patternZ, frames,
+				spriteIndex, isAnimation, animationMode, loopCount, startFrame, frameDurations
+			});
+		}
+	}
+
 	return [thing, offset];
 }
