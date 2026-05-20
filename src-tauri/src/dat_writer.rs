@@ -954,13 +954,18 @@ impl<W: Write> DatWriter<W> {
         // CRITICAL: Items use full property set, other categories only support 3 properties
         let is_item = thing.category == "item";
 
-        if self.version >= 780 && self.version <= 854 {
+        if self.version <= 772 {
+            return Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                format!("Writing version {} not supported (minimum 7.80)", self.version)
+            ));
+        } else if self.version <= 854 {
             if is_item {
                 self.write_item_properties_v4(thing)?;
             } else {
                 self.write_non_item_properties_v4(thing)?;
             }
-        } else if self.version >= 860 && self.version <= 986 {
+        } else if self.version <= 986 {
             if is_item {
                 self.write_item_properties_v5(thing)?;
             } else {

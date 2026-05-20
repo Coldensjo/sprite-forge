@@ -662,24 +662,23 @@ impl DatReader {
     }
 
     fn read_properties(&mut self, thing: &mut ThingType) -> io::Result<()> {
-        // Branch based on version
-        if self.version >= 1010 {
-            self.read_properties_v6(thing)
-        } else if self.version >= 860 {
-            self.read_properties_v5(thing)
-        } else if self.version >= 780 {
-            self.read_properties_v4(thing)
-        } else if self.version >= 755 {
-            self.read_properties_v3(thing)
-        } else if self.version >= 740 {
-            self.read_properties_v2(thing)
-        } else if self.version >= 710 {
-            self.read_properties_v1(thing)
-        } else {
+        if self.version < 710 {
             Err(io::Error::new(
                 io::ErrorKind::Unsupported,
                 format!("Version {} not supported (minimum 7.10)", self.version)
             ))
+        } else if self.version <= 730 {
+            self.read_properties_v1(thing)
+        } else if self.version <= 750 {
+            self.read_properties_v2(thing)
+        } else if self.version <= 772 {
+            self.read_properties_v3(thing)
+        } else if self.version <= 854 {
+            self.read_properties_v4(thing)
+        } else if self.version <= 986 {
+            self.read_properties_v5(thing)
+        } else {
+            self.read_properties_v6(thing)
         }
     }
 
