@@ -254,9 +254,9 @@ function decodeThing(view: DataView, buffer: Uint8Array, offset: number, categor
 		offset += 2;
 	}
 	if (thing.hasOffset) {
-		thing.offsetX = view.getUint16(offset, true);
+		thing.offsetX = view.getInt16(offset, true);
 		offset += 2;
-		thing.offsetY = view.getUint16(offset, true);
+		thing.offsetY = view.getInt16(offset, true);
 		offset += 2;
 	}
 	if (thing.hasElevation) {

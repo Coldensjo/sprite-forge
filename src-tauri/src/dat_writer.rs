@@ -77,8 +77,8 @@ pub struct ThingType {
     pub floor_change: bool,
     pub is_translucent: bool,
     pub has_offset: bool,
-    pub offset_x: u16,
-    pub offset_y: u16,
+    pub offset_x: i16,
+    pub offset_y: i16,
     pub has_elevation: bool,
     pub elevation: u16,
     pub is_lying_object: bool,
@@ -374,8 +374,8 @@ impl<W: Write> DatWriter<W> {
         }
         if thing.has_offset {
             self.write_u8(MetadataFlags4::HAS_OFFSET)?;
-            self.write_u16_le(thing.offset_x)?;
-            self.write_u16_le(thing.offset_y)?;
+            self.write_u16_le(thing.offset_x as u16)?;
+            self.write_u16_le(thing.offset_y as u16)?;
         }
         if thing.has_elevation {
             self.write_u8(MetadataFlags4::HAS_ELEVATION)?;
@@ -418,8 +418,8 @@ impl<W: Write> DatWriter<W> {
 
         if thing.has_offset {
             self.write_u8(MetadataFlags4::HAS_OFFSET)?;
-            self.write_u16_le(thing.offset_x)?;
-            self.write_u16_le(thing.offset_y)?;
+            self.write_u16_le(thing.offset_x as u16)?;
+            self.write_u16_le(thing.offset_y as u16)?;
         }
 
         if thing.animate_always {
@@ -510,8 +510,8 @@ impl<W: Write> DatWriter<W> {
         }
         if thing.has_offset {
             self.write_u8(MetadataFlags5::HAS_OFFSET)?;
-            self.write_u16_le(thing.offset_x)?;
-            self.write_u16_le(thing.offset_y)?;
+            self.write_u16_le(thing.offset_x as u16)?;
+            self.write_u16_le(thing.offset_y as u16)?;
         }
         if thing.has_elevation {
             self.write_u8(MetadataFlags5::HAS_ELEVATION)?;
@@ -567,8 +567,8 @@ impl<W: Write> DatWriter<W> {
 
         if thing.has_offset {
             self.write_u8(MetadataFlags5::HAS_OFFSET)?;
-            self.write_u16_le(thing.offset_x)?;
-            self.write_u16_le(thing.offset_y)?;
+            self.write_u16_le(thing.offset_x as u16)?;
+            self.write_u16_le(thing.offset_y as u16)?;
         }
 
         if thing.animate_always {
@@ -662,8 +662,8 @@ impl<W: Write> DatWriter<W> {
         }
         if thing.has_offset {
             self.write_u8(MetadataFlags6::HAS_OFFSET)?;
-            self.write_u16_le(thing.offset_x)?;
-            self.write_u16_le(thing.offset_y)?;
+            self.write_u16_le(thing.offset_x as u16)?;
+            self.write_u16_le(thing.offset_y as u16)?;
         }
         if thing.has_elevation {
             self.write_u8(MetadataFlags6::HAS_ELEVATION)?;
@@ -736,8 +736,8 @@ impl<W: Write> DatWriter<W> {
 
         if thing.has_offset {
             self.write_u8(MetadataFlags6::HAS_OFFSET)?;
-            self.write_u16_le(thing.offset_x)?;
-            self.write_u16_le(thing.offset_y)?;
+            self.write_u16_le(thing.offset_x as u16)?;
+            self.write_u16_le(thing.offset_y as u16)?;
         }
 
         if thing.animate_always {

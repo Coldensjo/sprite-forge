@@ -886,8 +886,8 @@ impl DatReader {
                 MetadataFlags3::FLOOR_CHANGE => thing.floor_change = true,
                 MetadataFlags3::HAS_OFFSET => {
                     thing.has_offset = true;
-                    thing.offset_x = self.read_u16_le()?;
-                    thing.offset_y = self.read_u16_le()?;
+                    thing.offset_x = self.read_u16_le()? as i16;
+                    thing.offset_y = self.read_u16_le()? as i16;
                 }
                 MetadataFlags3::HAS_ELEVATION => {
                     thing.has_elevation = true;
@@ -968,8 +968,8 @@ impl DatReader {
                 MetadataFlags4::FLOOR_CHANGE => thing.floor_change = true,
                 MetadataFlags4::HAS_OFFSET => {
                     thing.has_offset = true;
-                    thing.offset_x = self.read_u16_le()?;
-                    thing.offset_y = self.read_u16_le()?;
+                    thing.offset_x = self.read_u16_le()? as i16;
+                    thing.offset_y = self.read_u16_le()? as i16;
                 }
                 MetadataFlags4::HAS_ELEVATION => {
                     thing.has_elevation = true;
@@ -1049,8 +1049,8 @@ impl DatReader {
                 MetadataFlags5::HAS_OFFSET => {
                     thing.has_offset = true;
                     // In v5, offsets are signed i16 (like Object Builder MetadataReader5)
-                    thing.offset_x = self.read_u16_le()?;
-                    thing.offset_y = self.read_u16_le()?;
+                    thing.offset_x = self.read_u16_le()? as i16;
+                    thing.offset_y = self.read_u16_le()? as i16;
                 }
                 MetadataFlags5::HAS_ELEVATION => {
                     thing.has_elevation = true;
@@ -1141,8 +1141,8 @@ impl DatReader {
                 MetadataFlags6::TRANSLUCENT => thing.is_translucent = true,
                 MetadataFlags6::HAS_OFFSET => {
                     thing.has_offset = true;
-                    thing.offset_x = self.read_u16_le()?;
-                    thing.offset_y = self.read_u16_le()?;
+                    thing.offset_x = self.read_u16_le()? as i16;
+                    thing.offset_y = self.read_u16_le()? as i16;
                 }
                 MetadataFlags6::HAS_ELEVATION => {
                     thing.has_elevation = true;
