@@ -731,8 +731,8 @@ impl DatReader {
                 }
                 MetadataFlags1::HAS_OFFSET => {
                     thing.has_offset = true;
-                    thing.offset_x = self.read_u16_le()?;
-                    thing.offset_y = self.read_u16_le()?;
+                    thing.offset_x = 8;
+                    thing.offset_y = 8;
                 }
                 MetadataFlags1::MINI_MAP => {
                     thing.mini_map = true;
@@ -807,8 +807,8 @@ impl DatReader {
                 }
                 MetadataFlags2::HAS_OFFSET => {
                     thing.has_offset = true;
-                    thing.offset_x = self.read_u16_le()?;
-                    thing.offset_y = self.read_u16_le()?;
+                    thing.offset_x = 8;
+                    thing.offset_y = 8;
                 }
                 MetadataFlags2::MINI_MAP => {
                     thing.mini_map = true;
