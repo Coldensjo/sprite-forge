@@ -1095,25 +1095,9 @@ impl DatReader {
     /// Read properties for v10.10+ (MetadataFlags6)
     fn read_properties_v6(&mut self, thing: &mut ThingType) -> io::Result<()> {
         loop {
-            let mut flag = self.read_u8()?;
-            let orig_flag = flag; // Keep original for error reporting
+            let flag = self.read_u8()?;
             if flag == MetadataFlags6::LAST_FLAG {
                 break;
-            }
-
-            // Version 10.10-10.56 flag remapping (like OTClient)
-            // Version 10.57+ uses frame groups and different format
-            if self.version >= 1010 && self.version < 1057 {
-                if flag == 16 {
-                    flag = MetadataFlags6::NO_MOVE_ANIMATION;
-                } else if flag == 254 {
-                    flag = MetadataFlags6::USABLE;
-                } else if flag == 35 {
-                    flag = MetadataFlags6::DEFAULT_ACTION;
-                } else if flag > 16 {
-                    // All flags > 16 are decremented by 1 in v10.10-10.56
-                    flag -= 1;
-                }
             }
 
             match flag {
@@ -1223,7 +1207,7 @@ impl DatReader {
                     // Unknown flag, but we should probably continue or error
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidData, 
-                        format!("Unknown flag: 0x{:02X} (original: 0x{:02X}, version: {})", flag, orig_flag, self.version)
+                        format!("Unknown flag: 0x{:02X} (version: {})", flag, self.version)
                     ));
                 }
             }
