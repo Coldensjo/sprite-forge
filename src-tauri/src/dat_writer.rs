@@ -747,12 +747,12 @@ impl<W: Write> DatWriter<W> {
         if thing.unwrappable {
             self.write_u8(MetadataFlags6::UNWRAPPABLE)?;
         }
+        if thing.usable {
+            self.write_u8(MetadataFlags6::USABLE)?;
+        }
         if thing.has_bones {
             self.write_u8(MetadataFlags6::HAS_BONES)?;
             self.write_bones(thing)?;
-        }
-        if thing.usable {
-            self.write_u8(MetadataFlags6::USABLE)?;
         }
 
         // Last flag
