@@ -1243,9 +1243,9 @@ impl DatReader {
 
         // Read all frame groups
         for group_idx in 0..group_count {
-            // Read group type if frame groups enabled (0=IDLE, 1=WALKING)
             let group_type = if has_frame_groups {
-                self.read_u8()?
+                self.read_u8()?;
+                group_idx as u8
             } else {
                 0
             };
