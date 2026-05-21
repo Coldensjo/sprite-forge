@@ -457,6 +457,11 @@ impl<W: Write> DatWriter<W> {
             self.write_u8(MetadataFlags4::ANIMATE_ALWAYS)?;
         }
 
+        if thing.has_bones {
+            self.write_u8(MetadataFlags4::HAS_BONES)?;
+            self.write_bones(thing)?;
+        }
+
         // Last flag
         self.write_u8(MetadataFlags4::LAST_FLAG)?;
         Ok(())
@@ -608,6 +613,11 @@ impl<W: Write> DatWriter<W> {
 
         if thing.animate_always {
             self.write_u8(MetadataFlags5::ANIMATE_ALWAYS)?;
+        }
+
+        if thing.has_bones {
+            self.write_u8(MetadataFlags5::HAS_BONES)?;
+            self.write_bones(thing)?;
         }
 
         // Last flag
@@ -783,6 +793,11 @@ impl<W: Write> DatWriter<W> {
         // topEffect is ONLY for effects (matching Object Builder behavior)
         if thing.top_effect && thing.category == "effect" {
             self.write_u8(MetadataFlags6::TOP_EFFECT)?;
+        }
+
+        if thing.has_bones {
+            self.write_u8(MetadataFlags6::HAS_BONES)?;
+            self.write_bones(thing)?;
         }
 
         // Last flag
