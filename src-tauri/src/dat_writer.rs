@@ -44,7 +44,6 @@ pub struct ThingType {
     pub sprite_index: Vec<u32>,
     pub frame_groups_data: Option<Vec<FrameGroup>>,
 
-    // Properties
     pub is_ground: bool,
     pub ground_speed: u16,
     pub is_ground_border: bool,
@@ -111,7 +110,6 @@ pub struct ThingType {
     #[serde(default)]
     pub bones_offset_y: Vec<i16>,
 
-    // Animation
     pub is_animation: bool,
     pub animation_mode: u8,
     pub loop_count: i32,
@@ -119,7 +117,118 @@ pub struct ThingType {
     pub frame_durations: Vec<FrameDuration>,
 }
 
-/// Metadata flags for different client versions
+#[allow(dead_code)]
+pub struct MetadataFlags1;
+#[allow(dead_code)]
+impl MetadataFlags1 {
+    const GROUND: u8 = 0x00;
+    const ON_BOTTOM: u8 = 0x01;
+    const ON_TOP: u8 = 0x02;
+    const CONTAINER: u8 = 0x03;
+    const STACKABLE: u8 = 0x04;
+    const MULTI_USE: u8 = 0x05;
+    const FORCE_USE: u8 = 0x06;
+    const WRITABLE: u8 = 0x07;
+    const WRITABLE_ONCE: u8 = 0x08;
+    const FLUID_CONTAINER: u8 = 0x09;
+    const FLUID: u8 = 0x0a;
+    const UNPASSABLE: u8 = 0x0b;
+    const UNMOVEABLE: u8 = 0x0c;
+    const BLOCK_MISSILE: u8 = 0x0d;
+    const BLOCK_PATHFIND: u8 = 0x0e;
+    const PICKUPABLE: u8 = 0x0f;
+    const HAS_LIGHT: u8 = 0x10;
+    const FLOOR_CHANGE: u8 = 0x11;
+    const FULL_GROUND: u8 = 0x12;
+    const HAS_ELEVATION: u8 = 0x13;
+    const HAS_OFFSET: u8 = 0x14;
+    const MINI_MAP: u8 = 0x16;
+    const ROTATABLE: u8 = 0x17;
+    const LYING_OBJECT: u8 = 0x18;
+    const ANIMATE_ALWAYS: u8 = 0x19;
+    const LENS_HELP: u8 = 0x1a;
+    const WRAPPABLE: u8 = 0x24;
+    const UNWRAPPABLE: u8 = 0x25;
+    const TOP_EFFECT: u8 = 0x26;
+    const LAST_FLAG: u8 = 0xff;
+}
+
+#[allow(dead_code)]
+pub struct MetadataFlags2;
+#[allow(dead_code)]
+impl MetadataFlags2 {
+    const GROUND: u8 = 0x00;
+    const ON_BOTTOM: u8 = 0x01;
+    const ON_TOP: u8 = 0x02;
+    const CONTAINER: u8 = 0x03;
+    const STACKABLE: u8 = 0x04;
+    const MULTI_USE: u8 = 0x05;
+    const FORCE_USE: u8 = 0x06;
+    const WRITABLE: u8 = 0x07;
+    const WRITABLE_ONCE: u8 = 0x08;
+    const FLUID_CONTAINER: u8 = 0x09;
+    const FLUID: u8 = 0x0a;
+    const UNPASSABLE: u8 = 0x0b;
+    const UNMOVEABLE: u8 = 0x0c;
+    const BLOCK_MISSILE: u8 = 0x0d;
+    const BLOCK_PATHFIND: u8 = 0x0e;
+    const PICKUPABLE: u8 = 0x0f;
+    const HAS_LIGHT: u8 = 0x10;
+    const FLOOR_CHANGE: u8 = 0x11;
+    const FULL_GROUND: u8 = 0x12;
+    const HAS_ELEVATION: u8 = 0x13;
+    const HAS_OFFSET: u8 = 0x14;
+    const MINI_MAP: u8 = 0x16;
+    const ROTATABLE: u8 = 0x17;
+    const LYING_OBJECT: u8 = 0x18;
+    const HANGABLE: u8 = 0x19;
+    const VERTICAL: u8 = 0x1a;
+    const HORIZONTAL: u8 = 0x1b;
+    const ANIMATE_ALWAYS: u8 = 0x1c;
+    const LENS_HELP: u8 = 0x1d;
+    const WRAPPABLE: u8 = 0x24;
+    const UNWRAPPABLE: u8 = 0x25;
+    const TOP_EFFECT: u8 = 0x26;
+    const LAST_FLAG: u8 = 0xff;
+}
+
+#[allow(dead_code)]
+pub struct MetadataFlags3;
+#[allow(dead_code)]
+impl MetadataFlags3 {
+    const GROUND: u8 = 0x00;
+    const GROUND_BORDER: u8 = 0x01;
+    const ON_BOTTOM: u8 = 0x02;
+    const ON_TOP: u8 = 0x03;
+    const CONTAINER: u8 = 0x04;
+    const STACKABLE: u8 = 0x05;
+    const FORCE_USE: u8 = 0x06;
+    const MULTI_USE: u8 = 0x07;
+    const WRITABLE: u8 = 0x08;
+    const WRITABLE_ONCE: u8 = 0x09;
+    const FLUID_CONTAINER: u8 = 0x0a;
+    const FLUID: u8 = 0x0b;
+    const UNPASSABLE: u8 = 0x0c;
+    const UNMOVEABLE: u8 = 0x0d;
+    const BLOCK_MISSILE: u8 = 0x0e;
+    const BLOCK_PATHFIND: u8 = 0x0f;
+    const PICKUPABLE: u8 = 0x10;
+    const HANGABLE: u8 = 0x11;
+    const VERTICAL: u8 = 0x12;
+    const HORIZONTAL: u8 = 0x13;
+    const ROTATABLE: u8 = 0x14;
+    const HAS_LIGHT: u8 = 0x15;
+    const FLOOR_CHANGE: u8 = 0x17;
+    const HAS_OFFSET: u8 = 0x18;
+    const HAS_ELEVATION: u8 = 0x19;
+    const LYING_OBJECT: u8 = 0x1a;
+    const ANIMATE_ALWAYS: u8 = 0x1b;
+    const MINI_MAP: u8 = 0x1c;
+    const LENS_HELP: u8 = 0x1d;
+    const FULL_GROUND: u8 = 0x1e;
+    const LAST_FLAG: u8 = 0xff;
+}
+
 pub struct MetadataFlags4;
 impl MetadataFlags4 {
     pub const GROUND: u8 = 0x00;
@@ -249,10 +358,10 @@ impl MetadataFlags6 {
 
 pub struct DatWriter<W: Write> {
     writer: W,
-    version: u32, // Version value (e.g., 780, 860, 1010)
+    version: u32,
     extended: bool,
     frame_durations: bool,
-    frame_groups: bool, // Version >= 10.57 (1057) uses frame groups
+    frame_groups: bool,
 }
 
 impl<W: Write> DatWriter<W> {
@@ -298,9 +407,7 @@ impl<W: Write> DatWriter<W> {
     }
 
     fn write_string(&mut self, s: &str) -> io::Result<()> {
-        // Write length as u16
         self.write_u16_le(s.len() as u16)?;
-        // Write string bytes (Latin-1 encoding)
         self.writer.write_all(s.as_bytes())
     }
 
@@ -313,9 +420,370 @@ impl<W: Write> DatWriter<W> {
         Ok(())
     }
 
-    // Write properties for ITEMS ONLY (version 4: 7.80 - 8.54)
+    fn write_item_properties_v1(&mut self, thing: &ThingType) -> io::Result<()> {
+        if thing.is_ground {
+            self.write_u8(MetadataFlags1::GROUND)?;
+            self.write_u16_le(thing.ground_speed)?;
+        } else if thing.is_on_bottom {
+            self.write_u8(MetadataFlags1::ON_BOTTOM)?;
+        } else if thing.is_on_top {
+            self.write_u8(MetadataFlags1::ON_TOP)?;
+        }
+        if thing.is_container {
+            self.write_u8(MetadataFlags1::CONTAINER)?;
+        }
+        if thing.stackable {
+            self.write_u8(MetadataFlags1::STACKABLE)?;
+        }
+        if thing.multi_use {
+            self.write_u8(MetadataFlags1::MULTI_USE)?;
+        }
+        if thing.force_use {
+            self.write_u8(MetadataFlags1::FORCE_USE)?;
+        }
+        if thing.writable {
+            self.write_u8(MetadataFlags1::WRITABLE)?;
+            self.write_u16_le(thing.max_text_length)?;
+        }
+        if thing.writable_once {
+            self.write_u8(MetadataFlags1::WRITABLE_ONCE)?;
+            self.write_u16_le(thing.max_text_length)?;
+        }
+        if thing.is_fluid_container {
+            self.write_u8(MetadataFlags1::FLUID_CONTAINER)?;
+        }
+        if thing.is_fluid {
+            self.write_u8(MetadataFlags1::FLUID)?;
+        }
+        if thing.is_unpassable {
+            self.write_u8(MetadataFlags1::UNPASSABLE)?;
+        }
+        if thing.is_unmoveable {
+            self.write_u8(MetadataFlags1::UNMOVEABLE)?;
+        }
+        if thing.block_missile {
+            self.write_u8(MetadataFlags1::BLOCK_MISSILE)?;
+        }
+        if thing.block_pathfind {
+            self.write_u8(MetadataFlags1::BLOCK_PATHFIND)?;
+        }
+        if thing.pickupable {
+            self.write_u8(MetadataFlags1::PICKUPABLE)?;
+        }
+        if thing.has_light {
+            self.write_u8(MetadataFlags1::HAS_LIGHT)?;
+            self.write_u16_le(thing.light_level)?;
+            self.write_u16_le(thing.light_color)?;
+        }
+        if thing.floor_change {
+            self.write_u8(MetadataFlags1::FLOOR_CHANGE)?;
+        }
+        if thing.is_full_ground {
+            self.write_u8(MetadataFlags1::FULL_GROUND)?;
+        }
+        if thing.has_elevation {
+            self.write_u8(MetadataFlags1::HAS_ELEVATION)?;
+            self.write_u16_le(thing.elevation)?;
+        }
+        if thing.has_offset {
+            self.write_u8(MetadataFlags1::HAS_OFFSET)?;
+        }
+        if thing.mini_map {
+            self.write_u8(MetadataFlags1::MINI_MAP)?;
+            self.write_u16_le(thing.mini_map_color)?;
+        }
+        if thing.rotatable {
+            self.write_u8(MetadataFlags1::ROTATABLE)?;
+        }
+        if thing.is_lying_object {
+            self.write_u8(MetadataFlags1::LYING_OBJECT)?;
+        }
+        if thing.animate_always {
+            self.write_u8(MetadataFlags1::ANIMATE_ALWAYS)?;
+        }
+        if thing.is_lens_help {
+            self.write_u8(MetadataFlags1::LENS_HELP)?;
+            self.write_u16_le(thing.lens_help)?;
+        }
+        if thing.wrappable {
+            self.write_u8(MetadataFlags1::WRAPPABLE)?;
+        }
+        if thing.unwrappable {
+            self.write_u8(MetadataFlags1::UNWRAPPABLE)?;
+        }
+
+        self.write_u8(MetadataFlags1::LAST_FLAG)?;
+        Ok(())
+    }
+
+    fn write_non_item_properties_v1(&mut self, thing: &ThingType) -> io::Result<()> {
+        if thing.has_light {
+            self.write_u8(MetadataFlags1::HAS_LIGHT)?;
+            self.write_u16_le(thing.light_level)?;
+            self.write_u16_le(thing.light_color)?;
+        }
+
+        if thing.has_offset {
+            self.write_u8(MetadataFlags1::HAS_OFFSET)?;
+        }
+
+        if thing.animate_always {
+            self.write_u8(MetadataFlags1::ANIMATE_ALWAYS)?;
+        }
+
+        self.write_u8(MetadataFlags1::LAST_FLAG)?;
+        Ok(())
+    }
+
+    fn write_item_properties_v2(&mut self, thing: &ThingType) -> io::Result<()> {
+        if thing.is_ground {
+            self.write_u8(MetadataFlags2::GROUND)?;
+            self.write_u16_le(thing.ground_speed)?;
+        } else if thing.is_on_bottom {
+            self.write_u8(MetadataFlags2::ON_BOTTOM)?;
+        } else if thing.is_on_top {
+            self.write_u8(MetadataFlags2::ON_TOP)?;
+        }
+        if thing.is_container {
+            self.write_u8(MetadataFlags2::CONTAINER)?;
+        }
+        if thing.stackable {
+            self.write_u8(MetadataFlags2::STACKABLE)?;
+        }
+        if thing.multi_use {
+            self.write_u8(MetadataFlags2::MULTI_USE)?;
+        }
+        if thing.force_use {
+            self.write_u8(MetadataFlags2::FORCE_USE)?;
+        }
+        if thing.writable {
+            self.write_u8(MetadataFlags2::WRITABLE)?;
+            self.write_u16_le(thing.max_text_length)?;
+        }
+        if thing.writable_once {
+            self.write_u8(MetadataFlags2::WRITABLE_ONCE)?;
+            self.write_u16_le(thing.max_text_length)?;
+        }
+        if thing.is_fluid_container {
+            self.write_u8(MetadataFlags2::FLUID_CONTAINER)?;
+        }
+        if thing.is_fluid {
+            self.write_u8(MetadataFlags2::FLUID)?;
+        }
+        if thing.is_unpassable {
+            self.write_u8(MetadataFlags2::UNPASSABLE)?;
+        }
+        if thing.is_unmoveable {
+            self.write_u8(MetadataFlags2::UNMOVEABLE)?;
+        }
+        if thing.block_missile {
+            self.write_u8(MetadataFlags2::BLOCK_MISSILE)?;
+        }
+        if thing.block_pathfind {
+            self.write_u8(MetadataFlags2::BLOCK_PATHFIND)?;
+        }
+        if thing.pickupable {
+            self.write_u8(MetadataFlags2::PICKUPABLE)?;
+        }
+        if thing.has_light {
+            self.write_u8(MetadataFlags2::HAS_LIGHT)?;
+            self.write_u16_le(thing.light_level)?;
+            self.write_u16_le(thing.light_color)?;
+        }
+        if thing.floor_change {
+            self.write_u8(MetadataFlags2::FLOOR_CHANGE)?;
+        }
+        if thing.is_full_ground {
+            self.write_u8(MetadataFlags2::FULL_GROUND)?;
+        }
+        if thing.has_elevation {
+            self.write_u8(MetadataFlags2::HAS_ELEVATION)?;
+            self.write_u16_le(thing.elevation)?;
+        }
+        if thing.has_offset {
+            self.write_u8(MetadataFlags2::HAS_OFFSET)?;
+        }
+        if thing.mini_map {
+            self.write_u8(MetadataFlags2::MINI_MAP)?;
+            self.write_u16_le(thing.mini_map_color)?;
+        }
+        if thing.rotatable {
+            self.write_u8(MetadataFlags2::ROTATABLE)?;
+        }
+        if thing.is_lying_object {
+            self.write_u8(MetadataFlags2::LYING_OBJECT)?;
+        }
+        if thing.hangable {
+            self.write_u8(MetadataFlags2::HANGABLE)?;
+        }
+        if thing.is_vertical {
+            self.write_u8(MetadataFlags2::VERTICAL)?;
+        }
+        if thing.is_horizontal {
+            self.write_u8(MetadataFlags2::HORIZONTAL)?;
+        }
+        if thing.animate_always {
+            self.write_u8(MetadataFlags2::ANIMATE_ALWAYS)?;
+        }
+        if thing.is_lens_help {
+            self.write_u8(MetadataFlags2::LENS_HELP)?;
+            self.write_u16_le(thing.lens_help)?;
+        }
+        if thing.wrappable {
+            self.write_u8(MetadataFlags2::WRAPPABLE)?;
+        }
+        if thing.unwrappable {
+            self.write_u8(MetadataFlags2::UNWRAPPABLE)?;
+        }
+
+        self.write_u8(MetadataFlags2::LAST_FLAG)?;
+        Ok(())
+    }
+
+    fn write_non_item_properties_v2(&mut self, thing: &ThingType) -> io::Result<()> {
+        if thing.has_light {
+            self.write_u8(MetadataFlags2::HAS_LIGHT)?;
+            self.write_u16_le(thing.light_level)?;
+            self.write_u16_le(thing.light_color)?;
+        }
+
+        if thing.has_offset {
+            self.write_u8(MetadataFlags2::HAS_OFFSET)?;
+        }
+
+        if thing.animate_always {
+            self.write_u8(MetadataFlags2::ANIMATE_ALWAYS)?;
+        }
+
+        self.write_u8(MetadataFlags2::LAST_FLAG)?;
+        Ok(())
+    }
+
+    fn write_item_properties_v3(&mut self, thing: &ThingType) -> io::Result<()> {
+        if thing.is_ground {
+            self.write_u8(MetadataFlags3::GROUND)?;
+            self.write_u16_le(thing.ground_speed)?;
+        } else if thing.is_ground_border {
+            self.write_u8(MetadataFlags3::GROUND_BORDER)?;
+        } else if thing.is_on_bottom {
+            self.write_u8(MetadataFlags3::ON_BOTTOM)?;
+        } else if thing.is_on_top {
+            self.write_u8(MetadataFlags3::ON_TOP)?;
+        }
+        if thing.is_container {
+            self.write_u8(MetadataFlags3::CONTAINER)?;
+        }
+        if thing.stackable {
+            self.write_u8(MetadataFlags3::STACKABLE)?;
+        }
+        if thing.multi_use {
+            self.write_u8(MetadataFlags3::MULTI_USE)?;
+        }
+        if thing.force_use {
+            self.write_u8(MetadataFlags3::FORCE_USE)?;
+        }
+        if thing.writable {
+            self.write_u8(MetadataFlags3::WRITABLE)?;
+            self.write_u16_le(thing.max_text_length)?;
+        }
+        if thing.writable_once {
+            self.write_u8(MetadataFlags3::WRITABLE_ONCE)?;
+            self.write_u16_le(thing.max_text_length)?;
+        }
+        if thing.is_fluid_container {
+            self.write_u8(MetadataFlags3::FLUID_CONTAINER)?;
+        }
+        if thing.is_fluid {
+            self.write_u8(MetadataFlags3::FLUID)?;
+        }
+        if thing.is_unpassable {
+            self.write_u8(MetadataFlags3::UNPASSABLE)?;
+        }
+        if thing.is_unmoveable {
+            self.write_u8(MetadataFlags3::UNMOVEABLE)?;
+        }
+        if thing.block_missile {
+            self.write_u8(MetadataFlags3::BLOCK_MISSILE)?;
+        }
+        if thing.block_pathfind {
+            self.write_u8(MetadataFlags3::BLOCK_PATHFIND)?;
+        }
+        if thing.pickupable {
+            self.write_u8(MetadataFlags3::PICKUPABLE)?;
+        }
+        if thing.hangable {
+            self.write_u8(MetadataFlags3::HANGABLE)?;
+        }
+        if thing.is_vertical {
+            self.write_u8(MetadataFlags3::VERTICAL)?;
+        }
+        if thing.is_horizontal {
+            self.write_u8(MetadataFlags3::HORIZONTAL)?;
+        }
+        if thing.rotatable {
+            self.write_u8(MetadataFlags3::ROTATABLE)?;
+        }
+        if thing.has_light {
+            self.write_u8(MetadataFlags3::HAS_LIGHT)?;
+            self.write_u16_le(thing.light_level)?;
+            self.write_u16_le(thing.light_color)?;
+        }
+        if thing.floor_change {
+            self.write_u8(MetadataFlags3::FLOOR_CHANGE)?;
+        }
+        if thing.has_offset {
+            self.write_u8(MetadataFlags3::HAS_OFFSET)?;
+            self.write_u16_le(thing.offset_x as u16)?;
+            self.write_u16_le(thing.offset_y as u16)?;
+        }
+        if thing.has_elevation {
+            self.write_u8(MetadataFlags3::HAS_ELEVATION)?;
+            self.write_u16_le(thing.elevation)?;
+        }
+        if thing.is_lying_object {
+            self.write_u8(MetadataFlags3::LYING_OBJECT)?;
+        }
+        if thing.animate_always {
+            self.write_u8(MetadataFlags3::ANIMATE_ALWAYS)?;
+        }
+        if thing.mini_map {
+            self.write_u8(MetadataFlags3::MINI_MAP)?;
+            self.write_u16_le(thing.mini_map_color)?;
+        }
+        if thing.is_lens_help {
+            self.write_u8(MetadataFlags3::LENS_HELP)?;
+            self.write_u16_le(thing.lens_help)?;
+        }
+        if thing.is_full_ground {
+            self.write_u8(MetadataFlags3::FULL_GROUND)?;
+        }
+
+        self.write_u8(MetadataFlags3::LAST_FLAG)?;
+        Ok(())
+    }
+
+    fn write_non_item_properties_v3(&mut self, thing: &ThingType) -> io::Result<()> {
+        if thing.has_light {
+            self.write_u8(MetadataFlags3::HAS_LIGHT)?;
+            self.write_u16_le(thing.light_level)?;
+            self.write_u16_le(thing.light_color)?;
+        }
+
+        if thing.has_offset {
+            self.write_u8(MetadataFlags3::HAS_OFFSET)?;
+            self.write_u16_le(thing.offset_x as u16)?;
+            self.write_u16_le(thing.offset_y as u16)?;
+        }
+
+        if thing.animate_always {
+            self.write_u8(MetadataFlags3::ANIMATE_ALWAYS)?;
+        }
+
+        self.write_u8(MetadataFlags3::LAST_FLAG)?;
+        Ok(())
+    }
+
     fn write_item_properties_v4(&mut self, thing: &ThingType) -> io::Result<()> {
-        // Ground flags are mutually exclusive (same as Object Builder)
         if thing.is_ground {
             self.write_u8(MetadataFlags4::GROUND)?;
             self.write_u16_le(thing.ground_speed)?;
@@ -433,13 +901,10 @@ impl<W: Write> DatWriter<W> {
             self.write_bones(thing)?;
         }
 
-        // Last flag
         self.write_u8(MetadataFlags4::LAST_FLAG)?;
         Ok(())
     }
 
-    // Write properties for OUTFITS/EFFECTS/MISSILES ONLY (version 4: 7.80 - 8.54)
-    // These categories only support 3 properties: hasLight, hasOffset, animateAlways
     fn write_non_item_properties_v4(&mut self, thing: &ThingType) -> io::Result<()> {
         if thing.has_light {
             self.write_u8(MetadataFlags4::HAS_LIGHT)?;
@@ -462,14 +927,11 @@ impl<W: Write> DatWriter<W> {
             self.write_bones(thing)?;
         }
 
-        // Last flag
         self.write_u8(MetadataFlags4::LAST_FLAG)?;
         Ok(())
     }
 
-    // Write properties for ITEMS ONLY (version 5: 8.60 - 9.86)
     fn write_item_properties_v5(&mut self, thing: &ThingType) -> io::Result<()> {
-        // Ground flags are mutually exclusive (same as Object Builder)
         if thing.is_ground {
             self.write_u8(MetadataFlags5::GROUND)?;
             self.write_u16_le(thing.ground_speed)?;
@@ -591,13 +1053,10 @@ impl<W: Write> DatWriter<W> {
             self.write_bones(thing)?;
         }
 
-        // Last flag
         self.write_u8(MetadataFlags5::LAST_FLAG)?;
         Ok(())
     }
 
-    // Write properties for OUTFITS/EFFECTS/MISSILES ONLY (version 5: 8.60 - 9.86)
-    // These categories only support 3 properties: hasLight, hasOffset, animateAlways
     fn write_non_item_properties_v5(&mut self, thing: &ThingType) -> io::Result<()> {
         if thing.has_light {
             self.write_u8(MetadataFlags5::HAS_LIGHT)?;
@@ -620,14 +1079,11 @@ impl<W: Write> DatWriter<W> {
             self.write_bones(thing)?;
         }
 
-        // Last flag
         self.write_u8(MetadataFlags5::LAST_FLAG)?;
         Ok(())
     }
 
-    // Write properties for ITEMS ONLY (version 6: 10.10 - 10.56)
     fn write_item_properties_v6(&mut self, thing: &ThingType) -> io::Result<()> {
-        // Ground flags are mutually exclusive (same as Object Builder)
         if thing.is_ground {
             self.write_u8(MetadataFlags6::GROUND)?;
             self.write_u16_le(thing.ground_speed)?;
@@ -765,14 +1221,10 @@ impl<W: Write> DatWriter<W> {
             self.write_bones(thing)?;
         }
 
-        // Last flag
         self.write_u8(MetadataFlags6::LAST_FLAG)?;
         Ok(())
     }
 
-    // Write properties for OUTFITS/EFFECTS/MISSILES ONLY (version 6: 10.10 - 10.56+)
-    // These categories only support limited properties: hasLight, hasOffset, animateAlways
-    // Effects also support topEffect
     fn write_non_item_properties_v6(&mut self, thing: &ThingType) -> io::Result<()> {
         if thing.has_light {
             self.write_u8(MetadataFlags6::HAS_LIGHT)?;
@@ -790,7 +1242,6 @@ impl<W: Write> DatWriter<W> {
             self.write_u8(MetadataFlags6::ANIMATE_ALWAYS)?;
         }
 
-        // topEffect is ONLY for effects (matching Object Builder behavior)
         if thing.top_effect && thing.category == "effect" {
             self.write_u8(MetadataFlags6::TOP_EFFECT)?;
         }
@@ -800,21 +1251,17 @@ impl<W: Write> DatWriter<W> {
             self.write_bones(thing)?;
         }
 
-        // Last flag
         self.write_u8(MetadataFlags6::LAST_FLAG)?;
         Ok(())
     }
 
     fn write_texture_patterns(&mut self, thing: &ThingType) -> io::Result<()> {
-        // For version >= 10.57 (1057) outfits use frame groups
         if self.frame_groups && thing.category == "outfit" {
             if let Some(groups) = &thing.frame_groups_data {
                 if !groups.is_empty() {
-                    // Write group count
                     self.write_u8(groups.len() as u8)?;
                     
                     for (group_idx, group) in groups.iter().enumerate() {
-                        // Validate sprite index length for this group
                         let expected_sprites = group.width as usize
                             * group.height as usize
                             * group.layers as usize
@@ -836,14 +1283,10 @@ impl<W: Write> DatWriter<W> {
                             ));
                         }
                         
-                        // Write group type using loop index (matching Object Builder behavior)
-                        // Object Builder always writes 0, 1, 2... based on position, not stored type
-                        // Exception: if single group, write type 1 (Walking)
                         let group_type = if groups.len() < 2 { 1 } else { group_idx as u8 };
                         
                         self.write_u8(group_type)?;
                         
-                        // Write texture data for group
                         self.write_u8(group.width)?;
                         self.write_u8(group.height)?;
                         
@@ -857,34 +1300,27 @@ impl<W: Write> DatWriter<W> {
                         self.write_u8(group.pattern_z)?;
                         self.write_u8(group.frames)?;
                         
-                        // Write animation data if frames > 1 and version supports frame durations
-                        // This MUST match the reader logic exactly
                         if group.frames > 1 && self.frame_durations {
                             self.write_u8(group.animation_mode.unwrap_or(0))?;
                             self.write_i32_le(group.loop_count.unwrap_or(0))?;
                             self.write_i8(group.start_frame.unwrap_or(0))?;
                             
-                            // CRITICAL: Write EXACTLY group.frames frame durations
-                            // The reader expects this exact count
                             for i in 0..group.frames {
                                 if let Some(durations) = &group.frame_durations {
                                     if (i as usize) < durations.len() {
                                         self.write_u32_le(durations[i as usize].minimum)?;
                                         self.write_u32_le(durations[i as usize].maximum)?;
                                     } else {
-                                        // Fallback: use default duration
                                         self.write_u32_le(100)?;
                                         self.write_u32_le(100)?;
                                     }
                                 } else {
-                                    // No durations array - use default
                                     self.write_u32_le(100)?;
                                     self.write_u32_le(100)?;
                                 }
                             }
                         }
                         
-                        // Write sprite indices
                         for &sprite_id in &group.sprite_index {
                             if self.extended {
                                 self.write_u32_le(sprite_id)?;
@@ -897,16 +1333,11 @@ impl<W: Write> DatWriter<W> {
                 }
             }
 
-            // Fallback for outfits without frame_groups_data: 
-            // Write as a single group then continue to regular texture pattern writing
-            // WARNING: This should rarely happen for 10.57+ outfits - they should have frame_groups_data
             eprintln!("WARNING: Outfit {} using fallback (no frame_groups_data)! This may cause corruption.", thing.id);
             self.write_u8(1)?;
-            // Write group type (1 = Walking for single group, matching Object Builder)
             self.write_u8(1)?;
         }
 
-        // Write texture data
         self.write_u8(thing.width)?;
         self.write_u8(thing.height)?;
 
@@ -917,30 +1348,27 @@ impl<W: Write> DatWriter<W> {
         self.write_u8(thing.layers)?;
         self.write_u8(thing.pattern_x)?;
         self.write_u8(thing.pattern_y)?;
-        self.write_u8(thing.pattern_z)?;
+        if self.version > 750 {
+            self.write_u8(thing.pattern_z)?;
+        }
         self.write_u8(thing.frames)?;
 
-        // Write animation data if frames > 1 and version supports frame durations
-        // This MUST match the reader logic exactly
         if thing.frames > 1 && self.frame_durations {
             self.write_u8(thing.animation_mode)?;
             self.write_i32_le(thing.loop_count)?;
             self.write_i8(thing.start_frame)?;
 
-            // CRITICAL: Write EXACTLY thing.frames frame durations
             for i in 0..thing.frames {
                 if (i as usize) < thing.frame_durations.len() {
                     self.write_u32_le(thing.frame_durations[i as usize].minimum)?;
                     self.write_u32_le(thing.frame_durations[i as usize].maximum)?;
                 } else {
-                    // Fallback: write default durations
                     self.write_u32_le(100)?;
                     self.write_u32_le(100)?;
                 }
             }
         }
 
-        // Write sprite indices
         for &sprite_id in &thing.sprite_index {
             if self.extended {
                 self.write_u32_le(sprite_id)?;
@@ -953,15 +1381,12 @@ impl<W: Write> DatWriter<W> {
     }
 
     pub fn write_thing(&mut self, thing: &ThingType) -> io::Result<()> {
-        // For outfits with frame groups (version >= 1057), sprite validation is done per-group
-        // in write_texture_patterns. For all other things, validate here.
         let uses_frame_groups = self.frame_groups 
             && thing.category == "outfit" 
             && thing.frame_groups_data.is_some() 
             && !thing.frame_groups_data.as_ref().unwrap().is_empty();
 
         if !uses_frame_groups {
-            // CRITICAL VALIDATION: Calculate total sprites to detect corrupt data
             let total_sprites = thing.width as u32
                 * thing.height as u32
                 * thing.pattern_x as u32
@@ -986,7 +1411,6 @@ impl<W: Write> DatWriter<W> {
                 ));
             }
 
-            // Validate sprite index length matches calculated total
             if thing.sprite_index.len() != total_sprites as usize {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidData,
@@ -1001,15 +1425,31 @@ impl<W: Write> DatWriter<W> {
             }
         }
 
-        // Write properties based on category and version
-        // CRITICAL: Items use full property set, other categories only support 3 properties
         let is_item = thing.category == "item";
 
-        if self.version <= 772 {
+        if self.version < 710 {
             return Err(io::Error::new(
                 io::ErrorKind::Unsupported,
-                format!("Writing version {} not supported (minimum 7.80)", self.version)
+                format!("Writing version {} not supported (minimum 7.10)", self.version)
             ));
+        } else if self.version <= 730 {
+            if is_item {
+                self.write_item_properties_v1(thing)?;
+            } else {
+                self.write_non_item_properties_v1(thing)?;
+            }
+        } else if self.version <= 750 {
+            if is_item {
+                self.write_item_properties_v2(thing)?;
+            } else {
+                self.write_non_item_properties_v2(thing)?;
+            }
+        } else if self.version <= 772 {
+            if is_item {
+                self.write_item_properties_v3(thing)?;
+            } else {
+                self.write_non_item_properties_v3(thing)?;
+            }
         } else if self.version <= 854 {
             if is_item {
                 self.write_item_properties_v4(thing)?;
@@ -1030,7 +1470,6 @@ impl<W: Write> DatWriter<W> {
             }
         }
 
-        // Write texture patterns and sprite indices
         self.write_texture_patterns(thing)?;
 
         Ok(())
@@ -1068,14 +1507,12 @@ pub fn write_dat_file(
         )
         .map_err(|e| format!("Failed to write header: {}", e))?;
 
-    // Create HashMaps for O(1) lookup
     use std::collections::HashMap;
     let items_map: HashMap<u32, &ThingType> = items.iter().map(|t| (t.id, t)).collect();
     let outfits_map: HashMap<u32, &ThingType> = outfits.iter().map(|t| (t.id, t)).collect();
     let effects_map: HashMap<u32, &ThingType> = effects.iter().map(|t| (t.id, t)).collect();
     let missiles_map: HashMap<u32, &ThingType> = missiles.iter().map(|t| (t.id, t)).collect();
 
-    // Write items sequentially from minId to maxId
     for id in items_min_id..=items_max_id {
         match items_map.get(&(id as u32)) {
             Some(item) => {
@@ -1084,7 +1521,6 @@ pub fn write_dat_file(
                     .map_err(|e| format!("Failed to write item {}: {}", id, e))?;
             }
             None => {
-                // Missing ID - write only LAST_FLAG
                 writer
                     .write_u8(0xFF)
                     .map_err(|e| format!("Failed to write LAST_FLAG for item {}: {}", id, e))?;
@@ -1092,7 +1528,6 @@ pub fn write_dat_file(
         }
     }
 
-    // Write outfits sequentially from minId to maxId
     for id in outfits_min_id..=outfits_max_id {
         match outfits_map.get(&(id as u32)) {
             Some(outfit) => {
@@ -1108,7 +1543,6 @@ pub fn write_dat_file(
         }
     }
 
-    // Write effects sequentially from minId to maxId
     for id in effects_min_id..=effects_max_id {
         match effects_map.get(&(id as u32)) {
             Some(effect) => {
@@ -1124,7 +1558,6 @@ pub fn write_dat_file(
         }
     }
 
-    // Write missiles sequentially from minId to maxId
     for id in missiles_min_id..=missiles_max_id {
         match missiles_map.get(&(id as u32)) {
             Some(missile) => {
