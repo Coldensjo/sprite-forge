@@ -13,6 +13,7 @@ import {
 	ThingCategory,
 	MIN_MISSILE_ID,
 	type ThingType,
+	getSpriteIndex,
 	isValidSpriteId,
 	createThingType
 } from '@/lib/tibia';
@@ -45,6 +46,22 @@ import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from './ui/t
 import { Select, SelectItem, SelectValue, SelectContent, SelectTrigger } from './ui/select';
 
 type ViewMode = 'list' | 'grid' | 'large';
+
+function getThumbnailSpriteIds(thing: ThingType): number[] {
+	const ids: number[] = [];
+	if (!thing.spriteIndex || thing.spriteIndex.length === 0) return ids;
+	const defaultPatternX = thing.category === ThingCategory.OUTFIT && thing.patternX > 2 ? 2 : 0;
+	for (let h = 0; h < thing.height; h++) {
+		for (let w = 0; w < thing.width; w++) {
+			const index = getSpriteIndex(thing, w, h, 0, defaultPatternX, 0, 0, 0);
+			if (index < thing.spriteIndex.length) {
+				const spriteId = thing.spriteIndex[index];
+				if (spriteId && isValidSpriteId(spriteId)) ids.push(spriteId);
+			}
+		}
+	}
+	return ids;
+}
 
 export const ItemList = () => {
 	const {
@@ -225,8 +242,6 @@ export const ItemList = () => {
 		}
 	}, [pendingSelection, selectedCategory, allItemIds, itemsPerPage, setHighlightedItemId]);
 
-	// Load sprites for items on current page + prefetch ahead
-	// PROGRESSIVE LOADING: Load first batch quickly, then rest in background
 	useEffect(() => {
 		if (!data || !data.sprPath) return;
 
@@ -239,13 +254,11 @@ export const ItemList = () => {
 
 			if (cancelled) return;
 
-			// OPTIMIZATION: Collect ALL sprite IDs for an item at once (all frames/patterns)
 			const collectAllSpriteIds = (itemIds: number[]) => {
 				const ids: number[] = [];
 				for (const id of itemIds) {
 					const item = getThing(id, selectedCategory);
 					if (item) {
-						// Collect from main spriteIndex (covers idle group / non-frame-group items)
 						if (item.spriteIndex && item.spriteIndex.length > 0) {
 							for (const spriteId of item.spriteIndex) {
 								if (spriteId && isValidSpriteId(spriteId)) {
@@ -269,22 +282,37 @@ export const ItemList = () => {
 				return ids;
 			};
 
-			// PROGRESSIVE LOADING: Split into batches for faster perceived load time
-			// Batch 1: First 20 items (immediate display ~200ms)
-			// Batch 2: Rest of current page (background)
-			// Batch 3: Prefetch next 2 pages (low priority)
+			const thumbIds: number[] = [];
+			const seenThumb = new Set<number>();
+			for (const id of paginatedItemIds) {
+				const item = getThing(id, selectedCategory);
+				if (!item) continue;
+				for (const spriteId of getThumbnailSpriteIds(item)) {
+					if (!seenThumb.has(spriteId)) {
+						seenThumb.add(spriteId);
+						thumbIds.push(spriteId);
+					}
+				}
+			}
+
+			if (thumbIds.length > 0 && !cancelled) {
+				if (thumbIds.length > 100) {
+					await loadSpriteIdsLz4(data.sprPath, thumbIds, data.transparency, data.sprites);
+				} else {
+					await loadSpriteIds(data.sprPath, thumbIds, data.transparency, data.sprites);
+				}
+				if (!cancelled) notifySpritesLoaded();
+			}
 
 			const FIRST_BATCH_SIZE = 20;
 			const PREFETCH_PAGES = 2;
 
-			// Batch 1: First 20 items for immediate display
 			const firstBatchIds = paginatedItemIds.slice(0, FIRST_BATCH_SIZE);
 			const firstBatchSpriteIds = collectAllSpriteIds(firstBatchIds);
 
 			if (firstBatchSpriteIds.length > 0 && !cancelled) {
 				logger.log(EventCode.ITEM_LOAD_BATCH, { batch: 1, items: firstBatchIds.length, sprites: firstBatchSpriteIds.length });
 
-				// Use LZ4 for large batches (>100 sprites), regular for small
 				if (firstBatchSpriteIds.length > 100) {
 					await loadSpriteIdsLz4(data.sprPath, firstBatchSpriteIds, data.transparency, data.sprites);
 				} else {
@@ -292,11 +320,10 @@ export const ItemList = () => {
 				}
 
 				if (!cancelled) {
-					notifySpritesLoaded(); // UI updates - first items visible!
+					notifySpritesLoaded();
 				}
 			}
 
-			// Batch 2: Rest of current page
 			if (!cancelled && paginatedItemIds.length > FIRST_BATCH_SIZE) {
 				const restBatchIds = paginatedItemIds.slice(FIRST_BATCH_SIZE);
 				const restBatchSpriteIds = collectAllSpriteIds(restBatchIds);
@@ -304,7 +331,6 @@ export const ItemList = () => {
 				if (restBatchSpriteIds.length > 0) {
 					logger.log(EventCode.ITEM_LOAD_BATCH, { batch: 2, items: restBatchIds.length, sprites: restBatchSpriteIds.length });
 
-					// Use LZ4 for large batches
 					if (restBatchSpriteIds.length > 100) {
 						await loadSpriteIdsLz4(data.sprPath, restBatchSpriteIds, data.transparency, data.sprites);
 					} else {
@@ -312,12 +338,11 @@ export const ItemList = () => {
 					}
 
 					if (!cancelled) {
-						notifySpritesLoaded(); // Full page visible
+						notifySpritesLoaded();
 					}
 				}
 			}
 
-			// Batch 3: Prefetch next pages (low priority, don't block UI)
 			if (!cancelled && totalPages > currentPage) {
 				const pagesToPrefetch = Math.min(PREFETCH_PAGES, totalPages - currentPage);
 				const prefetchSpriteIds: number[] = [];
@@ -333,7 +358,6 @@ export const ItemList = () => {
 				if (prefetchSpriteIds.length > 0 && !cancelled) {
 					logger.log(EventCode.ITEM_LOAD_BATCH, { batch: 3, prefetch: true, sprites: prefetchSpriteIds.length });
 
-					// Use LZ4 for prefetch (usually large)
 					await loadSpriteIdsLz4(data.sprPath, prefetchSpriteIds, data.transparency, data.sprites);
 
 					if (!cancelled) {
@@ -360,6 +384,59 @@ export const ItemList = () => {
 		itemsPerPage,
 		updateCounter // Force reload when data changes (e.g. after optimization)
 	]);
+
+	useEffect(() => {
+		if (!data || !data.sprPath) return;
+
+		let cancelled = false;
+
+		const mapFor = (category: ThingCategory) =>
+			category === ThingCategory.ITEM
+				? data.items
+				: category === ThingCategory.OUTFIT
+					? data.outfits
+					: category === ThingCategory.EFFECT
+						? data.effects
+						: data.missiles;
+
+		const warmThumbnails = async () => {
+			const { loadSpriteIdsLz4 } = await import('@/lib/tibia');
+
+			await new Promise((resolve) => setTimeout(resolve, 150));
+			if (cancelled || !data.sprPath) return;
+
+			const allCategories = [ThingCategory.ITEM, ThingCategory.OUTFIT, ThingCategory.EFFECT, ThingCategory.MISSILE];
+			const order = [selectedCategory, ...allCategories.filter((c) => c !== selectedCategory)];
+
+			for (const category of order) {
+				if (cancelled) break;
+
+				const seen = new Set<number>();
+				const ids: number[] = [];
+				for (const item of mapFor(category).values()) {
+					for (const spriteId of getThumbnailSpriteIds(item)) {
+						if (spriteId && !seen.has(spriteId) && !data.sprites.has(spriteId)) {
+							seen.add(spriteId);
+							ids.push(spriteId);
+						}
+					}
+				}
+
+				const CHUNK = 1500;
+				for (let i = 0; i < ids.length && !cancelled; i += CHUNK) {
+					await loadSpriteIdsLz4(data.sprPath, ids.slice(i, i + CHUNK), data.transparency, data.sprites);
+					if (!cancelled) notifySpritesLoaded();
+					await new Promise((resolve) => setTimeout(resolve, 16));
+				}
+			}
+		};
+
+		warmThumbnails();
+
+		return () => {
+			cancelled = true;
+		};
+	}, [data, selectedCategory, notifySpritesLoaded]);
 
 	const handlePageChange = (page: number) => {
 		if (page >= 1 && page <= totalPages) {

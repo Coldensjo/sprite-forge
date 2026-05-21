@@ -390,18 +390,21 @@ export async function loadTibiaData(
 		logError('Failed to preload sprites', err);
 	}
 
-	setTimeout(() => {
-		if (myEpoch !== loadEpoch) return;
-		void preloadSprites(
-			sprPath,
-			sprData.header.sprite_count,
-			sprData.transparency,
-			sprites,
-			sprData.header.sprite_count,
-			undefined,
-			() => myEpoch === loadEpoch
-		).catch((err) => logError('Background full preload failed', err));
-	}, 400);
+	const FULL_PRELOAD_MAX_SPRITES = 60000;
+	if (sprData.header.sprite_count <= FULL_PRELOAD_MAX_SPRITES) {
+		setTimeout(() => {
+			if (myEpoch !== loadEpoch) return;
+			void preloadSprites(
+				sprPath,
+				sprData.header.sprite_count,
+				sprData.transparency,
+				sprites,
+				sprData.header.sprite_count,
+				undefined,
+				() => myEpoch === loadEpoch
+			).catch((err) => logError('Background full preload failed', err));
+		}, 400);
+	}
 
 	const totalTime = performance.now();
 	console.log(`[loadTibiaData] Total loading time: ${(totalTime - startTime).toFixed(0)}ms`);
