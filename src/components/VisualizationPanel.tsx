@@ -2,6 +2,7 @@ import { Play, Pause, FileQuestion } from 'lucide-react';
 import { ThingCategory, loadSpriteIds } from '@/lib/tibia';
 import { useTibiaData } from '@/contexts/TibiaDataContext';
 import { useRef, useMemo, useState, useEffect } from 'react';
+import { getPingPongFrame, getDefaultDuration, AnimationDirection } from '@/lib/tibia/animation';
 
 import { Button } from './ui/button';
 import { SpriteCanvas } from './SpriteCanvas';
@@ -21,11 +22,16 @@ export const VisualizationPanel = () => {
 
 	// Animation timing refs
 	const animationState = useRef({
+		frame: 0,
 		frames: 0,
 		lastTime: 0,
+		loopCount: 0,
+		currentLoop: 0,
 		timeRemaining: 0,
+		isComplete: false,
 		skipFirstFrame: false,
-		durations: [] as number[]
+		durations: [] as number[],
+		direction: AnimationDirection.FORWARD as number
 	});
 	const requestRef = useRef<number>();
 
@@ -34,11 +40,16 @@ export const VisualizationPanel = () => {
 		setCurrentFrame(0);
 		setIsPlaying(false);
 		animationState.current = {
+			frame: 0,
 			frames: 0,
 			lastTime: 0,
+			loopCount: 0,
 			durations: [],
+			currentLoop: 0,
 			timeRemaining: 0,
-			skipFirstFrame: false
+			isComplete: false,
+			skipFirstFrame: false,
+			direction: AnimationDirection.FORWARD
 		};
 		if (requestRef.current) {
 			cancelAnimationFrame(requestRef.current);
@@ -138,16 +149,13 @@ export const VisualizationPanel = () => {
 		}
 	}, [item, hasAnimation]);
 
-	// Animation loop - uses refs to avoid stale closures
 	const animate = (time: number) => {
 		const state = animationState.current;
 
-		// Check if we should continue
-		if (state.frames === 0 || state.durations.length === 0) {
+		if (state.frames === 0 || state.durations.length === 0 || state.isComplete) {
 			return;
 		}
 
-		// Initialize lastTime if needed
 		if (state.lastTime === 0) {
 			state.lastTime = time;
 			requestRef.current = requestAnimationFrame(animate);
@@ -157,28 +165,42 @@ export const VisualizationPanel = () => {
 		const elapsed = time - state.lastTime;
 		state.lastTime = time;
 
-		// Frame advance logic (from Animator.as)
 		if (elapsed >= state.timeRemaining) {
-			setCurrentFrame((prevFrame) => {
-				let nextFrame = prevFrame + 1;
+			let nextFrame: number;
 
-				// Loop logic
+			if (state.loopCount < 0) {
+				const result = getPingPongFrame(state.frame, state.frames, state.direction);
+				nextFrame = result.frame;
+				state.direction = result.newDirection;
+			} else {
+				nextFrame = state.frame + 1;
 				if (nextFrame >= state.frames) {
-					nextFrame = 0;
+					if (state.loopCount === 0) {
+						nextFrame = 0;
+					} else if (state.currentLoop < state.loopCount - 1) {
+						state.currentLoop++;
+						nextFrame = 0;
+					} else {
+						nextFrame = state.frame;
+					}
 				}
+			}
 
-				// Skip first frame logic for outfits
-				if (state.skipFirstFrame && nextFrame === 0) {
-					nextFrame = 1 % state.frames;
-				}
+			if (nextFrame === state.frame) {
+				state.isComplete = true;
+				setIsPlaying(false);
+				return;
+			}
 
-				// Update duration for the new frame with overshoot compensation
-				const nextDuration = state.durations[nextFrame] || 200;
-				state.timeRemaining = nextDuration - (elapsed - state.timeRemaining);
-				if (state.timeRemaining < 0) state.timeRemaining = 0;
+			if (state.skipFirstFrame && nextFrame === 0) {
+				nextFrame = 1 % state.frames;
+			}
 
-				return nextFrame;
-			});
+			state.timeRemaining = state.durations[nextFrame] - (elapsed - state.timeRemaining);
+			if (state.timeRemaining < 0) state.timeRemaining = 0;
+
+			state.frame = nextFrame;
+			setCurrentFrame(nextFrame);
 		} else {
 			state.timeRemaining -= elapsed;
 		}
@@ -189,54 +211,42 @@ export const VisualizationPanel = () => {
 	// Animation setup effect
 	useEffect(() => {
 		if (isPlaying && item && hasAnimation && animationInfo) {
-			// Get base durations
-			let durations: number[] = [];
-
-			// Use the correct frame group (walking for outfits with frame groups)
 			const currentGroup = animationInfo.group;
 			const frameCount = currentGroup?.frames ?? item.frames;
 			const groupDurations = currentGroup?.frameDurations;
 
+			let durations: number[];
 			if (groupDurations && groupDurations.length > 0) {
 				durations = groupDurations.map((d) => d.minimum);
 			} else if (item.frameDurations && item.frameDurations.length > 0) {
 				durations = item.frameDurations.map((d) => d.minimum);
 			} else {
-				// Default durations matching Object Builder
-				let defaultDuration = 500; // Item default
-				if (item.category === ThingCategory.OUTFIT) {
-					defaultDuration = 300;
-				} else if (item.category === ThingCategory.EFFECT) {
-					defaultDuration = 100;
-				} else if (item.category === ThingCategory.MISSILE) {
-					defaultDuration = 150;
-				}
-				durations = new Array(frameCount).fill(defaultDuration);
+				durations = new Array(frameCount).fill(getDefaultDuration(item.category));
 			}
 
-			// Walking override for outfits (only for walking frame groups)
-			const isGroupWalking = currentGroup?.type === 1;
-			if (isGroupWalking && frameCount > 2) {
-				const calculatedDuration = Math.floor(1000 / frameCount);
-				durations = durations.map(() => calculatedDuration);
-			}
-
-			// Sanity check: minimum 50ms per frame
 			durations = durations.map((d) => Math.max(d, 50));
 
-			// Setup animator state
-			animationState.current.durations = durations;
-			animationState.current.frames = frameCount;
+			const loopCount = currentGroup?.loopCount ?? item.loopCount ?? 0;
+			const rawStartFrame = currentGroup?.startFrame ?? item.startFrame ?? -1;
 
-			// Skip first frame for outfits in idle mode
 			const isOutfit = item.category === ThingCategory.OUTFIT;
-			const animateAlways = item.animateAlways;
 			const isIdle = currentGroup?.type !== 1;
-			animationState.current.skipFirstFrame = isOutfit && !animateAlways && isIdle;
+			const skipFirstFrame = isOutfit && !item.animateAlways && isIdle;
 
-			// Initialize time remaining
-			animationState.current.timeRemaining = durations[currentFrame] || 200;
+			const startFrame = rawStartFrame > -1 ? rawStartFrame : Math.floor(Math.random() * frameCount);
+			const initialFrame = skipFirstFrame && startFrame === 0 ? 1 % frameCount : startFrame;
+
+			animationState.current.frame = initialFrame;
+			animationState.current.frames = frameCount;
+			animationState.current.durations = durations;
+			animationState.current.loopCount = loopCount;
+			animationState.current.direction = AnimationDirection.FORWARD;
+			animationState.current.currentLoop = 0;
+			animationState.current.isComplete = false;
+			animationState.current.skipFirstFrame = skipFirstFrame;
+			animationState.current.timeRemaining = durations[initialFrame] || getDefaultDuration(item.category);
 			animationState.current.lastTime = 0;
+			setCurrentFrame(initialFrame);
 
 			// Start loop
 			requestRef.current = requestAnimationFrame(animate);
@@ -253,12 +263,6 @@ export const VisualizationPanel = () => {
 
 	const handlePlayPause = () => {
 		if (!isPlaying) {
-			// Starting animation - skip first frame for outfits
-			const isOutfit = item?.category === ThingCategory.OUTFIT;
-			const frameCount = animationInfo?.group?.frames ?? item?.frames ?? 0;
-			if (isOutfit && item && !item.animateAlways && currentFrame === 0 && frameCount > 1) {
-				setCurrentFrame(1);
-			}
 			setIsPlaying(true);
 		} else {
 			setIsPlaying(false);

@@ -44,50 +44,28 @@ export function getFrameDuration(frameDuration: FrameDuration): number {
  * @param category - The thing category (determines default duration)
  * @returns Array of FrameDuration objects
  */
+export function getDefaultDuration(category: ThingCategory): number {
+	switch (category) {
+		case 'outfit':
+			return 300;
+		case 'effect':
+			return 100;
+		case 'missile':
+			return 75;
+		default:
+			return 500;
+	}
+}
+
 export function generateDefaultDurations(thing: ThingType, category: ThingCategory): FrameDuration[] {
-	// Generate default durations based on category
+	if (thing.frameDurations && thing.frameDurations.length === thing.frames) {
+		return thing.frameDurations;
+	}
+
+	const duration = getDefaultDuration(category);
 	const durations: FrameDuration[] = [];
-
-	if (category === 'outfit') {
-		// Outfits: Walking animations ALWAYS use 1000ms / frames
-		// This matches Object Builder's behavior (ThingDataView.as lines 238-244)
-		// CRITICAL: Override DAT durations for outfits to ensure correct walking speed
-		let duration = thing.frames > 0 ? Math.floor(1000 / thing.frames) : 333;
-
-		// Apply OTClient's animation speed clamping (creature.cpp lines 594-606)
-		// This prevents animations from being too slow
-		// For 3+ frame outfits: max 80ms per frame (12.5 FPS)
-		// For 1-2 frame outfits: max 205ms per frame (4.9 FPS)
-		const maxDelay = thing.frames > 2 ? 80 : 205;
-		duration = Math.min(duration, maxDelay);
-
-		for (let i = 0; i < thing.frames; i++) {
-			durations.push({ minimum: duration, maximum: duration });
-		}
-	} else if (category === 'effect') {
-		// Effects: Use DAT durations if available, otherwise default 200ms per frame
-		if (thing.frameDurations && thing.frameDurations.length === thing.frames) {
-			return thing.frameDurations;
-		}
-		for (let i = 0; i < thing.frames; i++) {
-			durations.push({ minimum: 200, maximum: 200 });
-		}
-	} else if (category === 'missile') {
-		// Missiles: Use DAT durations if available, otherwise default 300ms per frame
-		if (thing.frameDurations && thing.frameDurations.length === thing.frames) {
-			return thing.frameDurations;
-		}
-		for (let i = 0; i < thing.frames; i++) {
-			durations.push({ minimum: 300, maximum: 300 });
-		}
-	} else {
-		// Items and other: Use DAT durations if available, otherwise default 500ms per frame
-		if (thing.frameDurations && thing.frameDurations.length === thing.frames) {
-			return thing.frameDurations;
-		}
-		for (let i = 0; i < thing.frames; i++) {
-			durations.push({ minimum: 500, maximum: 500 });
-		}
+	for (let i = 0; i < thing.frames; i++) {
+		durations.push({ minimum: duration, maximum: duration });
 	}
 
 	return durations;
