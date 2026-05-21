@@ -747,9 +747,6 @@ impl<W: Write> DatWriter<W> {
         if thing.unwrappable {
             self.write_u8(MetadataFlags6::UNWRAPPABLE)?;
         }
-        if thing.top_effect {
-            self.write_u8(MetadataFlags6::TOP_EFFECT)?;
-        }
         if thing.has_bones {
             self.write_u8(MetadataFlags6::HAS_BONES)?;
             self.write_bones(thing)?;
