@@ -44,7 +44,7 @@ export interface SpriteOperationResult {
  */
 export async function addSprite(data: TibiaData, pixels: Uint8Array): Promise<SpriteOperationResult> {
 	// Check sprite limit
-	const maxSprites = data.extended ? 0xffffffff : 0xffff;
+	const maxSprites = data.extended ? 0xffffffff : 0xfffe;
 	if (data.spritesCount >= maxSprites) {
 		return {
 			success: false,
@@ -228,7 +228,7 @@ export async function removeSprite(data: TibiaData, id: number): Promise<SpriteO
  * @returns True if no more sprites can be added
  */
 export function isSpriteStorageFull(data: TibiaData): boolean {
-	const maxSprites = data.extended ? 0xffffffff : 0xffff;
+	const maxSprites = data.extended ? 0xffffffff : 0xfffe;
 	return data.spritesCount >= maxSprites;
 }
 
@@ -239,7 +239,7 @@ export function isSpriteStorageFull(data: TibiaData): boolean {
  * @returns Number of sprites that can still be added
  */
 export function getRemainingCapacity(data: TibiaData): number {
-	const maxSprites = data.extended ? 0xffffffff : 0xffff;
+	const maxSprites = data.extended ? 0xffffffff : 0xfffe;
 	return Math.max(0, maxSprites - data.spritesCount);
 }
 
@@ -304,7 +304,7 @@ export function cloneSprite(data: TibiaData, sourceId: number): SpriteOperationR
 	}
 
 	// Check sprite limit
-	const maxSprites = data.extended ? 0xffffffff : 0xffff;
+	const maxSprites = data.extended ? 0xffffffff : 0xfffe;
 	if (data.spritesCount >= maxSprites) {
 		return {
 			success: false,

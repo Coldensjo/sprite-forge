@@ -32,8 +32,8 @@ pub fn write_spr_file(
         file.write_all(&sprite_count.to_le_bytes())
             .map_err(|e| format!("Failed to write sprite count: {}", e))?;
     } else {
-        if sprite_count > 0xFFFF {
-            return Err("Sprite count exceeds non-extended format limit (65535)".to_string());
+        if sprite_count > 0xFFFE {
+            return Err("Sprite count exceeds non-extended format limit (65534); 0xFFFF is reserved".to_string());
         }
         file.write_all(&(sprite_count as u16).to_le_bytes())
             .map_err(|e| format!("Failed to write sprite count: {}", e))?;
@@ -140,8 +140,8 @@ pub fn update_sprites_in_spr(
             file.write_all(&sprites_count.to_le_bytes())
                 .map_err(|e| format!("Failed to write new sprite count: {}", e))?;
         } else {
-            if sprites_count > 0xFFFF {
-                return Err("Sprite count exceeds non-extended format limit (65535)".to_string());
+            if sprites_count > 0xFFFE {
+                return Err("Sprite count exceeds non-extended format limit (65534); 0xFFFF is reserved".to_string());
             }
             file.write_all(&(sprites_count as u16).to_le_bytes())
                 .map_err(|e| format!("Failed to write new sprite count: {}", e))?;
@@ -316,6 +316,9 @@ pub fn copy_spr_with_modifications(
         dest.write_all(&sprite_count.to_le_bytes())
             .map_err(|e| format!("Failed to write sprite count: {}", e))?;
     } else {
+        if sprite_count > 0xFFFE {
+            return Err("Sprite count exceeds non-extended format limit (65534); 0xFFFF is reserved".to_string());
+        }
         dest.write_all(&(sprite_count as u16).to_le_bytes())
             .map_err(|e| format!("Failed to write sprite count: {}", e))?;
     }
