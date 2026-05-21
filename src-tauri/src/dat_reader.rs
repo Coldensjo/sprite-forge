@@ -1261,7 +1261,7 @@ impl DatReader {
             let layers = self.read_u8()?;
             let pattern_x = self.read_u8()?;
             let pattern_y = self.read_u8()?;
-            let pattern_z = self.read_u8()?;
+            let pattern_z = if self.version <= 750 { 1 } else { self.read_u8()? };
             let frames = self.read_u8()?;
 
             // Read animation data if frames > 1
