@@ -11,7 +11,7 @@ mod logger;
 use logger::{Logger, LoggerState, EventCode};
 
 mod dat_writer;
-use dat_writer::{write_dat_file, ThingType, FrameGroup};
+use dat_writer::{write_dat_file, write_dat_from_buffer, ThingType, FrameGroup};
 
 mod spr_writer;
 use spr_writer::{write_spr_file, update_sprites_in_spr, copy_spr_with_modifications, SpriteWrite};
@@ -780,6 +780,14 @@ fn write_dat(
 }
 
 #[tauri::command]
+fn write_dat_bin(request: tauri::ipc::Request) -> Result<(), String> {
+    match request.body() {
+        tauri::ipc::InvokeBody::Raw(bytes) => write_dat_from_buffer(bytes),
+        _ => Err("write_dat_bin expects a raw binary payload".to_string()),
+    }
+}
+
+#[tauri::command]
 fn write_spr(
     path: String,
     signature: u32,
@@ -800,15 +808,33 @@ fn update_spr_sprites(
 }
 
 #[tauri::command]
-#[allow(non_snake_case)]
-fn copy_spr_file_with_mods(
-    sourcePath: String,
-    destPath: String,
-    extended: bool,
-    signature: u32,
-    modifications: Vec<SpriteWrite>,
-) -> Result<(), String> {
-    copy_spr_with_modifications(&sourcePath, &destPath, extended, signature, modifications)
+fn copy_spr_file_with_mods(request: tauri::ipc::Request) -> Result<(), String> {
+    fn take<'a>(bytes: &'a [u8], o: &mut usize, n: usize) -> Result<&'a [u8], String> {
+        if *o + n > bytes.len() {
+            return Err(format!("SPR copy buffer truncated at offset {}", *o));
+        }
+        let s = &bytes[*o..*o + n];
+        *o += n;
+        Ok(s)
+    }
+
+    let bytes = match request.body() {
+        tauri::ipc::InvokeBody::Raw(b) => b.as_slice(),
+        _ => return Err("copy_spr_file_with_mods expects a raw binary payload".to_string()),
+    };
+
+    let mut o = 0usize;
+    let extended = take(bytes, &mut o, 1)?[0] == 1;
+    let signature = u32::from_le_bytes(take(bytes, &mut o, 4)?.try_into().unwrap());
+    let target_count = u32::from_le_bytes(take(bytes, &mut o, 4)?.try_into().unwrap());
+    let src_len = u16::from_le_bytes(take(bytes, &mut o, 2)?.try_into().unwrap()) as usize;
+    let source_path = String::from_utf8_lossy(take(bytes, &mut o, src_len)?).into_owned();
+    let dst_len = u16::from_le_bytes(take(bytes, &mut o, 2)?.try_into().unwrap()) as usize;
+    let dest_path = String::from_utf8_lossy(take(bytes, &mut o, dst_len)?).into_owned();
+
+    let modifications = parse_sprites_buffer(&bytes[o..])?;
+
+    copy_spr_with_modifications(&source_path, &dest_path, extended, signature, target_count, modifications)
 }
 
 /// Parse binary buffer into Vec<SpriteWrite>
@@ -887,18 +913,27 @@ fn parse_sprites_buffer(buffer: &[u8]) -> Result<Vec<SpriteWrite>, String> {
     Ok(sprites)
 }
 
-/// Update sprites in SPR file using binary buffer (fast IPC)
 #[tauri::command]
-fn update_spr_sprites_bin(
-    path: String,
-    extended: bool,
-    buffer: Vec<u8>,
-    sprites_count: u32,
-) -> Result<(), String> {
-    // Parse binary buffer into sprites
-    let sprites = parse_sprites_buffer(&buffer)?;
+fn update_spr_sprites_bin(request: tauri::ipc::Request) -> Result<(), String> {
+    let bytes = match request.body() {
+        tauri::ipc::InvokeBody::Raw(b) => b.as_slice(),
+        _ => return Err("update_spr_sprites_bin expects a raw binary payload".to_string()),
+    };
 
-    // Call existing writer
+    if bytes.len() < 7 {
+        return Err("SPR update buffer too small for header".to_string());
+    }
+    let extended = bytes[0] == 1;
+    let sprites_count = u32::from_le_bytes([bytes[1], bytes[2], bytes[3], bytes[4]]);
+    let path_len = u16::from_le_bytes([bytes[5], bytes[6]]) as usize;
+    let path_start = 7;
+    if path_start + path_len > bytes.len() {
+        return Err("SPR update buffer truncated (path)".to_string());
+    }
+    let path = String::from_utf8_lossy(&bytes[path_start..path_start + path_len]).into_owned();
+
+    let sprites = parse_sprites_buffer(&bytes[path_start + path_len..])?;
+
     update_sprites_in_spr(&path, extended, sprites, sprites_count)
 }
 
@@ -1903,6 +1938,7 @@ tauri::Builder::default()
             load_scene,
             delete_scene,
             write_dat,
+            write_dat_bin,
             write_spr,
             update_spr_sprites,
             update_spr_sprites_bin,

@@ -1,5 +1,6 @@
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
-use std::fs::File;
+use std::collections::HashMap;
 use std::io::{self, Write};
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
@@ -1495,10 +1496,39 @@ pub fn write_dat_file(
     effects: Vec<ThingType>,
     missiles: Vec<ThingType>,
 ) -> Result<(), String> {
-    let file = File::create(path).map_err(|e| format!("Failed to create file: {}", e))?;
-    let mut writer = DatWriter::new(file, version, extended, frame_durations);
-    writer
-        .write_header(
+    let serialize_cat = |things: &[ThingType], cat: &str| -> Result<HashMap<u32, Vec<u8>>, String> {
+        things
+            .par_iter()
+            .map(|t| {
+                let mut buf: Vec<u8> = Vec::with_capacity(64);
+                {
+                    let mut w = DatWriter::new(&mut buf, version, extended, frame_durations);
+                    w.write_thing(t)
+                        .map_err(|e| format!("Failed to write {} {}: {}", cat, t.id, e))?;
+                }
+                Ok((t.id, buf))
+            })
+            .collect()
+    };
+
+    let items_bytes = serialize_cat(&items, "item")?;
+    let outfits_bytes = serialize_cat(&outfits, "outfit")?;
+    let effects_bytes = serialize_cat(&effects, "effect")?;
+    let missiles_bytes = serialize_cat(&missiles, "missile")?;
+
+    let body_len: usize = [&items_bytes, &outfits_bytes, &effects_bytes, &missiles_bytes]
+        .iter()
+        .map(|m| m.values().map(|b| b.len()).sum::<usize>())
+        .sum::<usize>()
+        + (items_max_id.saturating_sub(items_min_id) as usize + 1)
+        + (outfits_max_id.saturating_sub(outfits_min_id) as usize + 1)
+        + (effects_max_id.saturating_sub(effects_min_id) as usize + 1)
+        + (missiles_max_id.saturating_sub(missiles_min_id) as usize + 1);
+
+    let mut out: Vec<u8> = Vec::with_capacity(body_len + 12);
+    {
+        let mut hw = DatWriter::new(&mut out, version, extended, frame_durations);
+        hw.write_header(
             signature,
             items_max_id,
             outfits_max_id,
@@ -1506,72 +1536,388 @@ pub fn write_dat_file(
             missiles_max_id,
         )
         .map_err(|e| format!("Failed to write header: {}", e))?;
-
-    use std::collections::HashMap;
-    let items_map: HashMap<u32, &ThingType> = items.iter().map(|t| (t.id, t)).collect();
-    let outfits_map: HashMap<u32, &ThingType> = outfits.iter().map(|t| (t.id, t)).collect();
-    let effects_map: HashMap<u32, &ThingType> = effects.iter().map(|t| (t.id, t)).collect();
-    let missiles_map: HashMap<u32, &ThingType> = missiles.iter().map(|t| (t.id, t)).collect();
-
-    for id in items_min_id..=items_max_id {
-        match items_map.get(&(id as u32)) {
-            Some(item) => {
-                writer
-                    .write_thing(item)
-                    .map_err(|e| format!("Failed to write item {}: {}", id, e))?;
-            }
-            None => {
-                writer
-                    .write_u8(0xFF)
-                    .map_err(|e| format!("Failed to write LAST_FLAG for item {}: {}", id, e))?;
-            }
-        }
     }
 
-    for id in outfits_min_id..=outfits_max_id {
-        match outfits_map.get(&(id as u32)) {
-            Some(outfit) => {
-                writer
-                    .write_thing(outfit)
-                    .map_err(|e| format!("Failed to write outfit {}: {}", id, e))?;
-            }
-            None => {
-                writer
-                    .write_u8(0xFF)
-                    .map_err(|e| format!("Failed to write LAST_FLAG for outfit {}: {}", id, e))?;
-            }
-        }
-    }
+    append_category(&mut out, &items_bytes, items_min_id, items_max_id);
+    append_category(&mut out, &outfits_bytes, outfits_min_id, outfits_max_id);
+    append_category(&mut out, &effects_bytes, effects_min_id, effects_max_id);
+    append_category(&mut out, &missiles_bytes, missiles_min_id, missiles_max_id);
 
-    for id in effects_min_id..=effects_max_id {
-        match effects_map.get(&(id as u32)) {
-            Some(effect) => {
-                writer
-                    .write_thing(effect)
-                    .map_err(|e| format!("Failed to write effect {}: {}", id, e))?;
-            }
-            None => {
-                writer
-                    .write_u8(0xFF)
-                    .map_err(|e| format!("Failed to write LAST_FLAG for effect {}: {}", id, e))?;
-            }
-        }
-    }
-
-    for id in missiles_min_id..=missiles_max_id {
-        match missiles_map.get(&(id as u32)) {
-            Some(missile) => {
-                writer
-                    .write_thing(missile)
-                    .map_err(|e| format!("Failed to write missile {}: {}", id, e))?;
-            }
-            None => {
-                writer
-                    .write_u8(0xFF)
-                    .map_err(|e| format!("Failed to write LAST_FLAG for missile {}: {}", id, e))?;
-            }
-        }
-    }
+    std::fs::write(path, &out).map_err(|e| format!("Failed to write file: {}", e))?;
 
     Ok(())
+}
+
+fn append_category(out: &mut Vec<u8>, map: &HashMap<u32, Vec<u8>>, min_id: u16, max_id: u16) {
+    for id in min_id..=max_id {
+        match map.get(&(id as u32)) {
+            Some(bytes) => out.extend_from_slice(bytes),
+            None => out.push(0xFF),
+        }
+    }
+}
+
+struct Reader<'a> {
+    buf: &'a [u8],
+    pos: usize,
+}
+
+impl<'a> Reader<'a> {
+    fn new(buf: &'a [u8]) -> Self {
+        Self { buf, pos: 0 }
+    }
+
+    fn need(&self, n: usize) -> Result<(), String> {
+        if self.pos + n > self.buf.len() {
+            Err(format!(
+                "DAT buffer truncated at offset {}: need {} more bytes, have {}",
+                self.pos,
+                n,
+                self.buf.len() - self.pos
+            ))
+        } else {
+            Ok(())
+        }
+    }
+
+    fn u8(&mut self) -> Result<u8, String> {
+        self.need(1)?;
+        let v = self.buf[self.pos];
+        self.pos += 1;
+        Ok(v)
+    }
+
+    fn i8(&mut self) -> Result<i8, String> {
+        Ok(self.u8()? as i8)
+    }
+
+    fn bool(&mut self) -> Result<bool, String> {
+        Ok(self.u8()? != 0)
+    }
+
+    fn u16(&mut self) -> Result<u16, String> {
+        self.need(2)?;
+        let v = u16::from_le_bytes([self.buf[self.pos], self.buf[self.pos + 1]]);
+        self.pos += 2;
+        Ok(v)
+    }
+
+    fn i16(&mut self) -> Result<i16, String> {
+        Ok(self.u16()? as i16)
+    }
+
+    fn u32(&mut self) -> Result<u32, String> {
+        self.need(4)?;
+        let v = u32::from_le_bytes(self.buf[self.pos..self.pos + 4].try_into().unwrap());
+        self.pos += 4;
+        Ok(v)
+    }
+
+    fn i32(&mut self) -> Result<i32, String> {
+        Ok(self.u32()? as i32)
+    }
+
+    fn string(&mut self) -> Result<String, String> {
+        let n = self.u16()? as usize;
+        self.need(n)?;
+        let s = String::from_utf8_lossy(&self.buf[self.pos..self.pos + n]).into_owned();
+        self.pos += n;
+        Ok(s)
+    }
+}
+
+fn read_u32_vec(r: &mut Reader) -> Result<Vec<u32>, String> {
+    let n = r.u32()? as usize;
+    r.need(n)?;
+    let mut v = Vec::with_capacity(n);
+    for _ in 0..n {
+        v.push(r.u32()?);
+    }
+    Ok(v)
+}
+
+fn read_i16_vec_u8len(r: &mut Reader) -> Result<Vec<i16>, String> {
+    let n = r.u8()? as usize;
+    let mut v = Vec::with_capacity(n);
+    for _ in 0..n {
+        v.push(r.i16()?);
+    }
+    Ok(v)
+}
+
+fn read_frame_durations(r: &mut Reader) -> Result<Vec<FrameDuration>, String> {
+    let n = r.u16()? as usize;
+    r.need(n)?;
+    let mut v = Vec::with_capacity(n);
+    for _ in 0..n {
+        let minimum = r.u32()?;
+        let maximum = r.u32()?;
+        v.push(FrameDuration { minimum, maximum });
+    }
+    Ok(v)
+}
+
+fn read_frame_group(r: &mut Reader) -> Result<FrameGroup, String> {
+    let r#type = r.u8()?;
+    let width = r.u8()?;
+    let height = r.u8()?;
+    let exact_size = r.u8()?;
+    let layers = r.u8()?;
+    let pattern_x = r.u8()?;
+    let pattern_y = r.u8()?;
+    let pattern_z = r.u8()?;
+    let frames = r.u8()?;
+    let animation_mode = r.u8()?;
+    let loop_count = r.i32()?;
+    let start_frame = r.i8()?;
+    let frame_durations = read_frame_durations(r)?;
+    let sprite_index = read_u32_vec(r)?;
+
+    Ok(FrameGroup {
+        r#type,
+        width,
+        height,
+        exact_size,
+        layers,
+        pattern_x,
+        pattern_y,
+        pattern_z,
+        frames,
+        sprite_index,
+        is_animation: false,
+        animation_mode: Some(animation_mode),
+        loop_count: Some(loop_count),
+        start_frame: Some(start_frame),
+        frame_durations: Some(frame_durations),
+    })
+}
+
+fn read_thing(r: &mut Reader, category: &str) -> Result<ThingType, String> {
+    let id = r.u32()?;
+    let width = r.u8()?;
+    let height = r.u8()?;
+    let exact_size = r.u8()?;
+    let layers = r.u8()?;
+    let pattern_x = r.u8()?;
+    let pattern_y = r.u8()?;
+    let pattern_z = r.u8()?;
+    let frames = r.u8()?;
+
+    let is_ground = r.bool()?;
+    let is_ground_border = r.bool()?;
+    let is_on_bottom = r.bool()?;
+    let is_on_top = r.bool()?;
+    let is_container = r.bool()?;
+    let stackable = r.bool()?;
+    let multi_use = r.bool()?;
+    let force_use = r.bool()?;
+    let has_charges = r.bool()?;
+    let writable = r.bool()?;
+    let writable_once = r.bool()?;
+    let is_fluid_container = r.bool()?;
+    let is_fluid = r.bool()?;
+    let is_unpassable = r.bool()?;
+    let is_unmoveable = r.bool()?;
+    let block_missile = r.bool()?;
+    let block_pathfind = r.bool()?;
+    let no_move_animation = r.bool()?;
+    let pickupable = r.bool()?;
+    let hangable = r.bool()?;
+    let is_vertical = r.bool()?;
+    let is_horizontal = r.bool()?;
+    let rotatable = r.bool()?;
+    let has_light = r.bool()?;
+    let dont_hide = r.bool()?;
+    let floor_change = r.bool()?;
+    let is_translucent = r.bool()?;
+    let has_offset = r.bool()?;
+    let has_elevation = r.bool()?;
+    let is_lying_object = r.bool()?;
+    let animate_always = r.bool()?;
+    let mini_map = r.bool()?;
+    let is_lens_help = r.bool()?;
+    let is_full_ground = r.bool()?;
+    let ignore_look = r.bool()?;
+    let cloth = r.bool()?;
+    let is_market_item = r.bool()?;
+    let has_default_action = r.bool()?;
+    let wrappable = r.bool()?;
+    let unwrappable = r.bool()?;
+    let usable = r.bool()?;
+    let top_effect = r.bool()?;
+    let has_bones = r.bool()?;
+
+    let ground_speed = r.u16()?;
+    let max_text_length = r.u16()?;
+    let light_level = r.u16()?;
+    let light_color = r.u16()?;
+    let offset_x = r.i16()?;
+    let offset_y = r.i16()?;
+    let elevation = r.u16()?;
+    let mini_map_color = r.u16()?;
+    let lens_help = r.u16()?;
+    let cloth_slot = r.u16()?;
+    let market_category = r.u16()?;
+    let market_trade_as = r.u16()?;
+    let market_show_as = r.u16()?;
+    let market_restrict_profession = r.u16()?;
+    let market_restrict_level = r.u16()?;
+    let default_action = r.u16()?;
+    let animation_mode = r.u8()?;
+    let loop_count = r.i32()?;
+    let start_frame = r.i8()?;
+
+    let market_name = r.string()?;
+
+    let bones_offset_x = read_i16_vec_u8len(r)?;
+    let bones_offset_y = read_i16_vec_u8len(r)?;
+
+    let frame_durations = read_frame_durations(r)?;
+    let sprite_index = read_u32_vec(r)?;
+
+    let fg_count = r.u8()?;
+    let frame_groups_data = if fg_count == 0 {
+        None
+    } else {
+        let mut v = Vec::with_capacity(fg_count as usize);
+        for _ in 0..fg_count {
+            v.push(read_frame_group(r)?);
+        }
+        Some(v)
+    };
+
+    Ok(ThingType {
+        id,
+        category: category.to_string(),
+        width,
+        height,
+        exact_size,
+        layers,
+        pattern_x,
+        pattern_y,
+        pattern_z,
+        frames,
+        sprite_index,
+        frame_groups_data,
+        is_ground,
+        ground_speed,
+        is_ground_border,
+        is_on_bottom,
+        is_on_top,
+        is_container,
+        stackable,
+        force_use,
+        multi_use,
+        has_charges,
+        writable,
+        writable_once,
+        max_text_length,
+        is_fluid_container,
+        is_fluid,
+        is_unpassable,
+        is_unmoveable,
+        block_missile,
+        block_pathfind,
+        no_move_animation,
+        pickupable,
+        hangable,
+        is_vertical,
+        is_horizontal,
+        rotatable,
+        has_light,
+        light_level,
+        light_color,
+        dont_hide,
+        floor_change,
+        is_translucent,
+        has_offset,
+        offset_x,
+        offset_y,
+        has_elevation,
+        elevation,
+        is_lying_object,
+        animate_always,
+        mini_map,
+        mini_map_color,
+        is_lens_help,
+        lens_help,
+        is_full_ground,
+        ignore_look,
+        cloth,
+        cloth_slot,
+        is_market_item,
+        market_name,
+        market_category,
+        market_trade_as,
+        market_show_as,
+        market_restrict_profession,
+        market_restrict_level,
+        has_default_action,
+        default_action,
+        usable,
+        wrappable,
+        unwrappable,
+        top_effect,
+        has_bones,
+        bones_offset_x,
+        bones_offset_y,
+        is_animation: false,
+        animation_mode,
+        loop_count,
+        start_frame,
+        frame_durations,
+    })
+}
+
+fn read_things(r: &mut Reader, category: &str) -> Result<Vec<ThingType>, String> {
+    let n = r.u32()? as usize;
+    r.need(n)?;
+    let mut v = Vec::with_capacity(n);
+    for _ in 0..n {
+        v.push(read_thing(r, category)?);
+    }
+    Ok(v)
+}
+
+pub fn write_dat_from_buffer(buffer: &[u8]) -> Result<(), String> {
+    let mut r = Reader::new(buffer);
+
+    let signature = r.u32()?;
+    let version = r.u32()?;
+    let extended = r.bool()?;
+    let frame_durations = r.bool()?;
+    let items_min_id = r.u16()?;
+    let items_max_id = r.u16()?;
+    let outfits_min_id = r.u16()?;
+    let outfits_max_id = r.u16()?;
+    let effects_min_id = r.u16()?;
+    let effects_max_id = r.u16()?;
+    let missiles_min_id = r.u16()?;
+    let missiles_max_id = r.u16()?;
+    let path = r.string()?;
+
+    let items = read_things(&mut r, "item")?;
+    let outfits = read_things(&mut r, "outfit")?;
+    let effects = read_things(&mut r, "effect")?;
+    let missiles = read_things(&mut r, "missile")?;
+
+    write_dat_file(
+        &path,
+        signature,
+        version,
+        extended,
+        frame_durations,
+        items_min_id,
+        items_max_id,
+        outfits_min_id,
+        outfits_max_id,
+        effects_min_id,
+        effects_max_id,
+        missiles_min_id,
+        missiles_max_id,
+        items,
+        outfits,
+        effects,
+        missiles,
+    )
 }

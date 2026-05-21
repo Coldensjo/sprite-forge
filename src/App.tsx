@@ -5,6 +5,7 @@ import { Toaster as Sonner } from '@/components/ui/sonner';
 import { DragDropProvider } from '@/contexts/DragDropContext';
 import { Route, Routes, BrowserRouter } from 'react-router-dom';
 import { TibiaDataProvider } from '@/contexts/TibiaDataContext';
+import { ErrorDialogProvider } from '@/contexts/ErrorDialogContext';
 import { PanelSettingsProvider } from '@/contexts/PanelSettingsContext';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
@@ -17,21 +18,22 @@ const App = () => (
 	<QueryClientProvider client={queryClient}>
 		<ThemeProvider>
 			<TooltipProvider>
-				<TibiaDataProvider>
-					<PanelSettingsProvider>
-						<DragDropProvider>
-							<Toaster />
-							<Sonner />
-							<BrowserRouter>
-								<Routes>
-									<Route path="/" element={<Index />} />
-									{/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-									<Route path="*" element={<NotFound />} />
-								</Routes>
-							</BrowserRouter>
-						</DragDropProvider>
-					</PanelSettingsProvider>
-				</TibiaDataProvider>
+				<ErrorDialogProvider>
+					<TibiaDataProvider>
+						<PanelSettingsProvider>
+							<DragDropProvider>
+								<Toaster />
+								<Sonner />
+								<BrowserRouter>
+									<Routes>
+										<Route path="/" element={<Index />} />
+										<Route path="*" element={<NotFound />} />
+									</Routes>
+								</BrowserRouter>
+							</DragDropProvider>
+						</PanelSettingsProvider>
+					</TibiaDataProvider>
+				</ErrorDialogProvider>
 			</TooltipProvider>
 		</ThemeProvider>
 	</QueryClientProvider>

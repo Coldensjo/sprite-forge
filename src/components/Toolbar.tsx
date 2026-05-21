@@ -2,9 +2,11 @@ import { cn } from '@/lib/utils';
 import { join } from '@tauri-apps/api/path';
 import { useState, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
+import { errorToString } from '@/lib/errorMessage';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useTibiaData } from '@/contexts/TibiaDataContext';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
+import { useErrorDialog } from '@/contexts/ErrorDialogContext';
 import { usePanelSettings } from '@/contexts/PanelSettingsContext';
 import { loadTibiaData, type ThingType, optimizeSprites } from '@/lib/tibia';
 import {
@@ -38,6 +40,7 @@ export const Toolbar = () => {
 	const { data, setData, setError, isLoading, setLoading, compileFiles, loadingProgress, hasModifiedItems, notifyDataChanged } =
 		useTibiaData();
 	const { settings, togglePanel } = usePanelSettings();
+	const { showError } = useErrorDialog();
 	const { toast } = useToast();
 	const [folderDialogOpen, setFolderDialogOpen] = useState(false);
 	const [assetDialogOpen, setAssetDialogOpen] = useState(false);
@@ -274,7 +277,7 @@ export const Toolbar = () => {
 				description: 'Files have been compiled and a version was created.'
 			});
 		} catch (err) {
-			const errorMessage = err instanceof Error ? err.message : 'Failed to compile files';
+			const errorMessage = errorToString(err);
 			console.error('Compile error details:', err);
 
 			// Check for permission errors
@@ -308,12 +311,7 @@ export const Toolbar = () => {
 						'File is too large or system ran out of memory. Try closing other applications or compiling fewer changes at once.'
 				});
 			} else {
-				toast({
-					duration: 7000,
-					variant: 'destructive',
-					title: 'Compile failed',
-					description: errorMessage || 'An unknown error occurred during compilation. Check the console for details.'
-				});
+				showError('Compile failed', err);
 			}
 		}
 	};

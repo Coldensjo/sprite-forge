@@ -1,7 +1,7 @@
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{Write, Read, Seek, SeekFrom};
+use std::io::{BufReader, BufWriter, Write, Read, Seek, SeekFrom};
 
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -253,6 +253,7 @@ pub fn copy_spr_with_modifications(
     dest_path: &str,
     extended: bool,
     signature: u32,
+    target_count: u32,
     modifications: Vec<SpriteWrite>,
 ) -> Result<(), String> {
     // If source and dest are the same, use a temp file
@@ -263,9 +264,9 @@ pub fn copy_spr_with_modifications(
         dest_path.to_string()
     };
     
-    // Open source file for reading
-    let mut source = File::open(source_path)
-        .map_err(|e| format!("Failed to open source SPR file: {}", e))?;
+    let mut source = BufReader::new(
+        File::open(source_path).map_err(|e| format!("Failed to open source SPR file: {}", e))?,
+    );
     
     // Read source header
     let header_size = if extended { 8 } else { 6 };
@@ -298,6 +299,12 @@ pub fn copy_spr_with_modifications(
         source_addresses.push(u32::from_le_bytes(addr_buf));
     }
     
+    let source_len = source
+        .get_ref()
+        .metadata()
+        .map_err(|e| format!("Failed to stat source SPR file: {}", e))?
+        .len();
+
     // Create modifications map for quick lookup
     let mut mods_map: std::collections::HashMap<u32, &SpriteWrite> = std::collections::HashMap::new();
     for sprite in &modifications {
@@ -305,38 +312,44 @@ pub fn copy_spr_with_modifications(
     }
     
     // Create destination file (use temp path if same as source)
-    let mut dest = File::create(&temp_path)
-        .map_err(|e| format!("Failed to create dest SPR file: {}", e))?;
+    let mut dest = BufWriter::new(
+        File::create(&temp_path).map_err(|e| format!("Failed to create dest SPR file: {}", e))?,
+    );
     
     // Write header
     dest.write_all(&signature.to_le_bytes())
         .map_err(|e| format!("Failed to write signature: {}", e))?;
     
     if extended {
-        dest.write_all(&sprite_count.to_le_bytes())
+        dest.write_all(&target_count.to_le_bytes())
             .map_err(|e| format!("Failed to write sprite count: {}", e))?;
     } else {
-        if sprite_count > 0xFFFE {
+        if target_count > 0xFFFE {
             return Err("Sprite count exceeds non-extended format limit (65534); 0xFFFF is reserved".to_string());
         }
-        dest.write_all(&(sprite_count as u16).to_le_bytes())
+        dest.write_all(&(target_count as u16).to_le_bytes())
             .map_err(|e| format!("Failed to write sprite count: {}", e))?;
     }
-    
+
     // Reserve space for address table
-    let address_table_size = sprite_count * 4;
+    let address_table_size = target_count * 4;
     let data_start = header_size + address_table_size as u64;
     let zero_addresses = vec![0u8; address_table_size as usize];
     dest.write_all(&zero_addresses)
         .map_err(|e| format!("Failed to write address table placeholder: {}", e))?;
-    
+
     // Write sprite data
-    let mut new_addresses = Vec::with_capacity(sprite_count as usize);
+    let mut new_addresses = Vec::with_capacity(target_count as usize);
     let mut current_position = data_start;
-    
-    for sprite_id in 1..=sprite_count {
-        let source_address = source_addresses[(sprite_id - 1) as usize];
-        
+    let mut bad_addresses = 0u32;
+
+    for sprite_id in 1..=target_count {
+        let source_address = if sprite_id <= sprite_count {
+            source_addresses[(sprite_id - 1) as usize]
+        } else {
+            0
+        };
+
         // Check if we have a modification for this sprite
         if let Some(mod_sprite) = mods_map.get(&sprite_id) {
             if mod_sprite.is_empty {
@@ -362,43 +375,60 @@ pub fn copy_spr_with_modifications(
             // Empty sprite in source
             new_addresses.push(0u32);
         } else {
-            // Copy sprite from source
-            new_addresses.push(current_position as u32);
-            
+            if source_address as u64 + 5 > source_len {
+                bad_addresses += 1;
+                new_addresses.push(0u32);
+                continue;
+            }
+
             // Read sprite data from source
             source.seek(SeekFrom::Start(source_address as u64))
-                .map_err(|e| format!("Failed to seek to source sprite: {}", e))?;
-            
+                .map_err(|e| format!("Failed to seek to source sprite {}: {}", sprite_id, e))?;
+
             // Read RGB header (3 bytes)
             let mut rgb = [0u8; 3];
             source.read_exact(&mut rgb)
-                .map_err(|e| format!("Failed to read RGB header: {}", e))?;
-            
+                .map_err(|e| format!("Failed to read RGB header for sprite {} at {}: {}", sprite_id, source_address, e))?;
+
             // Read length
             let mut len_buf = [0u8; 2];
             source.read_exact(&mut len_buf)
-                .map_err(|e| format!("Failed to read sprite length: {}", e))?;
+                .map_err(|e| format!("Failed to read length for sprite {} at {}: {}", sprite_id, source_address, e))?;
             let length = u16::from_le_bytes(len_buf) as usize;
-            
+
+            if source_address as u64 + 5 + length as u64 > source_len {
+                bad_addresses += 1;
+                new_addresses.push(0u32);
+                continue;
+            }
+
             // Read pixel data
             let mut data = vec![0u8; length];
             if length > 0 {
                 source.read_exact(&mut data)
-                    .map_err(|e| format!("Failed to read sprite data: {}", e))?;
+                    .map_err(|e| format!("Failed to read data for sprite {} at {}: {}", sprite_id, source_address, e))?;
             }
-            
+
             // Write to destination
+            new_addresses.push(current_position as u32);
             dest.write_all(&rgb)
                 .map_err(|e| format!("Failed to write RGB header: {}", e))?;
             dest.write_all(&len_buf)
                 .map_err(|e| format!("Failed to write sprite length: {}", e))?;
             dest.write_all(&data)
                 .map_err(|e| format!("Failed to write sprite data: {}", e))?;
-            
+
             current_position += 3 + 2 + length as u64;
         }
     }
-    
+
+    if bad_addresses > 0 {
+        eprintln!(
+            "WARNING: {} source sprite(s) in '{}' had out-of-range/corrupt addresses and were written empty (header claims {} sprites, file is {} bytes)",
+            bad_addresses, source_path, sprite_count, source_len
+        );
+    }
+
     // Write address table
     dest.seek(SeekFrom::Start(header_size))
         .map_err(|e| format!("Failed to seek to address table: {}", e))?;
