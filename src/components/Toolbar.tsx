@@ -27,13 +27,13 @@ import {
 
 import { Button } from './ui/button';
 import { LoadingDialog } from './LoadingDialog';
+import { LoadOptions } from './FolderSelectDialog';
 import { FolderSelectDialog } from './FolderSelectDialog';
 import { ThemeSettingsDialog } from './ThemeSettingsDialog';
 import { VersionHistoryDialog } from './VersionHistoryDialog';
 import { SpriteOptimizerDialog } from './SpriteOptimizerDialog';
 import { SceneEditorDialog } from './SceneEditor/SceneEditorDialog';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
-import { LoadOptions, OpenAssetFilesDialog } from './OpenAssetFilesDialog';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from './ui/tooltip';
 
 export const Toolbar = () => {
@@ -43,8 +43,6 @@ export const Toolbar = () => {
 	const { showError } = useErrorDialog();
 	const { toast } = useToast();
 	const [folderDialogOpen, setFolderDialogOpen] = useState(false);
-	const [assetDialogOpen, setAssetDialogOpen] = useState(false);
-	const [selectedFolderPath, setSelectedFolderPath] = useState('');
 	const [themeDialogOpen, setThemeDialogOpen] = useState(false);
 	const [versionHistoryOpen, setVersionHistoryOpen] = useState(false);
 	const [optimizerOpen, setOptimizerOpen] = useState(false);
@@ -192,23 +190,8 @@ export const Toolbar = () => {
 		setFolderDialogOpen(true);
 	};
 
-	// Handler when folder is selected from FolderSelectDialog (Step 1)
-	const handleFolderChosen = (path: string) => {
-		setSelectedFolderPath(path);
-		setFolderDialogOpen(false);
-		setAssetDialogOpen(true); // Open Step 2 modal
-	};
-
-	// Handler when user clicks Browse in OpenAssetFilesDialog
-	const handleBrowseFromAssetDialog = () => {
-		setAssetDialogOpen(false);
-		setFolderDialogOpen(true);
-	};
-
-	// Handler when Load is clicked in OpenAssetFilesDialog (Step 2)
 	const handleLoadWithOptions = async (options: LoadOptions) => {
-		setAssetDialogOpen(false);
-		// Use existing load logic with transparency option
+		setFolderDialogOpen(false);
 		await handleFolderSelect(options.folderPath, options.transparency);
 	};
 
@@ -646,16 +629,9 @@ export const Toolbar = () => {
 
 			<FolderSelectDialog
 				open={folderDialogOpen}
-				onOpenChange={setFolderDialogOpen}
-				onFolderSelected={handleFolderChosen}
-				title="Select folder containing Tibia.dat and Tibia.spr"
-			/>
-			<OpenAssetFilesDialog
-				open={assetDialogOpen}
 				onLoad={handleLoadWithOptions}
-				initialPath={selectedFolderPath}
-				onOpenChange={setAssetDialogOpen}
-				onBrowse={handleBrowseFromAssetDialog}
+				onOpenChange={setFolderDialogOpen}
+				title="Select folder containing Tibia.dat and Tibia.spr"
 			/>
 			<ThemeSettingsDialog open={themeDialogOpen} onOpenChange={setThemeDialogOpen} />
 			<VersionHistoryDialog open={versionHistoryOpen} onOpenChange={setVersionHistoryOpen} />

@@ -1,13 +1,27 @@
+import { join } from '@tauri-apps/api/path';
 import { invoke } from '@tauri-apps/api/core';
 import React, { useRef, useState, useEffect } from 'react';
 import {
+	readOtfiFile,
+	readDatHeader,
+	readSprHeader,
+	type OtfiData,
+	type DatHeader,
+	type SprHeader,
+	type ClientVersion
+} from '@/lib/tibia';
+import {
 	X,
+	Info,
 	Home,
 	Star,
+	Image,
 	Folder,
-	Search,
+	Loader2,
 	Monitor,
+	Package,
 	ArrowUp,
+	Settings,
 	Download,
 	Computer,
 	FileText,
@@ -15,10 +29,22 @@ import {
 	HardDrive,
 	ArrowLeft,
 	ArrowRight,
+	AlertCircle,
 	ChevronDown,
 	ChevronRight,
 	CheckCircle2
 } from 'lucide-react';
+
+import { Label } from './ui/label';
+import { Switch } from './ui/switch';
+
+export interface LoadOptions {
+	extended: boolean;
+	folderPath: string;
+	frameGroups: boolean;
+	transparency: boolean;
+	improvedAnimations: boolean;
+}
 
 interface DirEntry {
 	name: string;
@@ -47,8 +73,17 @@ interface FolderSelectDialogProps {
 	open: boolean;
 	title?: string;
 	onOpenChange: (open: boolean) => void;
+	onLoad?: (options: LoadOptions) => void;
 	onFolderSelected?: (path: string) => void;
 	onSelect?: (path: string, transparency: boolean) => void;
+}
+
+interface AssetInfo {
+	error: null | string;
+	otfi: null | OtfiData;
+	datHeader: null | DatHeader;
+	sprHeader: null | SprHeader;
+	version: null | ClientVersion;
 }
 
 const EXIT_MS = 160;
@@ -68,7 +103,12 @@ function pathSegments(p: string): string[] {
 }
 
 function pathsEqual(a: string, b: string): boolean {
-	return a.replace(/[\\/]+$/, '').toLowerCase() === b.replace(/[\\/]+$/, '').toLowerCase();
+	const norm = (s: string) =>
+		s
+			.replace(/[\\/]+$/, '')
+			.replace(/[\\/]+/g, '/')
+			.toLowerCase();
+	return norm(a) === norm(b);
 }
 
 function driveLabel(letter: string, drives: DriveInfo[]): string {
@@ -113,12 +153,14 @@ function entryType(entry: DirEntry): string {
 
 export const FolderSelectDialog = ({
 	open,
+	onLoad,
 	onSelect,
 	onOpenChange,
 	onFolderSelected,
 	title = 'Select Folder'
 }: FolderSelectDialogProps) => {
-	const pathOnlyMode = !!onFolderSelected && !onSelect;
+	const assetMode = !!onLoad;
+	const pathOnlyMode = !assetMode && !!onFolderSelected && !onSelect;
 
 	const [mounted, setMounted] = useState(open);
 	const [drives, setDrives] = useState<DriveInfo[]>([]);
@@ -133,9 +175,20 @@ export const FolderSelectDialog = ({
 	const [nameInput, setNameInput] = useState('');
 	const [refreshTick, setRefreshTick] = useState(0);
 	const [computerExpanded, setComputerExpanded] = useState(true);
+
 	const [hasTibiaFiles, setHasTibiaFiles] = useState(false);
+	const [assetLoading, setAssetLoading] = useState(false);
+	const [assetInfo, setAssetInfo] = useState<AssetInfo>({
+		otfi: null,
+		error: null,
+		version: null,
+		datHeader: null,
+		sprHeader: null
+	});
+	const [extended, setExtended] = useState(false);
 	const [transparency, setTransparency] = useState(false);
-	const [searchQuery, setSearchQuery] = useState('');
+	const [improvedAnimations, setImprovedAnimations] = useState(false);
+	const [frameGroups, setFrameGroups] = useState(false);
 
 	const path = history[historyIndex];
 	const currentPathString = pathString(path);
@@ -258,6 +311,65 @@ export const FolderSelectDialog = ({
 		};
 	}, [path, drives, refreshTick]);
 
+	useEffect(() => {
+		if (!assetMode || !hasTibiaFiles || !currentPathString) {
+			setAssetInfo({ otfi: null, error: null, version: null, datHeader: null, sprHeader: null });
+			setAssetLoading(false);
+			return;
+		}
+
+		let cancelled = false;
+		setAssetLoading(true);
+		setAssetInfo({ otfi: null, error: null, version: null, datHeader: null, sprHeader: null });
+
+		(async () => {
+			try {
+				const datPath = await join(currentPathString, 'Tibia.dat');
+				const sprPath = await join(currentPathString, 'Tibia.spr');
+				const [datHeader, sprHeaderRaw, otfi] = await Promise.all([
+					readDatHeader(datPath),
+					readSprHeader(sprPath),
+					readOtfiFile(currentPathString)
+				]);
+				if (cancelled) return;
+				const sprHeader: SprHeader = {
+					extended: sprHeaderRaw.extended,
+					signature: sprHeaderRaw.signature,
+					spriteCount: sprHeaderRaw.spriteCount ?? (sprHeaderRaw as any).sprite_count
+				};
+				const version = datHeader.version;
+				setAssetInfo({ otfi, version, datHeader, sprHeader, error: null });
+				if (otfi) {
+					setExtended(otfi.extended);
+					setTransparency(otfi.transparency);
+					setImprovedAnimations(otfi.frameDurations);
+					setFrameGroups(otfi.frameGroups);
+				} else if (version) {
+					setExtended(version.supportsExtended);
+					setTransparency(version.supportsAlphaChannel);
+					setImprovedAnimations(version.supportsFrameDurations);
+					setFrameGroups(version.supportsFrameDurations);
+				}
+			} catch (err) {
+				if (!cancelled) {
+					setAssetInfo({
+						otfi: null,
+						version: null,
+						datHeader: null,
+						sprHeader: null,
+						error: err instanceof Error ? err.message : 'Failed to read file headers'
+					});
+				}
+			} finally {
+				if (!cancelled) setAssetLoading(false);
+			}
+		})();
+
+		return () => {
+			cancelled = true;
+		};
+	}, [assetMode, hasTibiaFiles, currentPathString]);
+
 	const navigateTo = (next: string[]) => {
 		const trimmed = history.slice(0, historyIndex + 1);
 		trimmed.push(next);
@@ -309,13 +421,17 @@ export const FolderSelectDialog = ({
 		} catch {
 			/* */
 		}
-		if (pathOnlyMode && onFolderSelected) {
+		if (assetMode && onLoad) {
+			onLoad({ extended, frameGroups, transparency, improvedAnimations, folderPath: target });
+		} else if (pathOnlyMode && onFolderSelected) {
 			onFolderSelected(target);
 		} else if (onSelect) {
 			onSelect(target, transparency);
 		}
 		onOpenChange(false);
 	};
+
+	const canLoad = assetMode && hasTibiaFiles && !!assetInfo.datHeader && !!assetInfo.sprHeader && !assetLoading;
 
 	const saveFavorites = async (next: FavoriteFolder[]) => {
 		setFavorites(next);
@@ -346,10 +462,6 @@ export const FolderSelectDialog = ({
 	if (!mounted) return null;
 	const closing = !open;
 
-	const visibleEntries = searchQuery.trim()
-		? entries.filter((e) => e.name.toLowerCase().includes(searchQuery.trim().toLowerCase()))
-		: entries;
-
 	return (
 		<div onMouseDown={() => onOpenChange(false)} className={'fb-backdrop' + (closing ? ' fb-closing' : '')}>
 			<div
@@ -373,11 +485,8 @@ export const FolderSelectDialog = ({
 					onBack={goBack}
 					onForward={goForward}
 					canUp={path.length > 0}
-					searchQuery={searchQuery}
 					canBack={historyIndex > 0}
 					canFavorite={path.length > 0}
-					hasTibiaFiles={hasTibiaFiles}
-					onSearchChange={setSearchQuery}
 					isFavorited={isCurrentFavorited}
 					onCrumb={(i) => navigateTo(path.slice(0, i))}
 					canForward={historyIndex < history.length - 1}
@@ -397,17 +506,32 @@ export const FolderSelectDialog = ({
 						onRemoveFavorite={(p) => toggleFavorite(p)}
 						onToggleComputer={() => setComputerExpanded((v) => !v)}
 					/>
-					<FileList
-						error={error}
-						loading={loading}
-						currentPath={path}
-						selected={selected}
-						favorites={favorites}
-						onRowClick={onRowClick}
-						entries={visibleEntries}
-						onRowDoubleClick={onRowDoubleClick}
-						onToggleFavorite={(p) => toggleFavorite(p)}
-					/>
+					{assetMode && hasTibiaFiles ? (
+						<TibiaAssetPanel
+							info={assetInfo}
+							extended={extended}
+							loading={assetLoading}
+							frameGroups={frameGroups}
+							transparency={transparency}
+							onExtendedChange={setExtended}
+							onFrameGroupsChange={setFrameGroups}
+							onTransparencyChange={setTransparency}
+							improvedAnimations={improvedAnimations}
+							onImprovedAnimationsChange={setImprovedAnimations}
+						/>
+					) : (
+						<FileList
+							error={error}
+							loading={loading}
+							entries={entries}
+							currentPath={path}
+							selected={selected}
+							favorites={favorites}
+							onRowClick={onRowClick}
+							onRowDoubleClick={onRowDoubleClick}
+							onToggleFavorite={(p) => toggleFavorite(p)}
+						/>
+					)}
 				</div>
 
 				<footer className="fb-footer">
@@ -428,18 +552,28 @@ export const FolderSelectDialog = ({
 							</button>
 						</div>
 					</label>
-					<button type="button" className="fb-filter">
-						<span>All files (*.*)</span>
-						<ChevronDown size={12} />
-					</button>
-					<div className="fb-footer-row2">
-						{!pathOnlyMode && (
-							<label className="fb-transparency">
-								<input type="checkbox" checked={transparency} onChange={(e) => setTransparency(e.target.checked)} />
-								<span>Enable Alpha Channel</span>
-							</label>
-						)}
-						<div className="fb-footer-buttons">
+					{!pathOnlyMode && !assetMode && (
+						<label className="fb-transparency">
+							<input type="checkbox" checked={transparency} onChange={(e) => setTransparency(e.target.checked)} />
+							<span>Enable Alpha Channel</span>
+						</label>
+					)}
+					<div className="fb-footer-buttons">
+						<button type="button" className="fb-btn" onClick={() => onOpenChange(false)}>
+							Cancel
+						</button>
+						{assetMode ? (
+							<button type="button" disabled={!canLoad} className="fb-btn fb-btn-primary" onClick={() => void confirmCurrent()}>
+								{assetLoading ? (
+									<span className="fb-btn-loading">
+										<Loader2 size={14} className="fb-spin" />
+										Reading…
+									</span>
+								) : (
+									'Load'
+								)}
+							</button>
+						) : (
 							<button
 								type="button"
 								disabled={!currentPathString}
@@ -448,10 +582,7 @@ export const FolderSelectDialog = ({
 							>
 								Select Folder
 							</button>
-							<button type="button" className="fb-btn" onClick={() => onOpenChange(false)}>
-								Cancel
-							</button>
-						</div>
+						)}
 					</div>
 				</footer>
 			</div>
@@ -469,15 +600,12 @@ interface ToolbarProps {
 	onBack: () => void;
 	drives: DriveInfo[];
 	canForward: boolean;
-	searchQuery: string;
 	isFavorited: boolean;
 	canFavorite: boolean;
 	onForward: () => void;
 	onRefresh: () => void;
-	hasTibiaFiles: boolean;
 	onCrumb: (i: number) => void;
 	onToggleFavorite: () => void;
-	onSearchChange: (q: string) => void;
 }
 
 function Toolbar({
@@ -493,9 +621,6 @@ function Toolbar({
 	canForward,
 	isFavorited,
 	canFavorite,
-	searchQuery,
-	hasTibiaFiles,
-	onSearchChange,
 	onToggleFavorite
 }: ToolbarProps) {
 	return (
@@ -534,13 +659,6 @@ function Toolbar({
 				</button>
 			</div>
 
-			{hasTibiaFiles && (
-				<span className="fb-tibia-badge">
-					<CheckCircle2 size={14} />
-					Tibia.dat & Tibia.spr
-				</span>
-			)}
-
 			<button
 				type="button"
 				disabled={!canFavorite}
@@ -555,17 +673,6 @@ function Toolbar({
 			<button type="button" onClick={onRefresh} aria-label="Refresh" className="fb-icon-button">
 				<RefreshCw size={14} />
 			</button>
-
-			<div className="fb-search">
-				<Search size={15} />
-				<input
-					type="search"
-					value={searchQuery}
-					className="fb-search-input"
-					onChange={(e) => onSearchChange(e.target.value)}
-					placeholder={'Search ' + (path[path.length - 1] ?? 'This PC')}
-				/>
-			</div>
 		</div>
 	);
 }
@@ -849,6 +956,189 @@ function FileList({
 						);
 					})
 				)}
+			</div>
+		</div>
+	);
+}
+
+/* ---------- Tibia asset panel ---------- */
+
+interface TibiaAssetPanelProps {
+	info: AssetInfo;
+	loading: boolean;
+	extended: boolean;
+	frameGroups: boolean;
+	transparency: boolean;
+	improvedAnimations: boolean;
+	onExtendedChange: (v: boolean) => void;
+	onFrameGroupsChange: (v: boolean) => void;
+	onTransparencyChange: (v: boolean) => void;
+	onImprovedAnimationsChange: (v: boolean) => void;
+}
+
+function formatSignature(sig: number): string {
+	return sig.toString(16).toUpperCase();
+}
+
+function TibiaAssetPanel({
+	info,
+	loading,
+	extended,
+	frameGroups,
+	transparency,
+	onExtendedChange,
+	improvedAnimations,
+	onFrameGroupsChange,
+	onTransparencyChange,
+	onImprovedAnimationsChange
+}: TibiaAssetPanelProps) {
+	return (
+		<div className="fb-asset-panel">
+			<div className="fb-asset-header">
+				<Package size={15} className="fb-asset-header-icon" />
+				<h3 className="fb-asset-header-title">Asset Information</h3>
+			</div>
+			<div className="fb-asset-row">
+				<div className="fb-asset-field">
+					<Label className="fb-asset-label">
+						<Info size={13} className="fb-asset-label-icon" />
+						Version
+					</Label>
+					<div className="fb-asset-value">
+						{loading ? (
+							<span className="fb-asset-value-muted">
+								<Loader2 size={12} className="fb-spin" />
+								Detecting…
+							</span>
+						) : info.version ? (
+							<span className="fb-asset-value-ok">
+								<CheckCircle2 size={13} />
+								{info.version.label}
+							</span>
+						) : (
+							<span className="fb-asset-value-muted">Unknown</span>
+						)}
+					</div>
+				</div>
+				<div className="fb-asset-field">
+					<Label className="fb-asset-label">Sprite Dimension</Label>
+					<div className="fb-asset-value">
+						<span>32×32</span>
+					</div>
+				</div>
+			</div>
+
+			<div className="fb-asset-field">
+				<Label className="fb-asset-label">
+					<Settings size={13} className="fb-asset-label-icon" />
+					Options
+					{!loading && info.otfi && (
+						<span className="fb-asset-otfi-badge">
+							<FileText size={11} />
+							from OTFI
+						</span>
+					)}
+				</Label>
+				<div className="fb-asset-options">
+					<label className="fb-asset-toggle">
+						<span>Extended</span>
+						<Switch checked={extended} disabled={loading} className="scale-75" onCheckedChange={onExtendedChange} />
+					</label>
+					<label className="fb-asset-toggle">
+						<span>Transparency</span>
+						<Switch disabled={loading} className="scale-75" checked={transparency} onCheckedChange={onTransparencyChange} />
+					</label>
+					<label className="fb-asset-toggle">
+						<span>Improved animations</span>
+						<Switch
+							disabled={loading}
+							className="scale-75"
+							checked={improvedAnimations}
+							onCheckedChange={onImprovedAnimationsChange}
+						/>
+					</label>
+					<label className="fb-asset-toggle">
+						<span>Frame Groups</span>
+						<Switch disabled={loading} className="scale-75" checked={frameGroups} onCheckedChange={onFrameGroupsChange} />
+					</label>
+				</div>
+			</div>
+
+			<div className="fb-asset-row">
+				<div className="fb-asset-card">
+					<Label className="fb-asset-label fb-asset-card-label">
+						<span className="fb-asset-card-title">
+							<Package size={13} className="fb-asset-label-icon" />
+							DAT File
+						</span>
+						{!loading && info.datHeader && (
+							<span className="fb-asset-value-ok">
+								<CheckCircle2 size={12} />
+								Valid
+							</span>
+						)}
+					</Label>
+					<div className="fb-asset-card-body">
+						{loading ? (
+							<span className="fb-asset-value-muted">
+								<Loader2 size={13} className="fb-spin" />
+								Reading…
+							</span>
+						) : info.datHeader ? (
+							<dl className="fb-asset-stats">
+								<dt>Signature:</dt>
+								<dd className="fb-asset-stat-primary font-mono">{formatSignature(info.datHeader.signature)}</dd>
+								<dt>Items:</dt>
+								<dd className="font-mono">{info.datHeader.itemsCount.toLocaleString()}</dd>
+								<dt>Outfits:</dt>
+								<dd className="font-mono">{info.datHeader.outfitsCount.toLocaleString()}</dd>
+								<dt>Effects:</dt>
+								<dd className="font-mono">{info.datHeader.effectsCount.toLocaleString()}</dd>
+								<dt>Missiles:</dt>
+								<dd className="font-mono">{info.datHeader.missilesCount.toLocaleString()}</dd>
+							</dl>
+						) : (
+							<span className="fb-asset-value-error">
+								<AlertCircle size={13} />
+								{info.error || 'Not found'}
+							</span>
+						)}
+					</div>
+				</div>
+				<div className="fb-asset-card">
+					<Label className="fb-asset-label fb-asset-card-label">
+						<span className="fb-asset-card-title">
+							<Image size={13} className="fb-asset-label-icon" />
+							SPR File
+						</span>
+						{!loading && info.sprHeader && (
+							<span className="fb-asset-value-ok">
+								<CheckCircle2 size={12} />
+								Valid
+							</span>
+						)}
+					</Label>
+					<div className="fb-asset-card-body">
+						{loading ? (
+							<span className="fb-asset-value-muted">
+								<Loader2 size={13} className="fb-spin" />
+								Reading…
+							</span>
+						) : info.sprHeader ? (
+							<dl className="fb-asset-stats">
+								<dt>Signature:</dt>
+								<dd className="fb-asset-stat-primary font-mono">{formatSignature(info.sprHeader.signature)}</dd>
+								<dt>Sprites:</dt>
+								<dd className="font-mono">{info.sprHeader.spriteCount.toLocaleString()}</dd>
+							</dl>
+						) : (
+							<span className="fb-asset-value-error">
+								<AlertCircle size={13} />
+								{info.error || 'Not found'}
+							</span>
+						)}
+					</div>
+				</div>
 			</div>
 		</div>
 	);
