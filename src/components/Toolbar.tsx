@@ -13,6 +13,7 @@ import {
 	X,
 	Eye,
 	List,
+	Copy,
 	Info,
 	Minus,
 	Square,
@@ -52,6 +53,21 @@ export const Toolbar = () => {
 		null
 	);
 	const [sceneEditorOpen, setSceneEditorOpen] = useState(false);
+	const [isMaximized, setIsMaximized] = useState(false);
+
+	useEffect(() => {
+		const appWindow = getCurrentWindow();
+		let unlisten: undefined | (() => void);
+		void appWindow.isMaximized().then(setIsMaximized);
+		void appWindow
+			.onResized(() => {
+				void appWindow.isMaximized().then(setIsMaximized);
+			})
+			.then((fn) => {
+				unlisten = fn;
+			});
+		return () => unlisten?.();
+	}, []);
 	const [itemToAdd, setItemToAdd] = useState<null | ThingType>(null);
 	const [isMac, setIsMac] = useState(false);
 
@@ -329,34 +345,38 @@ export const Toolbar = () => {
 		}
 
 		return (
-			<div className="ml-2 flex items-center flex-shrink-0">
-				<Button
-					size="icon"
-					variant="ghost"
+			<div className="ml-2 flex items-center flex-shrink-0 -mr-3">
+				<button
+					type="button"
+					aria-label="Minimize"
 					onClick={handleMinimize}
 					onMouseDown={(e) => e.stopPropagation()}
-					className="h-8 w-8 hover:bg-secondary/50"
+					className="h-11 w-11 inline-flex items-center justify-center text-foreground/70 hover:text-foreground hover:bg-foreground/10 transition-colors"
 				>
-					<Minus className="h-4 w-4" />
-				</Button>
-				<Button
-					size="icon"
-					variant="ghost"
+					<Minus strokeWidth={1.5} className="h-4 w-4" />
+				</button>
+				<button
+					type="button"
 					onClick={handleMaximize}
 					onMouseDown={(e) => e.stopPropagation()}
-					className="h-8 w-8 hover:bg-secondary/50"
+					aria-label={isMaximized ? 'Restore' : 'Maximize'}
+					className="h-11 w-11 inline-flex items-center justify-center text-foreground/70 hover:text-foreground hover:bg-foreground/10 transition-colors"
 				>
-					<Square className="h-3.5 w-3.5" />
-				</Button>
-				<Button
-					size="icon"
-					variant="ghost"
+					{isMaximized ? (
+						<Copy strokeWidth={1.5} className="h-3.5 w-3.5 -scale-x-100" />
+					) : (
+						<Square strokeWidth={1.5} className="h-3.5 w-3.5" />
+					)}
+				</button>
+				<button
+					type="button"
+					aria-label="Close"
 					onClick={handleClose}
 					onMouseDown={(e) => e.stopPropagation()}
-					className="h-8 w-8 hover:bg-destructive/20 hover:text-destructive"
+					className="h-11 w-11 inline-flex items-center justify-center text-foreground/70 hover:text-white hover:bg-[#e81123] transition-colors"
 				>
-					<X className="h-4 w-4" />
-				</Button>
+					<X strokeWidth={1.5} className="h-4 w-4" />
+				</button>
 			</div>
 		);
 	};

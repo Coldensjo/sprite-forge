@@ -32,6 +32,30 @@ mod sprite_protocol;
 struct FileBytes(#[serde(with = "serde_bytes")] Vec<u8>);
 
 #[tauri::command]
+#[allow(unused_variables)]
+fn set_window_acrylic(
+    window: tauri::Window,
+    enabled: bool,
+    color: Option<(u8, u8, u8, u8)>,
+) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        use window_vibrancy::{apply_acrylic, clear_acrylic};
+        if enabled {
+            let tint = color.unwrap_or((26, 26, 26, 180));
+            apply_acrylic(&window, Some(tint)).map_err(|e| e.to_string())?;
+        } else {
+            clear_acrylic(&window).map_err(|e| e.to_string())?;
+        }
+        return Ok(());
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err("Acrylic is only supported on Windows".to_string())
+    }
+}
+
+#[tauri::command]
 fn read_file(path: String) -> Result<FileBytes, String> {
     fs::read(&path)
         .map(FileBytes)
@@ -1795,7 +1819,8 @@ tauri::Builder::default()
             optimize_sprites_rust,
             apply_optimization,
             export_object_sheet_rust,
-            import_object_sheet_binary
+            import_object_sheet_binary,
+            set_window_acrylic
         ])
         .setup(move |app| {
             #[cfg(target_os = "macos")]

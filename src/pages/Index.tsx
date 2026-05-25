@@ -1,5 +1,6 @@
 import { Toolbar } from '@/components/Toolbar';
 import { ItemList } from '@/components/ItemList';
+import { useTheme } from '@/contexts/ThemeContext';
 import { SpriteList } from '@/components/SpriteList';
 import { PropertiesPanel } from '@/components/PropertiesPanel';
 import { OpenedItemsPanel } from '@/components/OpenedItemsPanel';
@@ -8,12 +9,14 @@ import { VisualizationPanel } from '@/components/VisualizationPanel';
 
 const Index = () => {
 	const { settings } = usePanelSettings();
+	const { acrylic, isWindows } = useTheme();
 
 	const isMac = navigator.userAgent.includes('Mac');
+	const transparentRoot = (isWindows && acrylic) || isMac;
 
 	return (
 		<div
-			className={`h-screen flex flex-col bg-background ${isMac ? 'rounded-xl overflow-hidden border border-white/10 shadow-2xl' : ''}`}
+			className={`h-screen flex flex-col ${transparentRoot ? 'bg-transparent' : 'bg-background'} ${isMac ? 'rounded-xl overflow-hidden border border-white/10 shadow-2xl' : ''}`}
 		>
 			<Toolbar />
 

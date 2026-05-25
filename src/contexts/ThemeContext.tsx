@@ -1,5 +1,6 @@
 import type { Theme } from '@/lib/themes/types';
 
+import { invoke } from '@tauri-apps/api/core';
 import themesData from '@/lib/themes/themes.json';
 import { defaultTheme } from '@/lib/themes/default';
 import { applyTheme, exportTheme, importTheme, validateTheme } from '@/lib/themes/utils';
@@ -8,10 +9,13 @@ import { useMemo, useState, useEffect, ReactNode, useContext, createContext } fr
 interface ThemeContextType {
 	themes: Theme[];
 	isDark: boolean;
+	acrylic: boolean;
+	isWindows: boolean;
 	currentTheme: Theme;
 	toggleDarkMode: () => void;
 	setTheme: (theme: Theme) => void;
 	exportCurrentTheme: () => string;
+	setAcrylic: (enabled: boolean) => void;
 	setThemeByName: (name: string) => void;
 	importThemeFromJson: (json: string) => void;
 }
@@ -20,8 +24,24 @@ const ThemeContext = createContext<undefined | ThemeContextType>(undefined);
 
 const THEME_STORAGE_KEY = 'sprite-forge-theme';
 const DARK_MODE_STORAGE_KEY = 'sprite-forge-dark-mode';
+const ACRYLIC_STORAGE_KEY = 'sprite-forge-acrylic';
 
 const CUSTOM_THEMES_STORAGE_KEY = 'sprite-forge-custom-themes';
+
+const isWindows = typeof navigator !== 'undefined' && navigator.userAgent.includes('Windows');
+
+const hslStringToRgb = (hsl: string): [number, number, number] => {
+	const parts = hsl.trim().split(/\s+/);
+	const h = parseFloat(parts[0]);
+	const s = parseFloat(parts[1]) / 100;
+	const l = parseFloat(parts[2]) / 100;
+	const a = s * Math.min(l, 1 - l);
+	const f = (n: number) => {
+		const k = (n + h / 30) % 12;
+		return Math.round((l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1))) * 255);
+	};
+	return [f(0), f(8), f(4)];
+};
 
 export const ThemeProvider = ({ children }: { children: ReactNode }) => {
 	const [currentTheme, setCurrentTheme] = useState<Theme>(defaultTheme);
@@ -36,6 +56,10 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
 	const [isDark, setIsDark] = useState<boolean>(() => {
 		const saved = localStorage.getItem(DARK_MODE_STORAGE_KEY);
 		return saved ? JSON.parse(saved) : true;
+	});
+	const [acrylic, setAcrylicState] = useState<boolean>(() => {
+		const saved = localStorage.getItem(ACRYLIC_STORAGE_KEY);
+		return saved ? JSON.parse(saved) : false;
 	});
 
 	const themes = useMemo(() => [...(themesData as Theme[]), ...customThemes], [customThemes]);
@@ -86,6 +110,21 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
 		setIsDark((prev) => !prev);
 	};
 
+	useEffect(() => {
+		document.documentElement.classList.toggle('acrylic', acrylic && isWindows);
+		if (!isWindows) return;
+		const palette = currentTheme.colors[isDark ? 'dark' : 'light'];
+		const [r, g, b] = hslStringToRgb(palette.background);
+		void invoke('set_window_acrylic', { enabled: acrylic, color: [r, g, b, 180] }).catch((err) => {
+			console.error('Failed to toggle acrylic:', err);
+		});
+		localStorage.setItem(ACRYLIC_STORAGE_KEY, JSON.stringify(acrylic));
+	}, [acrylic, currentTheme, isDark]);
+
+	const setAcrylic = (enabled: boolean) => {
+		setAcrylicState(enabled);
+	};
+
 	const exportCurrentTheme = () => {
 		return exportTheme(currentTheme);
 	};
@@ -119,7 +158,10 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
 			value={{
 				themes,
 				isDark,
+				acrylic,
 				setTheme,
+				isWindows,
+				setAcrylic,
 				currentTheme,
 				setThemeByName,
 				toggleDarkMode,
