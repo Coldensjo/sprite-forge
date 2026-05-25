@@ -82,7 +82,8 @@ export const ItemPickerDialog = ({ open, onOpenChange, onItemSelect }: ItemPicke
 		if (!map) return [];
 
 		const items: ThingType[] = [];
-		for (let id = minId; id <= count; id++) {
+		const maxId = minId + count - 1;
+		for (let id = minId; id <= maxId; id++) {
 			const item = map.get(id);
 			if (item) {
 				items.push(item);

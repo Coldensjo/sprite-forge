@@ -162,7 +162,8 @@ export const ItemList = () => {
 		}
 
 		if (map) {
-			for (let id = minId; id <= count; id++) {
+			const maxId = minId + count - 1;
+			for (let id = minId; id <= maxId; id++) {
 				if (map.has(id)) {
 					ids.push(id);
 				}
@@ -512,28 +513,26 @@ export const ItemList = () => {
 											// Add to map
 											map?.set(newId, newItem);
 
-											// Update count if we exceeded the previous max
+											const newCount = map?.size ?? count;
 											switch (selectedCategory) {
 												case ThingCategory.ITEM:
-													data.itemsCount = Math.max(data.itemsCount, newId);
+													data.itemsCount = newCount;
 													break;
 												case ThingCategory.OUTFIT:
-													data.outfitsCount = Math.max(data.outfitsCount, newId);
+													data.outfitsCount = newCount;
 													break;
 												case ThingCategory.EFFECT:
-													data.effectsCount = Math.max(data.effectsCount, newId);
+													data.effectsCount = newCount;
 													break;
 												case ThingCategory.MISSILE:
-													data.missilesCount = Math.max(data.missilesCount, newId);
+													data.missilesCount = newCount;
 													break;
 											}
 
-											// Recalculate allItemIds to include the new item
-											// We need to reconstruct the list to find the correct page
-											const updatedCount = Math.max(count, newId);
+											const updatedMaxId = minId + newCount - 1;
 											const updatedAllItemIds: number[] = [];
 											if (map) {
-												for (let id = minId; id <= updatedCount; id++) {
+												for (let id = minId; id <= updatedMaxId; id++) {
 													if (map.has(id)) {
 														updatedAllItemIds.push(id);
 													}
@@ -707,27 +706,19 @@ export const ItemList = () => {
 													// Add to map
 													map?.set(newId, duplicate);
 
-													// Update count if needed
+													const dupCount = map?.size ?? 0;
 													switch (selectedCategory) {
 														case ThingCategory.ITEM:
-															if (newId > data.itemsCount) {
-																data.itemsCount = newId;
-															}
+															data.itemsCount = dupCount;
 															break;
 														case ThingCategory.OUTFIT:
-															if (newId > data.outfitsCount) {
-																data.outfitsCount = newId;
-															}
+															data.outfitsCount = dupCount;
 															break;
 														case ThingCategory.EFFECT:
-															if (newId > data.effectsCount) {
-																data.effectsCount = newId;
-															}
+															data.effectsCount = dupCount;
 															break;
 														case ThingCategory.MISSILE:
-															if (newId > data.missilesCount) {
-																data.missilesCount = newId;
-															}
+															data.missilesCount = dupCount;
 															break;
 													}
 

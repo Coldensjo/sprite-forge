@@ -18,7 +18,6 @@ pub fn encode_dat_to_binary(
     let thing_count = items.len() + outfits.len() + effects.len() + missiles.len();
     let mut buffer = Vec::with_capacity(20 + thing_count * 150);
 
-    // Write header (20 bytes)
     buffer.extend_from_slice(&signature.to_le_bytes());
     buffer.extend_from_slice(&(items.len() as u32).to_le_bytes());
     buffer.extend_from_slice(&(outfits.len() as u32).to_le_bytes());
