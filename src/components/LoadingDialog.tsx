@@ -1,3 +1,5 @@
+import { useRef, useState, useEffect } from 'react';
+
 import { Progress } from './ui/progress';
 import { Dialog, DialogTitle, DialogHeader, DialogContent, DialogDescription } from './ui/dialog';
 
@@ -8,11 +10,37 @@ interface LoadingDialogProps {
 	current?: number;
 }
 
+// Loads finishing under this threshold never reveal the modal — fast loads feel instant.
+const REVEAL_DELAY_MS = 200;
+
 export const LoadingDialog = ({ open, stage, current = 0, total = 100 }: LoadingDialogProps) => {
 	const percentage = total > 0 ? Math.round((current / total) * 100) : 0;
+	const [reveal, setReveal] = useState(false);
+	const timerRef = useRef<null | number>(null);
+
+	useEffect(() => {
+		if (!open) {
+			setReveal(false);
+			if (timerRef.current !== null) {
+				window.clearTimeout(timerRef.current);
+				timerRef.current = null;
+			}
+			return;
+		}
+		timerRef.current = window.setTimeout(() => {
+			setReveal(true);
+			timerRef.current = null;
+		}, REVEAL_DELAY_MS);
+		return () => {
+			if (timerRef.current !== null) {
+				window.clearTimeout(timerRef.current);
+				timerRef.current = null;
+			}
+		};
+	}, [open]);
 
 	return (
-		<Dialog open={open}>
+		<Dialog open={open && reveal}>
 			<DialogContent className="sm:max-w-md" onInteractOutside={(e) => e.preventDefault()}>
 				<DialogHeader>
 					<DialogTitle>Loading Tibia Files</DialogTitle>

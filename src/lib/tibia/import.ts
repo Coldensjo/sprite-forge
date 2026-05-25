@@ -69,7 +69,6 @@ export async function importObjectSheet(thing: ThingType, data: TibiaData, file?
 	});
 
 	try {
-		// 3. Pack everything into a single raw binary buffer (no JSON IPC)
 		const w = new ByteWriter(imageBytes.length + 8192);
 		w.bool(data.transparency);
 		w.u32(data.version.value);
@@ -79,10 +78,8 @@ export async function importObjectSheet(thing: ThingType, data: TibiaData, file?
 		encodeThing(w, thing);
 		w.bytes(imageBytes);
 
-		// Single IPC call - returns binary response with ThingType + sprites
 		const response = await invoke<ArrayBuffer>('import_object_sheet_binary', w.finish());
 
-		// Convert to Uint8Array if needed
 		const buffer = response instanceof Uint8Array ? response : new Uint8Array(response);
 
 		// 4. Parse response (includes LZ4 decompression of sprites)

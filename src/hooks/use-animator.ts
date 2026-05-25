@@ -1,10 +1,5 @@
-/**
- * useAnimator - React hook for frame-accurate animation control
- * Based on Object Builder's Animator.as (lines 27-268)
- *
- * Subscribes to a shared rAF clock instead of spawning its own loop,
- * so N visible animated sprites share one rAF callback per frame.
- */
+// Subscribes to a shared rAF clock instead of spawning its own loop,
+// so N visible animated sprites share one rAF callback per frame.
 
 import type { ThingType, FrameDuration, ThingCategory } from '@/lib/tibia/types';
 
@@ -41,10 +36,6 @@ export interface UseAnimatorOptions {
 	onComplete?: () => void;
 }
 
-/**
- * Hook for managing animation timing and frame advancement
- * Matches Object Builder's Animator behavior exactly
- */
 export function useAnimator({
 	thing,
 	category,

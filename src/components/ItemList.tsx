@@ -251,36 +251,7 @@ export const ItemList = () => {
 			logger.log(EventCode.ITEM_PAGE, { pg: currentPage, cat: selectedCategory, n: paginatedItemIds.length });
 
 			const { loadSpriteIds, loadSpriteIdsLz4 } = await import('@/lib/tibia');
-
 			if (cancelled) return;
-
-			const collectAllSpriteIds = (itemIds: number[]) => {
-				const ids: number[] = [];
-				for (const id of itemIds) {
-					const item = getThing(id, selectedCategory);
-					if (item) {
-						if (item.spriteIndex && item.spriteIndex.length > 0) {
-							for (const spriteId of item.spriteIndex) {
-								if (spriteId && isValidSpriteId(spriteId)) {
-									ids.push(spriteId);
-								}
-							}
-						}
-
-						if (item.frameGroupsData && item.frameGroupsData.length > 0) {
-							const idleGroup = item.frameGroupsData[0];
-							if (idleGroup?.spriteIndex && idleGroup.spriteIndex.length > 0) {
-								for (const spriteId of idleGroup.spriteIndex) {
-									if (spriteId && isValidSpriteId(spriteId)) {
-										ids.push(spriteId);
-									}
-								}
-							}
-						}
-					}
-				}
-				return ids;
-			};
 
 			const thumbIds: number[] = [];
 			const seenThumb = new Set<number>();
@@ -304,65 +275,39 @@ export const ItemList = () => {
 				if (!cancelled) notifySpritesLoaded();
 			}
 
-			const FIRST_BATCH_SIZE = 20;
-			const PREFETCH_PAGES = 2;
+			if (cancelled || totalPages <= currentPage) return;
 
-			const firstBatchIds = paginatedItemIds.slice(0, FIRST_BATCH_SIZE);
-			const firstBatchSpriteIds = collectAllSpriteIds(firstBatchIds);
+			const PREFETCH_PAGES = 3;
+			const pagesToPrefetch = Math.min(PREFETCH_PAGES, totalPages - currentPage);
+			const prefetchIds: number[] = [];
+			const seenPrefetch = new Set<number>();
 
-			if (firstBatchSpriteIds.length > 0 && !cancelled) {
-				logger.log(EventCode.ITEM_LOAD_BATCH, { batch: 1, items: firstBatchIds.length, sprites: firstBatchSpriteIds.length });
-
-				if (firstBatchSpriteIds.length > 100) {
-					await loadSpriteIdsLz4(data.sprPath, firstBatchSpriteIds, data.transparency, data.sprites);
-				} else {
-					await loadSpriteIds(data.sprPath, firstBatchSpriteIds, data.transparency, data.sprites);
-				}
-
-				if (!cancelled) {
-					notifySpritesLoaded();
+			for (let i = 1; i <= pagesToPrefetch; i++) {
+				const pageNum = currentPage + i;
+				const start = (pageNum - 1) * itemsPerPage;
+				const end = start + itemsPerPage;
+				for (const id of allItemIds.slice(start, end)) {
+					const item = getThing(id, selectedCategory);
+					if (!item) continue;
+					for (const spriteId of getThumbnailSpriteIds(item)) {
+						if (!seenPrefetch.has(spriteId) && !data.sprites.has(spriteId)) {
+							seenPrefetch.add(spriteId);
+							prefetchIds.push(spriteId);
+						}
+					}
 				}
 			}
 
-			if (!cancelled && paginatedItemIds.length > FIRST_BATCH_SIZE) {
-				const restBatchIds = paginatedItemIds.slice(FIRST_BATCH_SIZE);
-				const restBatchSpriteIds = collectAllSpriteIds(restBatchIds);
-
-				if (restBatchSpriteIds.length > 0) {
-					logger.log(EventCode.ITEM_LOAD_BATCH, { batch: 2, items: restBatchIds.length, sprites: restBatchSpriteIds.length });
-
-					if (restBatchSpriteIds.length > 100) {
-						await loadSpriteIdsLz4(data.sprPath, restBatchSpriteIds, data.transparency, data.sprites);
+			// Prefetch is best-effort; failures are non-fatal.
+			if (prefetchIds.length > 0 && !cancelled) {
+				try {
+					if (prefetchIds.length > 100) {
+						await loadSpriteIdsLz4(data.sprPath, prefetchIds, data.transparency, data.sprites);
 					} else {
-						await loadSpriteIds(data.sprPath, restBatchSpriteIds, data.transparency, data.sprites);
+						await loadSpriteIds(data.sprPath, prefetchIds, data.transparency, data.sprites);
 					}
-
-					if (!cancelled) {
-						notifySpritesLoaded();
-					}
-				}
-			}
-
-			if (!cancelled && totalPages > currentPage) {
-				const pagesToPrefetch = Math.min(PREFETCH_PAGES, totalPages - currentPage);
-				const prefetchSpriteIds: number[] = [];
-
-				for (let i = 1; i <= pagesToPrefetch; i++) {
-					const pageNum = currentPage + i;
-					const start = (pageNum - 1) * itemsPerPage;
-					const end = start + itemsPerPage;
-					const pageItemIds = allItemIds.slice(start, end);
-					prefetchSpriteIds.push(...collectAllSpriteIds(pageItemIds));
-				}
-
-				if (prefetchSpriteIds.length > 0 && !cancelled) {
-					logger.log(EventCode.ITEM_LOAD_BATCH, { batch: 3, prefetch: true, sprites: prefetchSpriteIds.length });
-
-					await loadSpriteIdsLz4(data.sprPath, prefetchSpriteIds, data.transparency, data.sprites);
-
-					if (!cancelled) {
-						notifySpritesLoaded();
-					}
+				} catch {
+					/* noop */
 				}
 			}
 		};
@@ -384,59 +329,6 @@ export const ItemList = () => {
 		itemsPerPage,
 		updateCounter // Force reload when data changes (e.g. after optimization)
 	]);
-
-	useEffect(() => {
-		if (!data || !data.sprPath) return;
-
-		let cancelled = false;
-
-		const mapFor = (category: ThingCategory) =>
-			category === ThingCategory.ITEM
-				? data.items
-				: category === ThingCategory.OUTFIT
-					? data.outfits
-					: category === ThingCategory.EFFECT
-						? data.effects
-						: data.missiles;
-
-		const warmThumbnails = async () => {
-			const { loadSpriteIdsLz4 } = await import('@/lib/tibia');
-
-			await new Promise((resolve) => setTimeout(resolve, 150));
-			if (cancelled || !data.sprPath) return;
-
-			const allCategories = [ThingCategory.ITEM, ThingCategory.OUTFIT, ThingCategory.EFFECT, ThingCategory.MISSILE];
-			const order = [selectedCategory, ...allCategories.filter((c) => c !== selectedCategory)];
-
-			for (const category of order) {
-				if (cancelled) break;
-
-				const seen = new Set<number>();
-				const ids: number[] = [];
-				for (const item of mapFor(category).values()) {
-					for (const spriteId of getThumbnailSpriteIds(item)) {
-						if (spriteId && !seen.has(spriteId) && !data.sprites.has(spriteId)) {
-							seen.add(spriteId);
-							ids.push(spriteId);
-						}
-					}
-				}
-
-				const CHUNK = 1500;
-				for (let i = 0; i < ids.length && !cancelled; i += CHUNK) {
-					await loadSpriteIdsLz4(data.sprPath, ids.slice(i, i + CHUNK), data.transparency, data.sprites);
-					if (!cancelled) notifySpritesLoaded();
-					await new Promise((resolve) => setTimeout(resolve, 16));
-				}
-			}
-		};
-
-		warmThumbnails();
-
-		return () => {
-			cancelled = true;
-		};
-	}, [data, selectedCategory, notifySpritesLoaded]);
 
 	const handlePageChange = (page: number) => {
 		if (page >= 1 && page <= totalPages) {

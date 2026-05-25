@@ -12,37 +12,53 @@ import { logger, logError, EventCode } from '@/lib/debug';
 import { loadDatFile } from './datReader';
 import { decodeDatResponse } from './datDecoder';
 import { SpriteReader } from './spriteReader';
-import { Sprite, TibiaData, ThingType, ClientVersion, CLIENT_VERSIONS } from './types';
+import {
+	Sprite,
+	TibiaData,
+	ThingType,
+	ThingCategory,
+	ClientVersion,
+	getSpriteIndex,
+	CLIENT_VERSIONS,
+	isValidSpriteId
+} from './types';
 
-/**
- * Read a binary file using Tauri (optimized for large files)
- */
+function collectThumbnailIds(things: Iterable<ThingType>, into: Set<number>): void {
+	for (const thing of things) {
+		if (!thing.spriteIndex || thing.spriteIndex.length === 0) continue;
+		const defaultPatternX = thing.category === ThingCategory.OUTFIT && thing.patternX > 2 ? 2 : 0;
+		for (let h = 0; h < thing.height; h++) {
+			for (let w = 0; w < thing.width; w++) {
+				const index = getSpriteIndex(thing, w, h, 0, defaultPatternX, 0, 0, 0);
+				if (index < thing.spriteIndex.length) {
+					const spriteId = thing.spriteIndex[index];
+					if (spriteId && isValidSpriteId(spriteId)) into.add(spriteId);
+				}
+			}
+		}
+	}
+}
+
 async function readBinaryFile(path: string): Promise<Uint8Array> {
-	// Tauri with serde_bytes returns binary data efficiently as Uint8Array
 	const bytes = await invoke<Uint8Array>('read_file', { path });
 	return bytes;
 }
 
-/**
- * Read only the signature from a DAT file (first 4 bytes)
- */
-async function readDatSignature(path: string): Promise<number> {
-	const buffer = await invoke<Uint8Array>('read_file', { path });
-
+async function readSignature(path: string): Promise<number> {
+	const response = await invoke<Uint8Array | ArrayBuffer>('read_file_header', { path, bytes: 4 });
+	const buffer = response instanceof Uint8Array ? response : new Uint8Array(response);
 	if (buffer.length < 4) {
-		throw new Error('DAT file is too small to contain a valid signature');
+		throw new Error(`File ${path} is too small to contain a signature`);
 	}
-
-	// Read signature as little-endian uint32
-	const signature = (buffer[0] | (buffer[1] << 8) | (buffer[2] << 16) | (buffer[3] << 24)) >>> 0;
-	return signature;
+	return (buffer[0] | (buffer[1] << 8) | (buffer[2] << 16) | (buffer[3] << 24)) >>> 0;
 }
 
-/**
- * Detect client version from signature
- */
 export function detectVersionFromSignature(signature: number): null | ClientVersion {
 	return CLIENT_VERSIONS.find((v) => v.datSignature === signature || v.sprSignature === signature) || null;
+}
+
+export function getVersionBySignatures(datSig: number, sprSig: number): null | ClientVersion {
+	return CLIENT_VERSIONS.find((v) => v.datSignature === datSig && v.sprSignature === sprSig) || null;
 }
 
 /**
@@ -335,59 +351,56 @@ export async function loadTibiaData(
 	const startTime = performance.now();
 	const myEpoch = ++loadEpoch;
 
-	// Step 1: Detect version from signature if not provided
 	let detectedVersion = version;
 	if (!detectedVersion) {
 		if (onProgress) onProgress('Detecting version...', 0, 100);
-		const signature = await readDatSignature(datPath);
-		detectedVersion = detectVersionFromSignature(signature);
+		const [datSig, sprSig] = await Promise.all([readSignature(datPath), readSignature(sprPath)]);
+		detectedVersion =
+			getVersionBySignatures(datSig, sprSig) ?? detectVersionFromSignature(datSig) ?? detectVersionFromSignature(sprSig);
 		if (!detectedVersion) {
-			throw new Error(`Unknown DAT signature: 0x${signature.toString(16)}`);
+			throw new Error(`Unknown signatures — DAT: 0x${datSig.toString(16)}, SPR: 0x${sprSig.toString(16)}`);
 		}
 	}
 
-	// Step 2: Parse DAT file
-	// Use TypeScript parser to ensure we get all data (including frame groups)
-	if (onProgress) onProgress('Loading DAT file...', 0, 100);
+	if (onProgress) onProgress('Loading files...', 10, 100);
 
-	console.log(`[loadTibiaData] Using native Rust parser for version ${detectedVersion.value}`);
+	const [datResponse, sprData] = await Promise.all([
+		invoke<Uint8Array>('parse_dat_file_bin', {
+			path: datPath,
+			version: detectedVersion.value
+		}),
+		loadTibiaSpr(sprPath, detectedVersion, transparency)
+	]);
 
-	if (onProgress) onProgress('Parsing metadata...', 10, 100);
-	const datResponse = await invoke<Uint8Array>('parse_dat_file_bin', {
-		path: datPath,
-		version: detectedVersion.value
-	});
+	if (onProgress) onProgress('Parsing metadata...', 70, 100);
 	const datBuf = datResponse instanceof Uint8Array ? datResponse : new Uint8Array(datResponse);
 	const datData = decodeDatResponse(datBuf);
-	if (onProgress) onProgress('Parsing metadata...', 50, 100);
 
-	const datTime = performance.now();
-	console.log(`[loadTibiaData] DAT parsing (Rust): ${(datTime - startTime).toFixed(0)}ms`);
-
-	// Step 4: Open SPR file handle in Rust
-	if (onProgress) onProgress('Opening SPR file...', 90, 100);
-	const sprData = await loadTibiaSpr(sprPath, detectedVersion, transparency);
-
-	// Step 5: Initialize sprites map and preload first 100 sprites
-	// This ensures the first page renders instantly
 	const sprites = new Map<number, Sprite>();
 
 	try {
 		if (onProgress) onProgress('Preloading sprites...', 95, 100);
-		// Preload only first 100 sprites for instant first page render
-		// Additional sprites load on-demand as user navigates
-		await preloadSprites(
-			sprPath,
-			sprData.header.sprite_count,
-			sprData.transparency,
-			sprites,
-			100, // Only 100 sprites - enough for first page
-			(loaded, total) => {
-				if (onProgress) onProgress('Preloading sprites...', 95 + Math.floor((loaded / total) * 5), 100);
+
+		const FIRST_PAGE = 100;
+		const firstPageThumbs = new Set<number>();
+		const collectFirstPage = (things: Iterable<ThingType>) => {
+			let n = 0;
+			for (const thing of things) {
+				collectThumbnailIds([thing], firstPageThumbs);
+				if (++n >= FIRST_PAGE) break;
 			}
-		);
+		};
+		collectFirstPage(datData.items.values());
+		collectFirstPage(datData.outfits.values());
+		collectFirstPage(datData.effects.values());
+		collectFirstPage(datData.missiles.values());
+
+		if (firstPageThumbs.size > 0) {
+			await loadSpriteIdsLz4(sprPath, Array.from(firstPageThumbs), sprData.transparency, sprites);
+		}
+		if (onProgress) onProgress('Preloading sprites...', 100, 100);
 	} catch (err) {
-		logError('Failed to preload sprites', err);
+		logError('Failed to preload first-page thumbnails', err);
 	}
 
 	const FULL_PRELOAD_MAX_SPRITES = 60000;
@@ -408,11 +421,7 @@ export async function loadTibiaData(
 
 	const totalTime = performance.now();
 	console.log(`[loadTibiaData] Total loading time: ${(totalTime - startTime).toFixed(0)}ms`);
-	console.log(
-		`[loadTibiaData] Items: ${datData.itemsCount}, Outfits: ${datData.outfitsCount}, Effects: ${datData.effectsCount}, Missiles: ${datData.missilesCount}`
-	);
 
-	// Done! Return immediately - app is ready to use
 	if (onProgress) onProgress('Ready', 100, 100);
 
 	return {
@@ -701,8 +710,11 @@ export async function preloadSprites(
 			}
 		} catch (err) {
 			logError(`Failed to preload batch ${i + 1}/${batches}`, err);
-			// Continue with next batch even if one fails
 		}
+
+		// Awaiting IPC alone only flushes microtasks; a macrotask boundary lets
+		// the browser actually repaint between batches.
+		await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 	}
 
 	logger.log(EventCode.LOADER_ADDED, { preload: true, sz: spriteCache.size });

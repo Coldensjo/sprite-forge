@@ -115,12 +115,10 @@ export const SpriteList = () => {
 		let cancelled = false;
 
 		const loadSpritesForCurrentPage = async () => {
-			const { loadSpriteIds } = await import('@/lib/tibia');
+			const { loadSpriteIds, loadSpriteIdsLz4 } = await import('@/lib/tibia');
 
 			if (cancelled) return;
 
-			// OPTIMIZATION: Load multiple pages at once
-			// Current page + next 2 pages for smoother navigation
 			const PREFETCH_PAGES = 2;
 			const pagesToLoad = Math.min(PREFETCH_PAGES + 1, totalPages - currentPage + 1);
 
@@ -132,13 +130,17 @@ export const SpriteList = () => {
 
 				const start = (pageNum - 1) * itemsPerPage;
 				const end = start + itemsPerPage;
-				const pageIds = allSpriteIds.slice(start, end);
-
-				spritesToLoad.push(...pageIds);
+				spritesToLoad.push(...allSpriteIds.slice(start, end));
 			}
 
-			if (spritesToLoad.length > 0) {
-				// Load all at once using batch loading
+			// Notifying with no actual change still cascades a re-render across
+			// every SpriteCanvas on the page, so bail out when nothing is missing.
+			const uncached = spritesToLoad.filter((id) => !data.sprites.has(id));
+			if (uncached.length === 0) return;
+
+			if (uncached.length > 100) {
+				await loadSpriteIdsLz4(data.sprPath, spritesToLoad, data.transparency, data.sprites);
+			} else {
 				await loadSpriteIds(data.sprPath, spritesToLoad, data.transparency, data.sprites);
 			}
 

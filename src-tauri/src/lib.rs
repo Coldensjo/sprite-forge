@@ -157,9 +157,7 @@ fn read_sprites_rgba_lz4(
     Ok(Response::new(bytes))
 }
 
-/// Compress RGBA pixels to Tibia RLE format
-/// Request body (raw binary): [transparent: u8][pixels: 4096 RGBA bytes]
-/// Response: RLE compressed bytes
+/// Request body: [transparent: u8][pixels: 4096 RGBA bytes]
 #[tauri::command]
 fn compress_sprite_rgba(request: tauri::ipc::Request) -> Result<Response, String> {
     let bytes = match request.body() {
@@ -801,14 +799,12 @@ fn clear_dat_data(
     Ok(())
 }
 
-// Helper to calculate dimensions
 fn get_group_dimensions(group: &FrameGroup) -> (u32, u32) {
     let total_x = (group.pattern_z as u32) * (group.pattern_x as u32) * (group.layers as u32);
     let total_y = (group.frames as u32) * (group.pattern_y as u32);
     (total_x, total_y)
 }
 
-// Helper to calculate sprite index
 fn get_sprite_index(
     group: &FrameGroup,
     width: u32,
@@ -1008,22 +1004,16 @@ fn export_object_sheet_rust(
             }
         }
     }
-    
-    // 5. Output
+
     sheet.save(&path).map_err(|e| format!("Failed to save image to {}: {}", path, e))?;
-        
+
     Ok(())
 }
 
-/// Import object sheet with binary response - returns both ThingType and sprites in one call
-/// This eliminates the need for a second IPC call to reload sprites
-///
-/// Request body (raw binary):
-///   [transparent: u8][version: u32 LE][next_sprite_id: u32 LE]
-///   [spr_path: u16-len-prefixed UTF-8][category: u16-len-prefixed UTF-8]
-///   [thing: encodeThing payload][image bytes: rest]
-///
-/// Response format: [JSON len: u32][ThingType JSON][sprites in RGBA format (LZ4 compressed)]
+/// Request body: [transparent: u8][version: u32 LE][next_sprite_id: u32 LE]
+///               [spr_path: u16-len UTF-8][category: u16-len UTF-8]
+///               [thing: encodeThing payload][image bytes: rest]
+/// Response:     [thing_json_len: u32][thing_json][LZ4 RGBA sprites]
 #[tauri::command]
 fn import_object_sheet_binary(
     request: tauri::ipc::Request,
