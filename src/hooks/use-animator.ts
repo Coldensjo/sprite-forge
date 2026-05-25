@@ -1,10 +1,14 @@
 /**
  * useAnimator - React hook for frame-accurate animation control
  * Based on Object Builder's Animator.as (lines 27-268)
+ *
+ * Subscribes to a shared rAF clock instead of spawning its own loop,
+ * so N visible animated sprites share one rAF callback per frame.
  */
 
 import type { ThingType, FrameDuration, ThingCategory } from '@/lib/tibia/types';
 
+import { animationClock } from '@/lib/animationClock';
 import { useRef, useState, useEffect, useCallback } from 'react';
 import {
 	getLoopFrame,
@@ -47,137 +51,101 @@ export function useAnimator({
 	onComplete,
 	autoPlay = false
 }: UseAnimatorOptions): AnimatorState & AnimatorControls {
-	// Animation state (from Animator.as lines 33-45)
 	const [currentFrame, setCurrentFrame] = useState<number>(0);
 	const [isPlaying, setIsPlaying] = useState(autoPlay && thing.isAnimation);
 	const [isComplete, setIsComplete] = useState(false);
 
-	// Internal state refs (persisted across renders)
 	const lastTimeRef = useRef<number>(0);
 	const currentFrameDurationRef = useRef<number>(0);
 	const currentLoopRef = useRef<number>(0);
 	const currentDirectionRef = useRef<number>(AnimationDirection.FORWARD);
-	const animationFrameIdRef = useRef<number>(0);
 	const skipFirstFrameRef = useRef<boolean>(false);
+	const frameRef = useRef<number>(0);
+	const onCompleteRef = useRef<undefined | (() => void)>(onComplete);
 
-	// Get or generate frame durations
 	const durationsRef = useRef<FrameDuration[]>(generateDefaultDurations(thing, category));
 
-	// Update durations when thing changes
 	useEffect(() => {
 		durationsRef.current = generateDefaultDurations(thing, category);
 		skipFirstFrameRef.current = shouldSkipFirstFrame(thing, category);
 	}, [thing, category]);
 
-	/**
-	 * Animation update loop (based on Animator.as lines 127-160)
-	 * Called on every requestAnimationFrame when playing
-	 */
-	const updateAnimation = useCallback(
-		(timestamp: number) => {
-			if (!isPlaying) return;
+	useEffect(() => {
+		onCompleteRef.current = onComplete;
+	}, [onComplete]);
 
-			// Initialize lastTime on first frame
+	useEffect(() => {
+		frameRef.current = currentFrame;
+	}, [currentFrame]);
+
+	useEffect(() => {
+		if (!isPlaying || !thing.isAnimation) return;
+
+		lastTimeRef.current = 0;
+		currentFrameDurationRef.current = getFrameDuration(durationsRef.current[frameRef.current]);
+
+		return animationClock.subscribe((timestamp: number) => {
 			if (lastTimeRef.current === 0) {
 				lastTimeRef.current = timestamp;
-				currentFrameDurationRef.current = getFrameDuration(durationsRef.current[currentFrame]);
-				animationFrameIdRef.current = requestAnimationFrame(updateAnimation);
 				return;
 			}
 
 			const elapsed = timestamp - lastTimeRef.current;
-
-			if (elapsed >= currentFrameDurationRef.current) {
-				// Time to advance to next frame
-				let nextFrame: number;
-				let complete = false;
-
-				if (thing.loopCount < 0) {
-					// Ping-pong animation (loopCount = -1)
-					const result = getPingPongFrame(currentFrame, thing.frames, currentDirectionRef.current);
-					nextFrame = result.frame;
-					currentDirectionRef.current = result.newDirection;
-				} else {
-					// Normal looping animation
-					nextFrame = getLoopFrame(currentFrame, thing.frames, thing.loopCount, currentLoopRef.current);
-
-					// Check if we completed a loop
-					if (nextFrame === 0 && currentFrame === thing.frames - 1) {
-						currentLoopRef.current++;
-					}
-
-					// Check if animation is complete
-					if (nextFrame === currentFrame && currentFrame === thing.frames - 1) {
-						complete = true;
-					}
-				}
-
-				// Handle skipFirstFrame for outfits
-				if (skipFirstFrameRef.current && nextFrame === 0) {
-					nextFrame = 1 % thing.frames;
-				}
-
-				if (complete) {
-					setIsComplete(true);
-					setIsPlaying(false);
-
-					if (thing.animateAlways) {
-						// Auto-restart for animateAlways
-						setCurrentFrame(0);
-						setIsComplete(false);
-						setIsPlaying(true);
-						currentLoopRef.current = 0;
-						currentDirectionRef.current = AnimationDirection.FORWARD;
-					} else {
-						// Stop animation
-						if (onComplete) {
-							onComplete();
-						}
-						return; // Don't schedule next frame
-					}
-				} else {
-					setCurrentFrame(nextFrame);
-				}
-
-				// Calculate remaining time for next frame
-				const duration = getFrameDuration(durationsRef.current[nextFrame]);
-				const remainingTime = duration - (elapsed - currentFrameDurationRef.current);
-				currentFrameDurationRef.current = remainingTime < 0 ? 0 : remainingTime;
-			} else {
-				// Still waiting for current frame duration
-				currentFrameDurationRef.current -= elapsed;
-			}
-
 			lastTimeRef.current = timestamp;
 
-			// Schedule next update
-			if (isPlaying) {
-				animationFrameIdRef.current = requestAnimationFrame(updateAnimation);
+			if (elapsed < currentFrameDurationRef.current) {
+				currentFrameDurationRef.current -= elapsed;
+				return;
 			}
-		},
-		[isPlaying, currentFrame, thing, onComplete]
-	);
 
-	// Start/stop animation loop
-	useEffect(() => {
-		if (isPlaying && thing.isAnimation) {
-			lastTimeRef.current = 0; // Reset timing
-			animationFrameIdRef.current = requestAnimationFrame(updateAnimation);
-		} else {
-			if (animationFrameIdRef.current) {
-				cancelAnimationFrame(animationFrameIdRef.current);
-				animationFrameIdRef.current = 0;
+			const curr = frameRef.current;
+			let nextFrame: number;
+			let complete = false;
+
+			if (thing.loopCount < 0) {
+				const result = getPingPongFrame(curr, thing.frames, currentDirectionRef.current);
+				nextFrame = result.frame;
+				currentDirectionRef.current = result.newDirection;
+			} else {
+				nextFrame = getLoopFrame(curr, thing.frames, thing.loopCount, currentLoopRef.current);
+				if (nextFrame === 0 && curr === thing.frames - 1) {
+					currentLoopRef.current++;
+				}
+				if (nextFrame === curr && curr === thing.frames - 1) {
+					complete = true;
+				}
 			}
-		}
 
-		return () => {
-			if (animationFrameIdRef.current) {
-				cancelAnimationFrame(animationFrameIdRef.current);
+			if (skipFirstFrameRef.current && nextFrame === 0) {
+				nextFrame = 1 % thing.frames;
 			}
-		};
-	}, [isPlaying, thing.isAnimation, updateAnimation]);
 
-	// Control functions (based on ThingDataView.as lines 178-194)
+			if (complete) {
+				if (thing.animateAlways) {
+					frameRef.current = 0;
+					currentLoopRef.current = 0;
+					currentDirectionRef.current = AnimationDirection.FORWARD;
+					currentFrameDurationRef.current = getFrameDuration(durationsRef.current[0]);
+					setCurrentFrame(0);
+					setIsComplete(false);
+				} else {
+					setIsComplete(true);
+					setIsPlaying(false);
+					onCompleteRef.current?.();
+				}
+				return;
+			}
+
+			frameRef.current = nextFrame;
+			setCurrentFrame(nextFrame);
+
+			const duration = getFrameDuration(durationsRef.current[nextFrame]);
+			const overshoot = elapsed - currentFrameDurationRef.current;
+			const remaining = duration - overshoot;
+			currentFrameDurationRef.current = remaining < 0 ? 0 : remaining;
+		});
+	}, [isPlaying, thing.isAnimation, thing.loopCount, thing.frames, thing.animateAlways]);
+
 	const play = useCallback(() => {
 		if (thing.isAnimation) {
 			setIsPlaying(true);
