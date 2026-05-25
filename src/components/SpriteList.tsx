@@ -3,7 +3,7 @@ import { type Sprite } from '@/lib/tibia';
 import { invoke } from '@tauri-apps/api/core';
 import { useDragDrop } from '@/contexts/DragDropContext';
 import { useTibiaData } from '@/contexts/TibiaDataContext';
-import { useRef, useMemo, useState, useEffect } from 'react';
+import { useRef, useMemo, useState, useEffect, useCallback } from 'react';
 import { ContextMenu, ContextMenuItem, ContextMenuContent, ContextMenuTrigger } from '@/components/ui/context-menu';
 import { DropdownMenu, DropdownMenuItem, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import {
@@ -13,12 +13,14 @@ import {
 	Image,
 	Square,
 	Trash2,
+	Grid3x3,
 	SkipBack,
 	LayoutGrid,
 	ChevronLeft,
 	SkipForward,
 	ChevronRight,
-	ClipboardPaste
+	ClipboardPaste,
+	LayoutDashboard
 } from 'lucide-react';
 
 import { Input } from './ui/input';
@@ -26,7 +28,9 @@ import { Button } from './ui/button';
 import { SpriteCanvas } from './SpriteCanvas';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from './ui/tooltip';
 
-type ViewMode = 'list' | 'grid' | 'large';
+type ViewMode = 'grid' | 'list' | 'large' | 'grid-3' | 'grid-4';
+
+const VIEW_MODES: ViewMode[] = ['list', 'grid', 'grid-3', 'grid-4', 'large'];
 
 export const SpriteList = () => {
 	const {
@@ -46,7 +50,22 @@ export const SpriteList = () => {
 	// const [highlightedSpriteId, setHighlightedSpriteId] = useState<null | number>(null); // Moved to context
 	const [selectedSpriteIds, setSelectedSpriteIds] = useState<Set<number>>(new Set());
 	const [inputValue, setInputValue] = useState<string>('');
-	const [viewMode, setViewMode] = useState<ViewMode>('list');
+	const [viewMode, setViewModeState] = useState<ViewMode>('list');
+
+	useEffect(() => {
+		invoke<null | string>('get_sprite_list_view_mode')
+			.then((mode) => {
+				if (mode && VIEW_MODES.includes(mode as ViewMode)) {
+					setViewModeState(mode as ViewMode);
+				}
+			})
+			.catch(() => {});
+	}, []);
+
+	const setViewMode = useCallback((mode: ViewMode) => {
+		setViewModeState(mode);
+		invoke('set_sprite_list_view_mode', { mode }).catch(() => {});
+	}, []);
 	const scrollViewportRef = useRef<HTMLDivElement>(null);
 	const shouldScrollToHighlightedRef = useRef(false);
 	const isInternalHighlightChange = useRef(false);
@@ -549,6 +568,8 @@ export const SpriteList = () => {
 							<Button size="icon" variant="ghost" className="h-6 w-6 p-0 hover:bg-secondary">
 								{viewMode === 'list' && <List className="h-3.5 w-3.5 text-muted-foreground" />}
 								{viewMode === 'grid' && <LayoutGrid className="h-3.5 w-3.5 text-muted-foreground" />}
+								{viewMode === 'grid-3' && <Grid3x3 className="h-3.5 w-3.5 text-muted-foreground" />}
+								{viewMode === 'grid-4' && <LayoutDashboard className="h-3.5 w-3.5 text-muted-foreground" />}
 								{viewMode === 'large' && <Square className="h-3.5 w-3.5 text-muted-foreground" />}
 							</Button>
 						</DropdownMenuTrigger>
@@ -559,7 +580,15 @@ export const SpriteList = () => {
 							</DropdownMenuItem>
 							<DropdownMenuItem onClick={() => setViewMode('grid')}>
 								<LayoutGrid className="mr-2 h-4 w-4" />
-								<span>Grid (50/50)</span>
+								<span>Grid (2 cols)</span>
+							</DropdownMenuItem>
+							<DropdownMenuItem onClick={() => setViewMode('grid-3')}>
+								<Grid3x3 className="mr-2 h-4 w-4" />
+								<span>Grid (3 cols)</span>
+							</DropdownMenuItem>
+							<DropdownMenuItem onClick={() => setViewMode('grid-4')}>
+								<LayoutDashboard className="mr-2 h-4 w-4" />
+								<span>Grid (4 cols)</span>
 							</DropdownMenuItem>
 							<DropdownMenuItem onClick={() => setViewMode('large')}>
 								<Square className="mr-2 h-4 w-4" />
@@ -583,6 +612,8 @@ export const SpriteList = () => {
 						'p-2 pb-16',
 						viewMode === 'list' && 'space-y-0.5',
 						viewMode === 'grid' && 'grid grid-cols-2 gap-1',
+						viewMode === 'grid-3' && 'grid grid-cols-3 gap-1',
+						viewMode === 'grid-4' && 'grid grid-cols-4 gap-1',
 						viewMode === 'large' && 'grid grid-cols-1 gap-2'
 					)}
 				>
@@ -608,10 +639,12 @@ export const SpriteList = () => {
 								isInternalHighlightChange.current = true;
 							}}
 							className={cn(
-								'w-full rounded-md transition-all hover:bg-item-hover cursor-grab active:cursor-grabbing',
+								'w-full rounded-md transition-all hover:bg-item-hover cursor-grab active:cursor-grabbing relative',
 								(selectedSpriteIds.has(id) || highlightedSpriteId === id) && 'bg-primary/15 ring-1 ring-primary/50',
 								viewMode === 'list' && 'flex items-center gap-2 px-2 py-1',
 								viewMode === 'grid' && 'flex items-center px-1 py-0.5 gap-1.5',
+								viewMode === 'grid-3' && 'flex flex-col items-center px-1 py-1 gap-1',
+								viewMode === 'grid-4' && 'flex flex-col items-center px-0.5 py-1 gap-0.5',
 								viewMode === 'large' && 'flex items-center px-1 py-0.5 gap-1.5'
 							)}
 							onClick={(e) => {
@@ -685,6 +718,8 @@ export const SpriteList = () => {
 												'rounded-md border border-border/50 flex items-center justify-center flex-shrink-0 overflow-hidden bg-muted pointer-events-none select-none',
 												viewMode === 'list' && 'w-8 h-8',
 												viewMode === 'grid' && 'w-12 h-12',
+												viewMode === 'grid-3' && 'w-11 h-11',
+												viewMode === 'grid-4' && 'w-9 h-9',
 												viewMode === 'large' && 'w-32 h-32'
 											)}
 										>
@@ -693,7 +728,17 @@ export const SpriteList = () => {
 												spriteId={id}
 												renderMode="list"
 												className="pointer-events-none select-none"
-												scale={viewMode === 'list' ? 1 : viewMode === 'grid' ? 1.5 : 4}
+												scale={
+													viewMode === 'list'
+														? 1
+														: viewMode === 'grid'
+															? 1.5
+															: viewMode === 'grid-3'
+																? 1.375
+																: viewMode === 'grid-4'
+																	? 1.125
+																	: 4
+												}
 											/>
 										</div>
 										<div
@@ -701,10 +746,19 @@ export const SpriteList = () => {
 												'min-w-0 pointer-events-none select-none',
 												viewMode === 'list' && 'flex-1 text-left',
 												viewMode === 'grid' && 'flex-1 text-right',
+												viewMode === 'grid-3' && 'w-full text-center',
+												viewMode === 'grid-4' && 'w-full text-center',
 												viewMode === 'large' && 'flex-1 text-right'
 											)}
 										>
-											<div className="text-[11px] text-foreground font-mono font-medium leading-tight">{id}</div>
+											<div
+												className={cn(
+													'text-foreground font-mono font-medium leading-tight truncate',
+													viewMode === 'grid-4' ? 'text-[9px]' : viewMode === 'grid-3' ? 'text-[10px]' : 'text-[11px]'
+												)}
+											>
+												{id}
+											</div>
 										</div>
 									</div>
 								</ContextMenuTrigger>

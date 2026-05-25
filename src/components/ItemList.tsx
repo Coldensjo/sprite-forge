@@ -1,5 +1,6 @@
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
+import { invoke } from '@tauri-apps/api/core';
 import { logger, EventCode } from '@/lib/debug';
 import { useTibiaData } from '@/contexts/TibiaDataContext';
 import { exportObjectSheet, importObjectSheet } from '@/lib/tibia';
@@ -26,6 +27,7 @@ import {
 	Circle,
 	Trash2,
 	Upload,
+	Grid3x3,
 	Package,
 	SkipBack,
 	Download,
@@ -34,7 +36,8 @@ import {
 	ChevronLeft,
 	SkipForward,
 	ChevronRight,
-	ClipboardPaste
+	ClipboardPaste,
+	LayoutDashboard
 } from 'lucide-react';
 
 import { Input } from './ui/input';
@@ -45,7 +48,9 @@ import { CheckerBoard } from './CheckerBoard';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from './ui/tooltip';
 import { Select, SelectItem, SelectValue, SelectContent, SelectTrigger } from './ui/select';
 
-type ViewMode = 'list' | 'grid' | 'large';
+type ViewMode = 'grid' | 'list' | 'large' | 'grid-3' | 'grid-4';
+
+const VIEW_MODES: ViewMode[] = ['list', 'grid', 'grid-3', 'grid-4', 'large'];
 
 function getThumbnailSpriteIds(thing: ThingType): number[] {
 	const ids: number[] = [];
@@ -86,7 +91,22 @@ export const ItemList = () => {
 	const [currentPage, setCurrentPage] = useState<number>(1);
 	const [copiedProperties, setCopiedProperties] = useState<null | Partial<ThingType>>(null);
 	const [inputValue, setInputValue] = useState<string>('');
-	const [viewMode, setViewMode] = useState<ViewMode>('list');
+	const [viewMode, setViewModeState] = useState<ViewMode>('list');
+
+	useEffect(() => {
+		invoke<null | string>('get_item_list_view_mode')
+			.then((mode) => {
+				if (mode && VIEW_MODES.includes(mode as ViewMode)) {
+					setViewModeState(mode as ViewMode);
+				}
+			})
+			.catch(() => {});
+	}, []);
+
+	const setViewMode = useCallback((mode: ViewMode) => {
+		setViewModeState(mode);
+		invoke('set_item_list_view_mode', { mode }).catch(() => {});
+	}, []);
 	const scrollViewportRef = useRef<HTMLDivElement>(null);
 	const shouldScrollToHighlightedRef = useRef(false);
 	const pendingNewItemId = useRef<null | number>(null);
@@ -566,6 +586,8 @@ export const ItemList = () => {
 							<Button size="icon" variant="ghost" className="h-6 w-6 p-0 hover:bg-secondary">
 								{viewMode === 'list' && <List className="h-3.5 w-3.5 text-muted-foreground" />}
 								{viewMode === 'grid' && <LayoutGrid className="h-3.5 w-3.5 text-muted-foreground" />}
+								{viewMode === 'grid-3' && <Grid3x3 className="h-3.5 w-3.5 text-muted-foreground" />}
+								{viewMode === 'grid-4' && <LayoutDashboard className="h-3.5 w-3.5 text-muted-foreground" />}
 								{viewMode === 'large' && <Square className="h-3.5 w-3.5 text-muted-foreground" />}
 							</Button>
 						</DropdownMenuTrigger>
@@ -576,7 +598,15 @@ export const ItemList = () => {
 							</DropdownMenuItem>
 							<DropdownMenuItem onClick={() => setViewMode('grid')}>
 								<LayoutGrid className="mr-2 h-4 w-4" />
-								<span>Grid (50/50)</span>
+								<span>Grid (2 cols)</span>
+							</DropdownMenuItem>
+							<DropdownMenuItem onClick={() => setViewMode('grid-3')}>
+								<Grid3x3 className="mr-2 h-4 w-4" />
+								<span>Grid (3 cols)</span>
+							</DropdownMenuItem>
+							<DropdownMenuItem onClick={() => setViewMode('grid-4')}>
+								<LayoutDashboard className="mr-2 h-4 w-4" />
+								<span>Grid (4 cols)</span>
 							</DropdownMenuItem>
 							<DropdownMenuItem onClick={() => setViewMode('large')}>
 								<Square className="mr-2 h-4 w-4" />
@@ -595,6 +625,8 @@ export const ItemList = () => {
 							'p-2 pb-16',
 							viewMode === 'list' && 'space-y-0.5',
 							viewMode === 'grid' && 'grid grid-cols-2 gap-1',
+							viewMode === 'grid-3' && 'grid grid-cols-3 gap-1',
+							viewMode === 'grid-4' && 'grid grid-cols-4 gap-1',
 							viewMode === 'large' && 'grid grid-cols-1 gap-2'
 						)}
 					>
@@ -613,10 +645,12 @@ export const ItemList = () => {
 												setHighlightedItemId(id);
 											}}
 											className={cn(
-												'w-full rounded-md transition-all hover:bg-item-hover',
+												'w-full rounded-md transition-all hover:bg-item-hover relative',
 												highlightedItemId === id && 'bg-primary/15 ring-1 ring-primary/50',
 												viewMode === 'list' && 'flex items-center gap-2 px-2 py-1',
 												viewMode === 'grid' && 'flex items-center px-1 py-0.5 gap-1.5',
+												viewMode === 'grid-3' && 'flex flex-col items-center px-1 py-1 gap-1',
+												viewMode === 'grid-4' && 'flex flex-col items-center px-0.5 py-1 gap-0.5',
 												viewMode === 'large' && 'flex items-center px-1 py-0.5 gap-1.5'
 											)}
 										>
@@ -625,6 +659,8 @@ export const ItemList = () => {
 													'rounded-md border border-border/50 flex items-center justify-center flex-shrink-0 overflow-hidden',
 													viewMode === 'list' && 'w-8 h-8',
 													viewMode === 'grid' && 'w-12 h-12',
+													viewMode === 'grid-3' && 'w-11 h-11',
+													viewMode === 'grid-4' && 'w-9 h-9',
 													viewMode === 'large' && 'w-32 h-32'
 												)}
 											>
@@ -639,7 +675,11 @@ export const ItemList = () => {
 															? 36 / (Math.max(item.width, item.height) * 32)
 															: viewMode === 'grid'
 																? 48 / (Math.max(item.width, item.height) * 32)
-																: 128 / (Math.max(item.width, item.height) * 32)
+																: viewMode === 'grid-3'
+																	? 44 / (Math.max(item.width, item.height) * 32)
+																	: viewMode === 'grid-4'
+																		? 36 / (Math.max(item.width, item.height) * 32)
+																		: 128 / (Math.max(item.width, item.height) * 32)
 													}
 												/>
 											</CheckerBoard>
@@ -648,11 +688,17 @@ export const ItemList = () => {
 													'min-w-0',
 													viewMode === 'list' && 'flex-1 text-left',
 													viewMode === 'grid' && 'flex-1 text-right',
+													viewMode === 'grid-3' && 'w-full text-center',
+													viewMode === 'grid-4' && 'w-full text-center',
 													viewMode === 'large' && 'flex-1 text-right'
 												)}
 											>
 												{viewMode === 'grid' || viewMode === 'large' ? (
 													<div className="text-[11px] text-foreground font-mono font-medium leading-tight">{id}</div>
+												) : viewMode === 'grid-3' ? (
+													<div className="text-[10px] text-foreground font-mono font-medium leading-tight truncate">{id}</div>
+												) : viewMode === 'grid-4' ? (
+													<div className="text-[9px] text-foreground font-mono font-medium leading-tight truncate">{id}</div>
 												) : (
 													<>
 														<div className="text-[11px] text-foreground font-mono font-medium leading-tight">{id}</div>
@@ -669,7 +715,14 @@ export const ItemList = () => {
 											{hasUnsavedChanges(id, selectedCategory) && (
 												<Tooltip>
 													<TooltipTrigger asChild>
-														<Circle className="h-2.5 w-2.5 text-primary fill-primary flex-shrink-0" />
+														<Circle
+															className={cn(
+																'text-primary fill-primary flex-shrink-0',
+																viewMode === 'grid-3' || viewMode === 'grid-4'
+																	? 'absolute top-0.5 right-0.5 h-2 w-2'
+																	: 'h-2.5 w-2.5'
+															)}
+														/>
 													</TooltipTrigger>
 													<TooltipContent>
 														<p>Unsaved changes</p>

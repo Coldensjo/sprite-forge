@@ -400,6 +400,8 @@ struct AppConfig {
     favorite_folders: Vec<FavoriteFolder>,
     panel_settings: Option<PanelSettings>,
     default_scene: Option<String>,
+    item_list_view_mode: Option<String>,
+    sprite_list_view_mode: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
@@ -503,6 +505,32 @@ fn get_panel_settings() -> Result<PanelSettings, String> {
 fn set_panel_settings(settings: PanelSettings) -> Result<(), String> {
     let mut config = get_config()?;
     config.panel_settings = Some(settings);
+    save_config(config)
+}
+
+#[tauri::command]
+fn get_item_list_view_mode() -> Result<Option<String>, String> {
+    let config = get_config()?;
+    Ok(config.item_list_view_mode)
+}
+
+#[tauri::command]
+fn set_item_list_view_mode(mode: String) -> Result<(), String> {
+    let mut config = get_config()?;
+    config.item_list_view_mode = Some(mode);
+    save_config(config)
+}
+
+#[tauri::command]
+fn get_sprite_list_view_mode() -> Result<Option<String>, String> {
+    let config = get_config()?;
+    Ok(config.sprite_list_view_mode)
+}
+
+#[tauri::command]
+fn set_sprite_list_view_mode(mode: String) -> Result<(), String> {
+    let mut config = get_config()?;
+    config.sprite_list_view_mode = Some(mode);
     save_config(config)
 }
 
@@ -1802,6 +1830,10 @@ tauri::Builder::default()
             set_favorite_folders,
             get_panel_settings,
             set_panel_settings,
+            get_item_list_view_mode,
+            set_item_list_view_mode,
+            get_sprite_list_view_mode,
+            set_sprite_list_view_mode,
             get_config_dir_path,
             ensure_versions_dir,
             write_json_file,
