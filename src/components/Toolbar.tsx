@@ -23,10 +23,12 @@ import {
 	Grid3x3,
 	Sparkles,
 	HardDrive,
-	FolderOpen
+	FolderOpen,
+	HelpCircle
 } from 'lucide-react';
 
 import { Button } from './ui/button';
+import { AboutDialog } from './AboutDialog';
 import { LoadingDialog } from './LoadingDialog';
 import { LoadOptions } from './FolderSelectDialog';
 import { FolderSelectDialog } from './FolderSelectDialog';
@@ -53,6 +55,7 @@ export const Toolbar = () => {
 		null
 	);
 	const [sceneEditorOpen, setSceneEditorOpen] = useState(false);
+	const [aboutDialogOpen, setAboutDialogOpen] = useState(false);
 	const [isMaximized, setIsMaximized] = useState(false);
 
 	useEffect(() => {
@@ -562,6 +565,16 @@ export const Toolbar = () => {
 				</TooltipProvider>
 
 				<div className="ml-auto text-[11px] text-muted-foreground flex-shrink-0 flex items-center gap-2">
+					<Button
+						size="icon"
+						variant="ghost"
+						title="About Sprite Forge"
+						onClick={() => setAboutDialogOpen(true)}
+						onMouseDown={(e) => e.stopPropagation()}
+						className="h-6 w-6 hover:bg-primary/20 hover:text-primary transition-colors"
+					>
+						<HelpCircle className="h-3.5 w-3.5" />
+					</Button>
 					<span className="font-mono">{data ? `v${data.version.label} | ${data.itemsCount} items` : 'No files loaded'}</span>
 					{data && (
 						<Popover>
@@ -655,6 +668,7 @@ export const Toolbar = () => {
 			/>
 			<ThemeSettingsDialog open={themeDialogOpen} onOpenChange={setThemeDialogOpen} />
 			<VersionHistoryDialog open={versionHistoryOpen} onOpenChange={setVersionHistoryOpen} />
+			<AboutDialog open={aboutDialogOpen} onOpenChange={setAboutDialogOpen} />
 			<SpriteOptimizerDialog
 				open={optimizerOpen}
 				result={optimizerResult}
