@@ -98,7 +98,8 @@ export const SpriteCanvas = memo(
 	}: SpriteCanvasProps) => {
 		const canvasRef = useRef<HTMLCanvasElement>(null);
 		const containerRef = useRef<HTMLDivElement>(null);
-		const { data, getSprite, spriteLoadVersion, notifyDataChanged, notifySpriteImport, notifySpritesLoaded } = useTibiaData();
+		const { data, getSprite, isNewItem, spriteLoadVersion, notifyDataChanged, notifySpriteImport, notifySpritesLoaded } =
+			useTibiaData();
 		const { dragType, isDragging, draggedItem } = useDragDrop();
 		const [isLoading, setIsLoading] = useState(false);
 		const [isPanning, setIsPanning] = useState(false);
@@ -999,13 +1000,15 @@ export const SpriteCanvas = memo(
 				const imageFile = files.find((f) => /\.(png|bmp|jpg|jpeg)$/i.test(f.name));
 				if (!imageFile || !thing || !data) return;
 
-				const result = await importObjectSheet(thing, data, imageFile);
+				const result = await importObjectSheet(thing, data, imageFile, { isNew: isNewItem(thing.id, thing.category) });
 				if (result.success && result.updatedThing) {
 					notifySpritesLoaded();
 					if (notifyDataChanged && result.spriteIds) {
 						notifyDataChanged(result.spriteIds);
 					}
 					notifySpriteImport();
+				} else if (result.error) {
+					console.error('Sheet import rejected:', result.error);
 				}
 			};
 
@@ -1026,7 +1029,7 @@ export const SpriteCanvas = memo(
 				containerElement.removeEventListener('dragleave', onDragLeave);
 				containerElement.removeEventListener('drop', onDrop);
 			};
-		}, [thing, data, allowFileDrop, notifySpritesLoaded, notifyDataChanged, notifySpriteImport]);
+		}, [thing, data, allowFileDrop, isNewItem, notifySpritesLoaded, notifyDataChanged, notifySpriteImport]);
 
 		const transformStyle = useMemo(() => {
 			const baseStyle = {

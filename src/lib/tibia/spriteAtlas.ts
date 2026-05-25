@@ -4,19 +4,19 @@ function protocolBase(): string {
 }
 
 export interface AtlasParams {
-	sprPath: string;
+	cols: number;
 	start: number;
 	count: number;
-	cols: number;
+	sprPath: string;
 	transparent: boolean;
 }
 
-export function atlasPngUrl({ sprPath, start, count, cols, transparent }: AtlasParams): string {
+export function atlasPngUrl({ cols, start, count, sprPath, transparent }: AtlasParams): string {
 	const q = new URLSearchParams({
 		path: sprPath,
+		cols: String(cols),
 		start: String(start),
 		count: String(count),
-		cols: String(cols),
 		transparent: transparent ? '1' : '0'
 	});
 	return `${protocolBase()}/atlas.png?${q.toString()}`;

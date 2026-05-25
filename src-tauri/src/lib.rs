@@ -864,9 +864,7 @@ fn export_object_sheet_rust(
     spr_state: tauri::State<SprManagerState>,
 ) -> Result<(), String> {
     let mut manager = spr_state.lock().map_err(|e| format!("Lock error: {}", e))?;
-    
-    // ... (group logic) ...
-// 1. Determine frame groups
+
     let mut groups: Vec<FrameGroup> = Vec::new();
     if let Some(ref fgs) = thing.frame_groups_data {
         if !fgs.is_empty() {
@@ -878,8 +876,7 @@ fn export_object_sheet_rust(
     } else {
          groups.push(create_synthetic_group(&thing));
     }
-    
-    // 2. Calculate Sheet Dimensions
+
     let mut sheet_total_x = 0;
     let mut sheet_total_y = 0;
     let mut max_thing_width = 0;
@@ -1010,7 +1007,320 @@ fn export_object_sheet_rust(
     Ok(())
 }
 
-/// Request body: [transparent: u8][version: u32 LE][next_sprite_id: u32 LE]
+#[derive(Clone)]
+struct GroupGeom {
+    width: u8,
+    height: u8,
+    layers: u8,
+    pattern_x: u8,
+    pattern_y: u8,
+    pattern_z: u8,
+    frames: u8,
+}
+
+impl GroupGeom {
+    fn from_thing(t: &ThingType) -> Self {
+        Self {
+            width: t.width.max(1),
+            height: t.height.max(1),
+            layers: t.layers.max(1),
+            pattern_x: t.pattern_x.max(1),
+            pattern_y: t.pattern_y.max(1),
+            pattern_z: t.pattern_z.max(1),
+            frames: t.frames.max(1),
+        }
+    }
+
+    fn from_frame_group(g: &FrameGroup) -> Self {
+        Self {
+            width: g.width.max(1),
+            height: g.height.max(1),
+            layers: g.layers.max(1),
+            pattern_x: g.pattern_x.max(1),
+            pattern_y: g.pattern_y.max(1),
+            pattern_z: g.pattern_z.max(1),
+            frames: g.frames.max(1),
+        }
+    }
+
+    fn total_x(&self) -> u32 {
+        self.pattern_z as u32 * self.pattern_x as u32 * self.layers as u32
+    }
+
+    fn total_y(&self) -> u32 {
+        self.frames as u32 * self.pattern_y as u32
+    }
+
+    fn sheet_size(&self) -> (u32, u32) {
+        (self.total_x() * self.width as u32 * 32, self.total_y() * self.height as u32 * 32)
+    }
+
+    fn total_sprites(&self) -> usize {
+        self.width as usize
+            * self.height as usize
+            * self.layers as usize
+            * self.pattern_x as usize
+            * self.pattern_y as usize
+            * self.pattern_z as usize
+            * self.frames as usize
+    }
+}
+
+fn extract_group_sprites(
+    img: &RgbaImage,
+    g: &GroupGeom,
+    sheet_total_x: u32,
+    cell_w_px: u32,
+    cell_h_px: u32,
+    fy_offset: u32,
+    transparent: bool,
+    spr_path: &str,
+    manager: &mut SprManager,
+    reusable_ids: &[u32],
+    id_alloc_idx: &mut usize,
+    current_next_id: &mut u32,
+) -> Result<(Vec<u32>, Vec<SpriteData>), String> {
+    let mut sprite_index: Vec<u32> = Vec::with_capacity(g.total_sprites());
+    let mut sprites_data: Vec<SpriteData> = Vec::new();
+    let img_w = img.width();
+    let img_h = img.height();
+
+    for frame in 0..g.frames {
+        for pz in 0..g.pattern_z {
+            for py in 0..g.pattern_y {
+                for px in 0..g.pattern_x {
+                    for layer in 0..g.layers {
+                        let tex_index = (((((frame as u32) * g.pattern_z as u32 + pz as u32)
+                            * g.pattern_y as u32
+                            + py as u32)
+                            * g.pattern_x as u32
+                            + px as u32)
+                            * g.layers as u32)
+                            + layer as u32;
+                        let fx = (tex_index % sheet_total_x) * cell_w_px;
+                        let fy = fy_offset + (tex_index / sheet_total_x) * cell_h_px;
+
+                        for h in 0..g.height {
+                            for w in 0..g.width {
+                                let reversed_w = (g.width - 1 - w) as u32;
+                                let reversed_h = (g.height - 1 - h) as u32;
+                                let src_x = fx + reversed_w * 32;
+                                let src_y = fy + reversed_h * 32;
+
+                                if src_x + 32 > img_w || src_y + 32 > img_h {
+                                    sprite_index.push(0);
+                                    continue;
+                                }
+
+                                let sub_img = img.view(src_x, src_y, 32, 32);
+                                let mut sub_img_buffer = sub_img.to_image();
+                                for pixel in sub_img_buffer.pixels_mut() {
+                                    if pixel[3] == 0 { pixel.0 = [0, 0, 0, 0]; }
+                                }
+                                let raw_pixels = sub_img_buffer.as_raw();
+                                let is_empty = raw_pixels.chunks(4).all(|p| p[3] == 0);
+
+                                if is_empty {
+                                    sprite_index.push(0);
+                                    continue;
+                                }
+
+                                let sprite_id = if *id_alloc_idx < reusable_ids.len() {
+                                    let id = reusable_ids[*id_alloc_idx];
+                                    *id_alloc_idx += 1;
+                                    id
+                                } else {
+                                    let id = *current_next_id;
+                                    *current_next_id += 1;
+                                    id
+                                };
+
+                                let compressed_pixels = compress_to_rle(raw_pixels, transparent);
+                                let sprite_data = SpriteData {
+                                    id: sprite_id,
+                                    is_empty: false,
+                                    compressed_pixels,
+                                };
+
+                                manager.update_sprite(spr_path, sprite_id, sprite_data.clone())?;
+                                sprites_data.push(sprite_data);
+                                sprite_index.push(sprite_id);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Ok((sprite_index, sprites_data))
+}
+
+fn build_import_response(new_thing: &ThingType, sprites_data: Vec<SpriteData>, transparent: bool)
+    -> Result<tauri::ipc::Response, String>
+{
+    let thing_json = serde_json::to_vec(new_thing)
+        .map_err(|e| format!("JSON serialize error: {}", e))?;
+    let sprites_buffer = SprManager::pack_sprites_rgba_lz4(sprites_data, transparent);
+    let mut result = Vec::with_capacity(4 + thing_json.len() + sprites_buffer.len());
+    result.extend_from_slice(&(thing_json.len() as u32).to_le_bytes());
+    result.extend_from_slice(&thing_json);
+    result.extend_from_slice(&sprites_buffer);
+    Ok(tauri::ipc::Response::new(result))
+}
+
+fn collect_reusable_ids(thing: &ThingType) -> Vec<u32> {
+    let mut ids: Vec<u32> = Vec::new();
+    if let Some(fgs) = &thing.frame_groups_data {
+        for fg in fgs {
+            for &id in &fg.sprite_index {
+                if id != 0 { ids.push(id); }
+            }
+        }
+    } else {
+        for &id in &thing.sprite_index {
+            if id != 0 { ids.push(id); }
+        }
+    }
+    ids.sort();
+    ids.dedup();
+    ids
+}
+
+fn import_preserve_geometry(
+    img: &RgbaImage,
+    img_width: u32,
+    img_height: u32,
+    thing: ThingType,
+    transparent: bool,
+    next_sprite_id: u32,
+    spr_path: &str,
+    manager: &mut SprManager,
+) -> Result<tauri::ipc::Response, String> {
+    let synthetic = thing.frame_groups_data.is_none();
+    let groups: Vec<GroupGeom> = if synthetic {
+        vec![GroupGeom::from_thing(&thing)]
+    } else {
+        thing.frame_groups_data
+            .as_ref()
+            .unwrap()
+            .iter()
+            .map(GroupGeom::from_frame_group)
+            .collect()
+    };
+
+    let reusable_ids = collect_reusable_ids(&thing);
+    let mut id_alloc_idx: usize = 0;
+    let mut current_next_id: u32 = next_sprite_id;
+
+    let active = GroupGeom::from_thing(&thing);
+    let active_matches = |g: &GroupGeom| {
+        g.width == active.width && g.height == active.height && g.layers == active.layers
+            && g.pattern_x == active.pattern_x && g.pattern_y == active.pattern_y
+            && g.pattern_z == active.pattern_z && g.frames == active.frames
+    };
+
+    let single_match: Option<usize> = groups
+        .iter()
+        .enumerate()
+        .find(|(_, g)| g.sheet_size() == (img_width, img_height) && active_matches(g))
+        .map(|(i, _)| i)
+        .or_else(|| {
+            groups
+                .iter()
+                .enumerate()
+                .find(|(_, g)| g.sheet_size() == (img_width, img_height))
+                .map(|(i, _)| i)
+        });
+
+    if let Some(idx) = single_match {
+        let g = groups[idx].clone();
+        let cell_w_px = g.width as u32 * 32;
+        let cell_h_px = g.height as u32 * 32;
+        let (new_sprite_index, sprites_data) = extract_group_sprites(
+            img, &g, g.total_x(), cell_w_px, cell_h_px, 0,
+            transparent, spr_path, manager,
+            &reusable_ids, &mut id_alloc_idx, &mut current_next_id,
+        )?;
+
+        let mut new_thing = thing.clone();
+        if synthetic {
+            new_thing.sprite_index = new_sprite_index;
+        } else if let Some(fgs) = new_thing.frame_groups_data.as_mut() {
+            fgs[idx].sprite_index = new_sprite_index.clone();
+            if active_matches(&GroupGeom::from_frame_group(&fgs[idx])) {
+                new_thing.sprite_index = new_sprite_index;
+            }
+        }
+
+        return build_import_response(&new_thing, sprites_data, transparent);
+    }
+
+    if groups.len() > 1 {
+        let combined_w: u32 = groups.iter().map(|g| g.total_x() * g.width as u32 * 32).max().unwrap_or(0);
+        let combined_h: u32 = groups.iter().map(|g| g.total_y() * g.height as u32 * 32).sum();
+
+        if combined_w == img_width && combined_h == img_height {
+            let global_total_x: u32 = groups.iter().map(|g| g.total_x()).max().unwrap_or(1);
+            let global_cell_w_px: u32 = groups.iter().map(|g| g.width as u32 * 32).max().unwrap_or(32);
+            let global_cell_h_px: u32 = groups.iter().map(|g| g.height as u32 * 32).max().unwrap_or(32);
+
+            let mut all_sprites: Vec<SpriteData> = Vec::new();
+            let mut per_group_index: Vec<Vec<u32>> = Vec::with_capacity(groups.len());
+            let mut fy_offset: u32 = 0;
+
+            for g in groups.iter() {
+                let (idx_vec, mut sprites) = extract_group_sprites(
+                    img, g, global_total_x, global_cell_w_px, global_cell_h_px, fy_offset,
+                    transparent, spr_path, manager,
+                    &reusable_ids, &mut id_alloc_idx, &mut current_next_id,
+                )?;
+                fy_offset += g.total_y() * global_cell_h_px;
+                per_group_index.push(idx_vec);
+                all_sprites.append(&mut sprites);
+            }
+
+            let mut new_thing = thing.clone();
+            if let Some(fgs) = new_thing.frame_groups_data.as_mut() {
+                for (i, idx_vec) in per_group_index.into_iter().enumerate() {
+                    if i < fgs.len() {
+                        fgs[i].sprite_index = idx_vec.clone();
+                        if active_matches(&GroupGeom::from_frame_group(&fgs[i])) {
+                            new_thing.sprite_index = idx_vec;
+                        }
+                    }
+                }
+            }
+
+            return build_import_response(&new_thing, all_sprites, transparent);
+        }
+    }
+
+    let single_sizes: Vec<String> = groups
+        .iter()
+        .enumerate()
+        .map(|(i, g)| {
+            let (w, h) = g.sheet_size();
+            if groups.len() > 1 {
+                format!("group {}: {}x{}", i, w, h)
+            } else {
+                format!("{}x{}", w, h)
+            }
+        })
+        .collect();
+    let mut msg = format!(
+        "Image is {}x{} but does not match the object's geometry. Expected {}",
+        img_width, img_height, single_sizes.join(" or ")
+    );
+    if groups.len() > 1 {
+        let combined_w: u32 = groups.iter().map(|g| g.total_x() * g.width as u32 * 32).max().unwrap_or(0);
+        let combined_h: u32 = groups.iter().map(|g| g.total_y() * g.height as u32 * 32).sum();
+        msg.push_str(&format!(", or combined: {}x{}", combined_w, combined_h));
+    }
+    Err(msg)
+}
+
+/// Request body: [transparent: u8][version: u32 LE][next_sprite_id: u32 LE][is_new: u8]
 ///               [spr_path: u16-len UTF-8][category: u16-len UTF-8]
 ///               [thing: encodeThing payload][image bytes: rest]
 /// Response:     [thing_json_len: u32][thing_json][LZ4 RGBA sprites]
@@ -1028,6 +1338,7 @@ fn import_object_sheet_binary(
     let transparent = r.bool()?;
     let version = r.u32()?;
     let next_sprite_id = r.u32()?;
+    let is_new = r.bool()?;
     let spr_path = r.string()?;
     let category = r.string()?;
     let thing = read_thing(&mut r, &category)?;
@@ -1045,6 +1356,19 @@ fn import_object_sheet_binary(
 
     if img_width < 32 || img_height < 32 {
         return Err("Image is too small (must be at least 32x32)".to_string());
+    }
+
+    if !is_new {
+        return import_preserve_geometry(
+            &img,
+            img_width,
+            img_height,
+            thing,
+            transparent,
+            next_sprite_id,
+            &spr_path,
+            &mut manager,
+        );
     }
 
     // 2. Detect if this is an outfit (special handling)

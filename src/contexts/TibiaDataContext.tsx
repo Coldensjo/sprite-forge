@@ -38,6 +38,9 @@ interface TibiaDataContextType {
 	setHighlightedItemId: (id: null | number) => void;
 	setHighlightedSpriteId: (id: null | number) => void;
 	setSelectedCategory: (category: ThingCategory) => void;
+	isNewItem: (id: number, category: ThingCategory) => boolean;
+	clearNewItem: (id: number, category: ThingCategory) => void;
+	markAsNewItem: (id: number, category: ThingCategory) => void;
 	removeOpenedItem: (id: number, category: ThingCategory) => void;
 	getThing: (id: number, category: ThingCategory) => null | ThingType;
 	hasUnsavedChanges: (id: number, category: ThingCategory) => boolean;
@@ -96,6 +99,7 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 	const [highlightedSpriteId, setHighlightedSpriteId] = useState<null | number>(null);
 	const [spriteLoadVersion, setSpriteLoadVersion] = useState(0);
 	const [unsavedChanges, setUnsavedChanges] = useState<Set<string>>(new Set());
+	const [newItemKeys, setNewItemKeys] = useState<Set<string>>(new Set());
 	// Compile tracking
 	const [modifiedSinceCompile, setModifiedSinceCompile] = useState<
 		Map<string, { id: number; data: ThingType; category: ThingCategory }>
@@ -192,6 +196,7 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 			setOpenedItems([]);
 			setHighlightedItemId(null);
 			setUnsavedChanges(new Set());
+			setNewItemKeys(new Set());
 			setSelectedCategoryState(ThingCategory.ITEM);
 
 			// Reset restoration flag BEFORE setting new data
@@ -243,6 +248,7 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 		setSelectedCategory(ThingCategory.ITEM);
 		setOpenedSpriteId(null);
 		setUnsavedChanges(new Set());
+		setNewItemKeys(new Set());
 		// Clear localStorage when data is cleared
 		try {
 			if (typeof window !== 'undefined') {
@@ -489,6 +495,30 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 		});
 	}, []);
 
+	const isNewItem = useCallback(
+		(id: number, category: ThingCategory): boolean => {
+			return newItemKeys.has(`${category}-${id}`);
+		},
+		[newItemKeys]
+	);
+
+	const markAsNewItem = useCallback((id: number, category: ThingCategory) => {
+		setNewItemKeys((prev) => {
+			const next = new Set(prev);
+			next.add(`${category}-${id}`);
+			return next;
+		});
+	}, []);
+
+	const clearNewItem = useCallback((id: number, category: ThingCategory) => {
+		setNewItemKeys((prev) => {
+			if (!prev.has(`${category}-${id}`)) return prev;
+			const next = new Set(prev);
+			next.delete(`${category}-${id}`);
+			return next;
+		});
+	}, []);
+
 	const notifySpritesLoaded = useCallback(() => {
 		setSpriteLoadVersion((v) => {
 			try {
@@ -586,6 +616,7 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 	const clearModifiedTracking = useCallback(() => {
 		setModifiedSinceCompile(new Map());
 		setModifiedSprites(new Map());
+		setNewItemKeys(new Set());
 	}, []);
 
 	const compileFiles = useCallback(async () => {
@@ -632,6 +663,7 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 				getOutfit,
 				getEffect,
 				getSprite,
+				isNewItem,
 				setLoading,
 				getMissile,
 				updateThing,
@@ -639,7 +671,9 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 				spriteReader,
 				openedItemId,
 				compileFiles,
+				clearNewItem,
 				updateCounter,
+				markAsNewItem,
 				openedSpriteId,
 				loadingProgress,
 				setOpenedItemId,

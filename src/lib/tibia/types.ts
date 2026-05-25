@@ -125,42 +125,40 @@ export interface ThingType {
 	clothSlot: number;
 
 	loopCount: number;
+	hasBones: boolean;
 	stackable: boolean;
 	rotatable: boolean;
 	lightLevel: number;
 	lightColor: number;
+
 	// Offset properties
 	hasOffset: boolean;
-
 	marketName: string;
 	wrappable: boolean;
 	topEffect: boolean;
 	startFrame: number;
-	groundSpeed: number;
 
+	groundSpeed: number;
 	isOnBottom: boolean;
 	pickupable: boolean;
-	isVertical: boolean;
 
+	isVertical: boolean;
 	isLensHelp: boolean;
 	ignoreLook: boolean;
-	hasCharges: boolean;
 
+	hasCharges: boolean;
 	// Container properties
 	isContainer: boolean;
 	floorChange: boolean;
+
 	miniMapColor: number;
-
 	marketShowAs: number;
+
 	unwrappable: boolean;
-
-	hasBones: boolean;
-	bonesOffsetX: number[];
-	bonesOffsetY: number[];
-
 	// Animation properties
 	isAnimation: boolean;
 	spriteIndex: number[];
+
 	writableOnce: boolean;
 	maxTextLength: number;
 	// Movement properties
@@ -168,7 +166,6 @@ export interface ThingType {
 	isUnmoveable: boolean;
 	blockMissile: boolean;
 	isHorizontal: boolean;
-
 	// Elevation properties
 	hasElevation: boolean;
 	isFullGround: boolean;
@@ -176,8 +173,11 @@ export interface ThingType {
 	// Market properties
 	isMarketItem: boolean;
 	marketTradeAs: number;
+
 	defaultAction: number;
 	animationMode: number;
+	bonesOffsetX: number[];
+	bonesOffsetY: number[];
 	blockPathfind: boolean;
 	isTranslucent: boolean;
 	// Misc properties
@@ -412,6 +412,7 @@ export function createThingType(id: number, category: ThingCategory): ThingType 
 		dontHide: false,
 		miniMapColor: 0,
 		marketShowAs: 0,
+		hasBones: false,
 		stackable: false,
 		maxTextLength: 0,
 		rotatable: false,
@@ -421,6 +422,8 @@ export function createThingType(id: number, category: ThingCategory): ThingType 
 		wrappable: false,
 		topEffect: false,
 		animationMode: 0,
+		bonesOffsetX: [],
+		bonesOffsetY: [],
 		isOnBottom: false,
 		pickupable: false,
 		isVertical: false,
@@ -431,9 +434,6 @@ export function createThingType(id: number, category: ThingCategory): ThingType 
 		isContainer: false,
 		floorChange: false,
 		unwrappable: false,
-		hasBones: false,
-		bonesOffsetX: [],
-		bonesOffsetY: [],
 		isAnimation: false,
 		frameDurations: [],
 		writableOnce: false,

@@ -10,8 +10,8 @@ import { open } from '@tauri-apps/plugin-dialog';
 import { logger, logError, EventCode } from '@/lib/debug';
 
 import { loadDatFile } from './datReader';
-import { decodeDatResponse } from './datDecoder';
 import { SpriteReader } from './spriteReader';
+import { decodeDatResponse } from './datDecoder';
 import {
 	Sprite,
 	TibiaData,
@@ -682,7 +682,7 @@ export async function preloadSprites(
 
 	for (let i = 0; i < batches; i++) {
 		if (shouldContinue && !shouldContinue()) {
-			logger.log(EventCode.LOADER_READ, { preload: true, cancelled: true, at: i });
+			logger.log(EventCode.LOADER_READ, { at: i, preload: true, cancelled: true });
 			return;
 		}
 

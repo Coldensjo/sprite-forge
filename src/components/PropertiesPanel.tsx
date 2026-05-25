@@ -127,12 +127,15 @@ export const PropertiesPanel = () => {
 	const {
 		data,
 		getThing,
+		isNewItem,
 		updateThing,
 		openedItemId,
+		clearNewItem,
 		updateCounter,
 		setOpenedItemId,
 		removeOpenedItem,
 		selectedCategory,
+		hasUnsavedChanges,
 		openedItemCategory,
 		markUnsavedChanges,
 		notifySpritesLoaded,
@@ -254,11 +257,12 @@ export const PropertiesPanel = () => {
 				spriteIndexFirst20: initialItem.spriteIndex?.slice(0, 20)
 			});
 
+			const isNew = isNewItem(openedItemId, openedItemCategory);
+			const wasMarkedUnsaved = hasUnsavedChanges(openedItemId, openedItemCategory);
 			setDraftItem(initialItem);
-			setHasChanges(false);
+			setHasChanges(isNew || wasMarkedUnsaved);
 			setSelectedFrameGroup(initialGroup);
 			selectedFrameGroupRef.current = initialGroup;
-			markUnsavedChanges(openedItemId, openedItemCategory, false);
 			// Store original state for comparison and reset
 			originalItemRef.current = { ...initialItem };
 		} else {
@@ -266,7 +270,7 @@ export const PropertiesPanel = () => {
 			setDraftItem(null);
 			setHasChanges(false);
 		}
-	}, [item, openedItemId, openedItemCategory, updateCounter, markUnsavedChanges]);
+	}, [item, openedItemId, openedItemCategory, updateCounter, isNewItem, hasUnsavedChanges, markUnsavedChanges]);
 
 	const handlePropertyChange = useCallback(
 		(property: string, value: any) => {
@@ -315,15 +319,17 @@ export const PropertiesPanel = () => {
 		updateThing(openedItemId, openedItemCategory, updates);
 		setHasChanges(false);
 		markUnsavedChanges(openedItemId, openedItemCategory, false);
+		clearNewItem(openedItemId, openedItemCategory);
 	};
 
 	const handleDiscardChanges = () => {
 		if (!originalItemRef.current || !openedItemId || !openedItemCategory) return;
 
+		const isNew = isNewItem(openedItemId, openedItemCategory);
 		// Reset to the original transformed state (not raw item)
 		setDraftItem({ ...originalItemRef.current });
-		setHasChanges(false);
-		markUnsavedChanges(openedItemId, openedItemCategory, false);
+		setHasChanges(isNew);
+		markUnsavedChanges(openedItemId, openedItemCategory, isNew);
 
 		// Reset frame group selection to initial state for outfits
 		if (originalItemRef.current.category === ThingCategory.OUTFIT) {
@@ -368,8 +374,10 @@ export const PropertiesPanel = () => {
 				return orig !== curr;
 			});
 
-			setHasChanges(stillHasChanges);
-			markUnsavedChanges(openedItemId, openedItemCategory, stillHasChanges);
+			const isNew = isNewItem(openedItemId, openedItemCategory);
+			const effective = stillHasChanges || isNew;
+			setHasChanges(effective);
+			markUnsavedChanges(openedItemId, openedItemCategory, effective);
 
 			return updated;
 		});

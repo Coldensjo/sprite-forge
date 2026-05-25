@@ -8,19 +8,22 @@ import { parseImportResponse } from './loader';
 import { ByteWriter, encodeThing } from './compiler';
 
 export interface ImportResult {
+	error?: string;
 	success: boolean;
 	spriteIds?: number[];
 	updatedThing?: ThingType;
 }
 
-/**
- * Import a sprite sheet into an object (item/outfit/effect/missile)
- *
- * Uses binary IPC to return both the updated ThingType and sprite data
- * in a single call, eliminating race conditions and ensuring sprites
- * are immediately available in the cache.
- */
-export async function importObjectSheet(thing: ThingType, data: TibiaData, file?: File | string): Promise<ImportResult> {
+export interface ImportOptions {
+	isNew?: boolean;
+}
+
+export async function importObjectSheet(
+	thing: ThingType,
+	data: TibiaData,
+	file?: File | string,
+	options?: ImportOptions
+): Promise<ImportResult> {
 	if (!data?.sprPath) {
 		logger.log(EventCode.ERROR, { msg: 'Cannot import: no data loaded' });
 		return { success: false };
@@ -73,6 +76,7 @@ export async function importObjectSheet(thing: ThingType, data: TibiaData, file?
 		w.bool(data.transparency);
 		w.u32(data.version.value);
 		w.u32(nextId);
+		w.bool(options?.isNew ?? false);
 		w.str(data.sprPath);
 		w.str(thing.category);
 		encodeThing(w, thing);
@@ -148,6 +152,7 @@ export async function importObjectSheet(thing: ThingType, data: TibiaData, file?
 	} catch (err) {
 		logger.log(EventCode.ERROR, { err, msg: 'Import failed' });
 		console.error('Import failed:', err);
-		return { success: false };
+		const message = typeof err === 'string' ? err : err instanceof Error ? err.message : String(err);
+		return { success: false, error: message };
 	}
 }

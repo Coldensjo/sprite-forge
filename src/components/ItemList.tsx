@@ -66,9 +66,11 @@ function getThumbnailSpriteIds(thing: ThingType): number[] {
 export const ItemList = () => {
 	const {
 		data,
+		isNewItem,
 		updateThing,
 		openedItemId,
 		updateCounter,
+		markAsNewItem,
 		setOpenedItemId,
 		selectedCategory,
 		removeOpenedItem,
@@ -184,6 +186,8 @@ export const ItemList = () => {
 				prevCategoryRef.current = selectedCategory;
 				prevDataRef.current = data;
 				setCurrentPage(1);
+				const viewport = scrollViewportRef.current?.querySelector('[data-radix-scroll-area-viewport]');
+				if (viewport) viewport.scrollTo({ top: 0, behavior: 'instant' });
 				// Auto-highlight first item (but don't open it)
 				const firstItemId = allItemIds[0];
 				if (firstItemId !== undefined) {
@@ -540,6 +544,9 @@ export const ItemList = () => {
 											const itemIndex = updatedAllItemIds.indexOf(newId);
 											const targetPage = Math.floor(itemIndex / itemsPerPage) + 1;
 
+											markAsNewItem(newId, selectedCategory);
+											markUnsavedChanges(newId, selectedCategory, true);
+
 											// Set pending item ID to highlight after page change
 											pendingNewItemId.current = newId;
 											notifyDataChanged();
@@ -774,10 +781,14 @@ export const ItemList = () => {
 											onClick={async () => {
 												if (data && item) {
 													console.log('Context Menu: Import Object Sheet clicked for item', item.id);
-													const success = await importObjectSheet(item, data);
-													if (success) {
+													const result = await importObjectSheet(item, data, undefined, {
+														isNew: isNewItem(item.id, selectedCategory)
+													});
+													if (result.success) {
 														notifySpritesLoaded(); // Force re-render of canvases
 														notifyDataChanged([item.id]); // Force refresh lists
+													} else if (result.error) {
+														toast({ variant: 'destructive', description: `Import rejected: ${result.error}` });
 													}
 												}
 											}}
