@@ -346,6 +346,40 @@ struct DirEntry {
     name: String,
     path: String,
     is_dir: bool,
+    modified_ms: Option<i64>,
+    size: Option<u64>,
+}
+
+#[derive(Serialize)]
+struct DriveInfo {
+    letter: String,
+    label: String,
+}
+
+#[tauri::command]
+#[cfg(target_os = "windows")]
+fn list_drives() -> Vec<DriveInfo> {
+    let mut drives = Vec::new();
+    for c in b'A'..=b'Z' {
+        let letter = (c as char).to_string();
+        let path_str = format!("{}:\\", letter);
+        if Path::new(&path_str).is_dir() {
+            drives.push(DriveInfo {
+                label: format!("Disco Local ({}:)", letter),
+                letter: path_str,
+            });
+        }
+    }
+    drives
+}
+
+#[tauri::command]
+#[cfg(not(target_os = "windows"))]
+fn list_drives() -> Vec<DriveInfo> {
+    vec![DriveInfo {
+        letter: "/".to_string(),
+        label: "Root (/)".to_string(),
+    }]
 }
 
 #[derive(Serialize)]
@@ -393,58 +427,6 @@ fn get_system_directories() -> Result<Vec<SystemDirectory>, String> {
             });
         }
 
-        if let Some(pic) = dirs::picture_dir() {
-            dirs.push(SystemDirectory {
-                name: "Pictures".to_string(),
-                path: pic.to_string_lossy().to_string(),
-            });
-        }
-
-        if let Some(video) = dirs::video_dir() {
-            dirs.push(SystemDirectory {
-                name: "Videos".to_string(),
-                path: video.to_string_lossy().to_string(),
-            });
-        }
-
-        if let Some(music) = dirs::audio_dir() {
-            dirs.push(SystemDirectory {
-                name: "Music".to_string(),
-                path: music.to_string_lossy().to_string(),
-            });
-        }
-    }
-
-    {
-        let temp = std::env::temp_dir();
-        dirs.push(SystemDirectory {
-            name: "Temp".to_string(),
-            path: temp.to_string_lossy().to_string(),
-        });
-    }
-
-    #[cfg(windows)]
-    {
-        if let Ok(program_files) = std::env::var("ProgramFiles") {
-            dirs.push(SystemDirectory {
-                name: "Program Files".to_string(),
-                path: program_files,
-            });
-        }
-        if let Ok(program_files_x86) = std::env::var("ProgramFiles(x86)") {
-            dirs.push(SystemDirectory {
-                name: "Program Files (x86)".to_string(),
-                path: program_files_x86,
-            });
-        }
-    }
-
-    #[cfg(unix)]
-    {
-        dirs.push(SystemDirectory {
-            name: "Root".to_string(),
-            path: "/".to_string(),
-        });
     }
 
     Ok(dirs)
@@ -478,11 +460,18 @@ fn list_directory(path: String) -> Result<Vec<DirEntry>, String> {
                         
                         let full_path = entry_path.to_string_lossy().to_string();
                         let is_dir = entry_path.is_dir();
-                        
+                        let meta = entry.metadata().ok();
+                        let modified_ms = meta.as_ref().and_then(|m| m.modified().ok()).and_then(|t| {
+                            t.duration_since(std::time::UNIX_EPOCH).ok().map(|d| d.as_millis() as i64)
+                        });
+                        let size = meta.as_ref().map(|m| m.len()).filter(|_| !is_dir);
+
                         entries.push(DirEntry {
                             name,
                             path: full_path,
                             is_dir,
+                            modified_ms,
+                            size,
                         });
                     }
                     Err(e) => {
@@ -1918,6 +1907,7 @@ tauri::Builder::default()
             set_debug_logging,
             get_debug_logging,
             list_directory,
+            list_drives,
             get_home_dir,
             get_system_directories,
             check_files_exist,

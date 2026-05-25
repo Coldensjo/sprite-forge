@@ -1,27 +1,44 @@
-import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { X, Home, Star, Folder, ChevronLeft, ChevronRight, CheckCircle2 } from 'lucide-react';
-
-import { Input } from './ui/input';
-import { Badge } from './ui/badge';
-import { Label } from './ui/label';
-import { Button } from './ui/button';
-import { Checkbox } from './ui/checkbox';
-import { ScrollArea } from './ui/scroll-area';
-import { Dialog, DialogTitle, DialogContent, DialogDescription } from './ui/dialog';
+import React, { useRef, useState, useEffect } from 'react';
+import {
+	X,
+	Home,
+	Star,
+	Folder,
+	Search,
+	Monitor,
+	ArrowUp,
+	Download,
+	Computer,
+	FileText,
+	RefreshCw,
+	HardDrive,
+	ArrowLeft,
+	ArrowRight,
+	ChevronDown,
+	ChevronRight,
+	CheckCircle2
+} from 'lucide-react';
 
 interface DirEntry {
 	name: string;
 	path: string;
 	is_dir: boolean;
+	size: null | number;
+	modified_ms: null | number;
 }
 
-interface SystemDirectory {
+interface DriveInfo {
+	label: string;
+	letter: string;
+}
+
+interface FavoriteFolder {
 	name: string;
 	path: string;
 }
 
-interface FavoriteFolder {
+interface SystemDirectory {
 	name: string;
 	path: string;
 }
@@ -30,10 +47,68 @@ interface FolderSelectDialogProps {
 	open: boolean;
 	title?: string;
 	onOpenChange: (open: boolean) => void;
-	// Option 2: Return path only (for new two-step flow)
 	onFolderSelected?: (path: string) => void;
-	// Option 1: Direct load with transparency (legacy mode)
 	onSelect?: (path: string, transparency: boolean) => void;
+}
+
+const EXIT_MS = 160;
+
+function pathString(segments: string[]): string {
+	if (segments.length === 0) return '';
+	if (segments.length === 1) {
+		const seg = segments[0];
+		return /^[A-Za-z]:$/.test(seg) ? seg + '\\' : seg;
+	}
+	const head = /^[A-Za-z]:$/.test(segments[0]) ? segments[0] + '\\' : segments[0];
+	return [head, ...segments.slice(1)].join('\\').replace(/\\+/g, '\\');
+}
+
+function pathSegments(p: string): string[] {
+	return p.split(/[\\/]+/).filter(Boolean);
+}
+
+function pathsEqual(a: string, b: string): boolean {
+	return a.replace(/[\\/]+$/, '').toLowerCase() === b.replace(/[\\/]+$/, '').toLowerCase();
+}
+
+function driveLabel(letter: string, drives: DriveInfo[]): string {
+	return drives.find((d) => d.letter === letter)?.label ?? letter;
+}
+
+function getFolderName(path: string): string {
+	const segs = pathSegments(path);
+	return segs[segs.length - 1] || path;
+}
+
+const dateFmt = new Intl.DateTimeFormat(undefined, {
+	day: '2-digit',
+	year: 'numeric',
+	hour: '2-digit',
+	month: '2-digit',
+	minute: '2-digit'
+});
+
+function formatModified(ms: null | number): string {
+	if (ms === null) return '';
+	return dateFmt.format(new Date(ms));
+}
+
+function formatSize(bytes: null | number): string {
+	if (bytes === null) return '';
+	if (bytes < 1024) return `${bytes} B`;
+	const kb = bytes / 1024;
+	if (kb < 1024) return `${kb.toFixed(1)} KB`;
+	const mb = kb / 1024;
+	if (mb < 1024) return `${mb.toFixed(1)} MB`;
+	const gb = mb / 1024;
+	return `${gb.toFixed(1)} GB`;
+}
+
+function entryType(entry: DirEntry): string {
+	if (entry.is_dir) return 'File folder';
+	const dot = entry.name.lastIndexOf('.');
+	if (dot < 1) return 'File';
+	return `${entry.name.slice(dot + 1).toUpperCase()} File`;
 }
 
 export const FolderSelectDialog = ({
@@ -43,371 +118,738 @@ export const FolderSelectDialog = ({
 	onFolderSelected,
 	title = 'Select Folder'
 }: FolderSelectDialogProps) => {
-	// Determine if we're in path-only mode (new two-step flow)
 	const pathOnlyMode = !!onFolderSelected && !onSelect;
-	const [currentPath, setCurrentPath] = useState<string>('');
+
+	const [mounted, setMounted] = useState(open);
+	const [drives, setDrives] = useState<DriveInfo[]>([]);
+	const [systemDirs, setSystemDirs] = useState<SystemDirectory[]>([]);
+	const [favorites, setFavorites] = useState<FavoriteFolder[]>([]);
+	const [history, setHistory] = useState<string[][]>([[]]);
+	const [historyIndex, setHistoryIndex] = useState(0);
 	const [entries, setEntries] = useState<DirEntry[]>([]);
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState<null | string>(null);
-	const [pathHistory, setPathHistory] = useState<string[]>([]);
-	const [historyIndex, setHistoryIndex] = useState(-1);
-	const [systemDirs, setSystemDirs] = useState<SystemDirectory[]>([]);
-	const [selectedSystemDir, setSelectedSystemDir] = useState<null | string>(null);
+	const [selected, setSelected] = useState<null | string>(null);
+	const [nameInput, setNameInput] = useState('');
+	const [refreshTick, setRefreshTick] = useState(0);
+	const [computerExpanded, setComputerExpanded] = useState(true);
 	const [hasTibiaFiles, setHasTibiaFiles] = useState(false);
-	const [favorites, setFavorites] = useState<FavoriteFolder[]>([]);
-	const [isFavorite, setIsFavorite] = useState(false);
 	const [transparency, setTransparency] = useState(false);
+	const [searchQuery, setSearchQuery] = useState('');
 
-	const checkTibiaFiles = async (path: string) => {
-		try {
-			const results = await invoke<boolean[]>('check_files_exist', {
-				path,
-				filenames: ['Tibia.dat', 'Tibia.spr']
-			});
-			setHasTibiaFiles(results.length === 2 && results[0] && results[1]);
-		} catch {
-			setHasTibiaFiles(false);
-		}
-	};
-
-	const loadDirectory = async (path: string) => {
-		setLoading(true);
-		setError(null);
-		try {
-			const result = await invoke<DirEntry[]>('list_directory', { path });
-			setEntries(result);
-			setCurrentPath(path);
-			await checkTibiaFiles(path);
-			// Check if current path is in favorites
-			try {
-				const currentFavorites = await invoke<FavoriteFolder[]>('get_favorite_folders');
-				setIsFavorite(currentFavorites.some((f) => f.path === path));
-			} catch {
-				setIsFavorite(false);
-			}
-		} catch (err) {
-			const errorMessage = err instanceof Error ? err.message : 'Failed to load directory';
-			setError(errorMessage);
-			setEntries([]);
-			setHasTibiaFiles(false);
-			setIsFavorite(false);
-		} finally {
-			setLoading(false);
-		}
-	};
-
-	const loadFavorites = async () => {
-		try {
-			const favorites = await invoke<FavoriteFolder[]>('get_favorite_folders');
-			setFavorites(favorites);
-		} catch (err) {
-			console.error('Failed to load favorites:', err);
-			setFavorites([]);
-		}
-	};
-
-	const saveFavorites = async (newFavorites: FavoriteFolder[]) => {
-		try {
-			await invoke('set_favorite_folders', { folders: newFavorites });
-			setFavorites(newFavorites);
-		} catch (err) {
-			console.error('Failed to save favorites:', err);
-		}
-	};
-
-	const getFolderName = (path: string): string => {
-		const separator = path.includes('\\') ? '\\' : '/';
-		const parts = path.split(separator).filter(Boolean);
-		return parts[parts.length - 1] || path;
-	};
-
-	const toggleFavorite = async () => {
-		if (!currentPath) return;
-
-		const folderName = getFolderName(currentPath);
-		const favorite: FavoriteFolder = { name: folderName, path: currentPath };
-
-		if (isFavorite) {
-			const newFavorites = favorites.filter((f) => f.path !== currentPath);
-			await saveFavorites(newFavorites);
-			setIsFavorite(false);
-		} else {
-			const newFavorites = [...favorites, favorite];
-			await saveFavorites(newFavorites);
-			setIsFavorite(true);
-		}
-	};
-
-	const removeFavorite = async (path: string, e: React.MouseEvent) => {
-		e.stopPropagation();
-		const newFavorites = favorites.filter((f) => f.path !== path);
-		await saveFavorites(newFavorites);
-		if (currentPath === path) {
-			setIsFavorite(false);
-		}
-	};
-
-	const initializePath = async () => {
-		try {
-			const lastFolder = await invoke<null | string>('get_last_folder');
-			if (lastFolder) {
-				try {
-					await loadDirectory(lastFolder);
-					return;
-				} catch {
-					// If last folder doesn't exist, fall through to home
-				}
-			}
-			const homeDir = await invoke<string>('get_home_dir');
-			await loadDirectory(homeDir);
-		} catch {
-			await loadDirectory('C:\\');
-		}
-	};
+	const path = history[historyIndex];
+	const currentPathString = pathString(path);
+	const isCurrentFavorited = favorites.some((f) => pathsEqual(f.path, currentPathString));
 
 	useEffect(() => {
 		if (open) {
-			loadFavorites();
-			setPathHistory([]);
-			setHistoryIndex(-1);
-			loadSystemDirectories();
-			initializePath();
+			setMounted(true);
+			return;
 		}
-	}, [open]);
+		if (!mounted) return;
+		const t = window.setTimeout(() => setMounted(false), EXIT_MS);
+		return () => window.clearTimeout(t);
+	}, [open, mounted]);
 
-	const loadSystemDirectories = async () => {
+	useEffect(() => {
+		if (!mounted) return;
+		let cancelled = false;
+
+		const init = async () => {
+			try {
+				const [d, favs, sysDirs] = await Promise.all([
+					invoke<DriveInfo[]>('list_drives').catch(() => [] as DriveInfo[]),
+					invoke<FavoriteFolder[]>('get_favorite_folders').catch(() => [] as FavoriteFolder[]),
+					invoke<SystemDirectory[]>('get_system_directories').catch(() => [] as SystemDirectory[])
+				]);
+				if (cancelled) return;
+				setDrives(d);
+				setFavorites(favs);
+				setSystemDirs(sysDirs);
+
+				let startPath = '';
+				try {
+					const last = await invoke<null | string>('get_last_folder');
+					if (last) startPath = last;
+				} catch {
+					/* ignore */
+				}
+				if (!startPath) {
+					try {
+						startPath = await invoke<string>('get_home_dir');
+					} catch {
+						startPath = '';
+					}
+				}
+				if (cancelled) return;
+				if (startPath) {
+					setHistory([pathSegments(startPath)]);
+					setHistoryIndex(0);
+				} else {
+					setHistory([[]]);
+					setHistoryIndex(0);
+				}
+			} catch (e) {
+				if (!cancelled) setError(String(e));
+			}
+		};
+
+		void init();
+		return () => {
+			cancelled = true;
+		};
+	}, [mounted]);
+
+	useEffect(() => {
+		if (!open) return;
+		const onKey = (e: KeyboardEvent) => {
+			if (e.key === 'Escape') onOpenChange(false);
+		};
+		document.addEventListener('keydown', onKey);
+		return () => document.removeEventListener('keydown', onKey);
+	}, [open, onOpenChange]);
+
+	useEffect(() => {
+		if (path.length === 0) {
+			setEntries(
+				drives.map((d) => ({
+					size: null,
+					is_dir: true,
+					name: d.label,
+					path: d.letter,
+					modified_ms: null
+				}))
+			);
+			setLoading(false);
+			setError(null);
+			setHasTibiaFiles(false);
+			return;
+		}
+
+		let cancelled = false;
+		setLoading(true);
+		setError(null);
+		const target = pathString(path);
+
+		invoke<DirEntry[]>('list_directory', { path: target })
+			.then((es) => {
+				if (cancelled) return;
+				setEntries(es);
+				setLoading(false);
+			})
+			.catch((e) => {
+				if (cancelled) return;
+				setError(String(e));
+				setEntries([]);
+				setLoading(false);
+			});
+
+		invoke<boolean[]>('check_files_exist', { path: target, filenames: ['Tibia.dat', 'Tibia.spr'] })
+			.then((res) => {
+				if (cancelled) return;
+				setHasTibiaFiles(res.length === 2 && res[0] && res[1]);
+			})
+			.catch(() => {
+				if (!cancelled) setHasTibiaFiles(false);
+			});
+
+		return () => {
+			cancelled = true;
+		};
+	}, [path, drives, refreshTick]);
+
+	const navigateTo = (next: string[]) => {
+		const trimmed = history.slice(0, historyIndex + 1);
+		trimmed.push(next);
+		setHistory(trimmed);
+		setHistoryIndex(trimmed.length - 1);
+		setSelected(null);
+		setNameInput('');
+	};
+
+	const goBack = () => {
+		if (historyIndex > 0) {
+			setHistoryIndex(historyIndex - 1);
+			setSelected(null);
+			setNameInput('');
+		}
+	};
+
+	const goForward = () => {
+		if (historyIndex < history.length - 1) {
+			setHistoryIndex(historyIndex + 1);
+			setSelected(null);
+			setNameInput('');
+		}
+	};
+
+	const goUp = () => {
+		if (path.length > 0) navigateTo(path.slice(0, -1));
+	};
+
+	const onRowClick = (entry: DirEntry) => {
+		setSelected(entry.path);
+		setNameInput(entry.name);
+	};
+
+	const onRowDoubleClick = (entry: DirEntry) => {
+		if (!entry.is_dir) return;
+		if (path.length === 0) {
+			navigateTo([entry.path]);
+		} else {
+			navigateTo([...path, entry.name]);
+		}
+	};
+
+	const confirmCurrent = async () => {
+		const target = currentPathString;
+		if (!target) return;
 		try {
-			const dirs = await invoke<SystemDirectory[]>('get_system_directories');
-			setSystemDirs(dirs);
-		} catch (err) {
-			console.error('Failed to load system directories:', err);
+			await invoke('set_last_folder', { path: target });
+		} catch {
+			/* */
 		}
-	};
-
-	const handleSystemDirClick = async (dir: SystemDirectory) => {
-		setSelectedSystemDir(dir.path);
-		const newHistory = pathHistory.slice(0, historyIndex + 1);
-		newHistory.push(currentPath);
-		setPathHistory(newHistory);
-		setHistoryIndex(newHistory.length - 1);
-		await loadDirectory(dir.path);
-	};
-
-	const handleEntryClick = async (entry: DirEntry) => {
-		if (entry.is_dir) {
-			setSelectedSystemDir(null);
-			const newHistory = pathHistory.slice(0, historyIndex + 1);
-			newHistory.push(currentPath);
-			setPathHistory(newHistory);
-			setHistoryIndex(newHistory.length - 1);
-			await loadDirectory(entry.path);
-		}
-	};
-
-	const handleBack = async () => {
-		if (historyIndex >= 0 && pathHistory[historyIndex]) {
-			setSelectedSystemDir(null);
-			const targetPath = pathHistory[historyIndex];
-			const newHistory = pathHistory.slice(0, historyIndex);
-			setPathHistory(newHistory);
-			setHistoryIndex(newHistory.length - 1);
-			await loadDirectory(targetPath);
-		}
-	};
-
-	const handlePathInput = async (e: React.KeyboardEvent<HTMLInputElement>) => {
-		if (e.key === 'Enter') {
-			setSelectedSystemDir(null);
-			const targetPath = e.currentTarget.value;
-			await loadDirectory(targetPath);
-		}
-	};
-
-	const handleSelect = async () => {
-		try {
-			await invoke('set_last_folder', { path: currentPath });
-		} catch (err) {
-			console.error('Failed to save last folder:', err);
-		}
-
 		if (pathOnlyMode && onFolderSelected) {
-			onFolderSelected(currentPath);
+			onFolderSelected(target);
 		} else if (onSelect) {
-			onSelect(currentPath, transparency);
+			onSelect(target, transparency);
 		}
 		onOpenChange(false);
 	};
 
-	const handleFavoriteClick = async (favorite: FavoriteFolder) => {
-		setSelectedSystemDir(null);
-		const newHistory = pathHistory.slice(0, historyIndex + 1);
-		newHistory.push(currentPath);
-		setPathHistory(newHistory);
-		setHistoryIndex(newHistory.length - 1);
-		await loadDirectory(favorite.path);
+	const saveFavorites = async (next: FavoriteFolder[]) => {
+		setFavorites(next);
+		try {
+			await invoke('set_favorite_folders', { folders: next });
+		} catch {
+			/* */
+		}
 	};
 
-	const canGoBack = historyIndex >= 0;
+	const toggleFavorite = async (targetPath: string) => {
+		const exists = favorites.some((f) => pathsEqual(f.path, targetPath));
+		if (exists) {
+			await saveFavorites(favorites.filter((f) => !pathsEqual(f.path, targetPath)));
+		} else {
+			await saveFavorites([...favorites, { path: targetPath, name: getFolderName(targetPath) }]);
+		}
+	};
+
+	const reorderFavorites = (from: number, to: number) => {
+		if (from === to) return;
+		const next = [...favorites];
+		const [item] = next.splice(from, 1);
+		next.splice(from < to ? to - 1 : to, 0, item);
+		void saveFavorites(next);
+	};
+
+	if (!mounted) return null;
+	const closing = !open;
+
+	const visibleEntries = searchQuery.trim()
+		? entries.filter((e) => e.name.toLowerCase().includes(searchQuery.trim().toLowerCase()))
+		: entries;
 
 	return (
-		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent className="max-w-4xl h-[600px] p-0 gap-0 flex flex-col [&>button]:hidden">
-				<DialogTitle className="sr-only">{title}</DialogTitle>
-				<DialogDescription className="sr-only">Browse and select a folder containing Tibia files</DialogDescription>
-				<div className="border-b border-border px-4 py-3 flex items-center justify-between">
-					<h2 className="text-lg font-semibold">{title}</h2>
-					<button
-						onClick={() => onOpenChange(false)}
-						className="w-6 h-6 flex items-center justify-center hover:bg-accent rounded transition-colors"
-					>
-						<X className="h-4 w-4" />
+		<div onMouseDown={() => onOpenChange(false)} className={'fb-backdrop' + (closing ? ' fb-closing' : '')}>
+			<div
+				role="dialog"
+				aria-modal="true"
+				aria-label={title}
+				onMouseDown={(e) => e.stopPropagation()}
+				className={'fb-dialog' + (closing ? ' fb-closing' : '')}
+			>
+				<header className="fb-titlebar">
+					<span className="fb-title">{title}</span>
+					<button aria-label="Close" className="fb-titlebar-close" onClick={() => onOpenChange(false)}>
+						<X size={14} />
 					</button>
+				</header>
+
+				<Toolbar
+					path={path}
+					onUp={goUp}
+					drives={drives}
+					onBack={goBack}
+					onForward={goForward}
+					canUp={path.length > 0}
+					searchQuery={searchQuery}
+					canBack={historyIndex > 0}
+					canFavorite={path.length > 0}
+					hasTibiaFiles={hasTibiaFiles}
+					onSearchChange={setSearchQuery}
+					isFavorited={isCurrentFavorited}
+					onCrumb={(i) => navigateTo(path.slice(0, i))}
+					canForward={historyIndex < history.length - 1}
+					onRefresh={() => setRefreshTick((t) => t + 1)}
+					onToggleFavorite={() => toggleFavorite(currentPathString)}
+				/>
+
+				<div className="fb-body">
+					<Sidebar
+						drives={drives}
+						currentPath={path}
+						favorites={favorites}
+						systemDirs={systemDirs}
+						onNavigate={(p) => navigateTo(p)}
+						computerExpanded={computerExpanded}
+						onReorderFavorites={reorderFavorites}
+						onRemoveFavorite={(p) => toggleFavorite(p)}
+						onToggleComputer={() => setComputerExpanded((v) => !v)}
+					/>
+					<FileList
+						error={error}
+						loading={loading}
+						currentPath={path}
+						selected={selected}
+						favorites={favorites}
+						onRowClick={onRowClick}
+						entries={visibleEntries}
+						onRowDoubleClick={onRowDoubleClick}
+						onToggleFavorite={(p) => toggleFavorite(p)}
+					/>
 				</div>
 
-				<div className="flex flex-1 overflow-hidden">
-					<div className="w-48 border-r border-border bg-muted/30 flex flex-col">
-						<div className="px-4 h-[49px] border-b border-border flex items-center">
-							<h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Quick Access</h3>
-						</div>
-						<ScrollArea className="flex-1">
-							<div className="py-2">
-								{favorites.length > 0 && (
-									<>
-										<div className="px-3 py-1.5">
-											<h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Favorites</h4>
-										</div>
-										{favorites.map((favorite) => (
-											<button
-												key={favorite.path}
-												onClick={() => handleFavoriteClick(favorite)}
-												className={`w-full flex items-center gap-2 px-3 py-2 text-sm transition-colors text-left group ${
-													currentPath === favorite.path ? 'bg-accent text-accent-foreground' : 'hover:bg-accent/50'
-												}`}
-											>
-												<Star className="h-4 w-4 flex-shrink-0 fill-yellow-500 text-yellow-500" />
-												<span className="truncate flex-1">{favorite.name}</span>
-												<span
-													tabIndex={0}
-													role="button"
-													title="Remove favorite"
-													onClick={(e) => removeFavorite(favorite.path, e)}
-													className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-destructive/20 rounded cursor-pointer"
-													onKeyDown={(e) => {
-														if (e.key === 'Enter' || e.key === ' ') {
-															removeFavorite(favorite.path, e as any);
-														}
-													}}
-												>
-													<X className="h-3 w-3" />
-												</span>
-											</button>
-										))}
-										<div className="h-px bg-border mx-3 my-2" />
-									</>
-								)}
-								<div className="px-3 py-1.5">
-									<h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">System</h4>
-								</div>
-								{systemDirs.map((dir) => (
-									<button
-										key={dir.path}
-										onClick={() => handleSystemDirClick(dir)}
-										className={`w-full flex items-center gap-2 px-3 py-2 text-sm transition-colors text-left ${
-											selectedSystemDir === dir.path ? 'bg-accent text-accent-foreground' : 'hover:bg-accent/50'
-										}`}
-									>
-										<Folder className="h-4 w-4 flex-shrink-0" />
-										<span className="truncate">{dir.name}</span>
-									</button>
-								))}
-							</div>
-						</ScrollArea>
-					</div>
-
-					<div className="flex-1 flex flex-col overflow-hidden">
-						<div className="px-4 h-[49px] border-b border-border flex items-center gap-2">
-							<Button size="icon" variant="ghost" className="h-8 w-8" onClick={handleBack} disabled={!canGoBack}>
-								<ChevronLeft className="h-4 w-4" />
-							</Button>
-							<Input
-								value={currentPath}
-								onKeyDown={handlePathInput}
-								placeholder="Enter path..."
-								className="flex-1 h-8 text-sm font-mono"
-								onChange={(e) => setCurrentPath(e.target.value)}
+				<footer className="fb-footer">
+					<label className="fb-field">
+						<span className="fb-field-label">Name:</span>
+						<div className="fb-field-input">
+							<input
+								value={nameInput}
+								className="fb-input"
+								onChange={(e) => setNameInput(e.target.value)}
+								placeholder={currentPathString || 'No folder selected'}
+								onKeyDown={(e) => {
+									if (e.key === 'Enter') void confirmCurrent();
+								}}
 							/>
-							{hasTibiaFiles && (
-								<Badge variant="default" className="bg-green-600 hover:bg-green-600 text-white gap-1.5">
-									<CheckCircle2 className="h-3 w-3" />
-									<span className="text-xs">Tibia.dat & Tibia.spr</span>
-								</Badge>
-							)}
-							<Button
-								size="icon"
-								variant="ghost"
-								onClick={toggleFavorite}
-								className={`h-8 w-8 ${isFavorite ? 'text-yellow-500' : ''}`}
-								title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
-							>
-								<Star className={`h-4 w-4 ${isFavorite ? 'fill-yellow-500' : ''}`} />
-							</Button>
-							<Button size="icon" variant="ghost" className="h-8 w-8" onClick={initializePath} title="Go to home directory">
-								<Home className="h-4 w-4" />
-							</Button>
+							<button type="button" aria-label="History" className="fb-input-chevron">
+								<ChevronDown size={12} />
+							</button>
 						</div>
-
-						<ScrollArea className="flex-1 px-4">
-							{loading ? (
-								<div className="flex items-center justify-center h-32 text-muted-foreground">Loading...</div>
-							) : error ? (
-								<div className="flex items-center justify-center h-32 text-destructive">{error}</div>
-							) : entries.length === 0 ? (
-								<div className="flex items-center justify-center h-32 text-muted-foreground">No entries found</div>
-							) : (
-								<div className="py-2 space-y-1">
-									{entries
-										.filter((entry) => entry.is_dir)
-										.map((entry) => (
-											<button
-												key={entry.path}
-												onClick={() => handleEntryClick(entry)}
-												className="w-full flex items-center gap-2 px-3 py-2 rounded-md hover:bg-accent transition-colors text-left"
-											>
-												<Folder className="h-4 w-4 text-blue-500" />
-												<span className="flex-1 text-sm">{entry.name}</span>
-												<ChevronRight className="h-4 w-4 text-muted-foreground" />
-											</button>
-										))}
-								</div>
-							)}
-						</ScrollArea>
+					</label>
+					<button type="button" className="fb-filter">
+						<span>All files (*.*)</span>
+						<ChevronDown size={12} />
+					</button>
+					<div className="fb-footer-row2">
+						{!pathOnlyMode && (
+							<label className="fb-transparency">
+								<input type="checkbox" checked={transparency} onChange={(e) => setTransparency(e.target.checked)} />
+								<span>Enable Alpha Channel</span>
+							</label>
+						)}
+						<div className="fb-footer-buttons">
+							<button
+								type="button"
+								disabled={!currentPathString}
+								className="fb-btn fb-btn-primary"
+								onClick={() => void confirmCurrent()}
+							>
+								Select Folder
+							</button>
+							<button type="button" className="fb-btn" onClick={() => onOpenChange(false)}>
+								Cancel
+							</button>
+						</div>
 					</div>
-				</div>
-
-				<div className="border-t border-border px-4 py-3 flex items-center justify-end gap-2">
-					{!pathOnlyMode && (
-						<div className="flex items-center gap-2 mr-2">
-							<Checkbox
-								id="transparency"
-								checked={transparency}
-								onCheckedChange={(checked) => setTransparency(checked === true)}
-							/>
-							<Label
-								htmlFor="transparency"
-								className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-							>
-								Enable Alpha Channel
-							</Label>
-						</div>
-					)}
-					<Button variant="outline" onClick={() => onOpenChange(false)}>
-						Cancel
-					</Button>
-					<Button onClick={handleSelect} disabled={!currentPath}>
-						Select Folder
-					</Button>
-				</div>
-			</DialogContent>
-		</Dialog>
+				</footer>
+			</div>
+		</div>
 	);
 };
+
+/* ---------- Toolbar ---------- */
+
+interface ToolbarProps {
+	path: string[];
+	canUp: boolean;
+	canBack: boolean;
+	onUp: () => void;
+	onBack: () => void;
+	drives: DriveInfo[];
+	canForward: boolean;
+	searchQuery: string;
+	isFavorited: boolean;
+	canFavorite: boolean;
+	onForward: () => void;
+	onRefresh: () => void;
+	hasTibiaFiles: boolean;
+	onCrumb: (i: number) => void;
+	onToggleFavorite: () => void;
+	onSearchChange: (q: string) => void;
+}
+
+function Toolbar({
+	path,
+	onUp,
+	canUp,
+	drives,
+	onBack,
+	canBack,
+	onCrumb,
+	onForward,
+	onRefresh,
+	canForward,
+	isFavorited,
+	canFavorite,
+	searchQuery,
+	hasTibiaFiles,
+	onSearchChange,
+	onToggleFavorite
+}: ToolbarProps) {
+	return (
+		<div className="fb-toolbar">
+			<div className="fb-nav-group">
+				<button type="button" onClick={onBack} aria-label="Back" disabled={!canBack} className="fb-icon-button">
+					<ArrowLeft size={14} />
+				</button>
+				<button type="button" onClick={onForward} aria-label="Forward" disabled={!canForward} className="fb-icon-button">
+					<ArrowRight size={14} />
+				</button>
+				<button type="button" aria-label="Recent" className="fb-icon-button">
+					<ChevronDown size={14} />
+				</button>
+				<button type="button" onClick={onUp} aria-label="Up" disabled={!canUp} className="fb-icon-button">
+					<ArrowUp size={14} />
+				</button>
+			</div>
+
+			<div className="fb-breadcrumb">
+				<button type="button" className="fb-crumb" onClick={() => onCrumb(0)}>
+					<Computer size={14} />
+					<span>This PC</span>
+				</button>
+				{path.map((seg, i) => (
+					<span key={i} className="fb-crumb-wrap">
+						<ChevronRight size={14} className="fb-crumb-sep" />
+						<button type="button" className="fb-crumb" onClick={() => onCrumb(i + 1)} title={pathString(path.slice(0, i + 1))}>
+							{i === 0 ? driveLabel(seg, drives) : seg}
+						</button>
+					</span>
+				))}
+				<ChevronRight size={14} className="fb-crumb-sep" />
+				<button type="button" aria-label="History" className="fb-crumb-history">
+					<ChevronDown size={14} />
+				</button>
+			</div>
+
+			{hasTibiaFiles && (
+				<span className="fb-tibia-badge">
+					<CheckCircle2 size={14} />
+					Tibia.dat & Tibia.spr
+				</span>
+			)}
+
+			<button
+				type="button"
+				disabled={!canFavorite}
+				onClick={onToggleFavorite}
+				aria-label="Favorite current folder"
+				title={isFavorited ? 'Remove from favorites' : 'Add to favorites'}
+				className={'fb-icon-button fb-fav-toggle' + (isFavorited ? ' fb-fav-toggle-active' : '')}
+			>
+				<Star size={14} fill={isFavorited ? 'currentColor' : 'none'} />
+			</button>
+
+			<button type="button" onClick={onRefresh} aria-label="Refresh" className="fb-icon-button">
+				<RefreshCw size={14} />
+			</button>
+
+			<div className="fb-search">
+				<Search size={15} />
+				<input
+					type="search"
+					value={searchQuery}
+					className="fb-search-input"
+					onChange={(e) => onSearchChange(e.target.value)}
+					placeholder={'Search ' + (path[path.length - 1] ?? 'This PC')}
+				/>
+			</div>
+		</div>
+	);
+}
+
+/* ---------- Sidebar ---------- */
+
+interface SidebarProps {
+	drives: DriveInfo[];
+	currentPath: string[];
+	computerExpanded: boolean;
+	favorites: FavoriteFolder[];
+	onToggleComputer: () => void;
+	systemDirs: SystemDirectory[];
+	onNavigate: (path: string[]) => void;
+	onRemoveFavorite: (path: string) => void;
+	onReorderFavorites: (from: number, to: number) => void;
+}
+
+const quickAccessIcons: Record<string, React.ReactNode> = {
+	Home: <Home size={14} className="fb-tree-icon" />,
+	Desktop: <Monitor size={14} className="fb-tree-icon" />,
+	Documents: <FileText size={14} className="fb-tree-icon" />,
+	Downloads: <Download size={14} className="fb-tree-icon" />
+};
+
+function Sidebar({
+	drives,
+	favorites,
+	systemDirs,
+	onNavigate,
+	currentPath,
+	onRemoveFavorite,
+	computerExpanded,
+	onToggleComputer,
+	onReorderFavorites
+}: SidebarProps) {
+	const currentString = pathString(currentPath);
+	const dragIdxRef = useRef<null | number>(null);
+	const [dragIdx, setDragIdx] = useState<null | number>(null);
+	const [dropIdx, setDropIdx] = useState<null | number>(null);
+	const [dropAfter, setDropAfter] = useState(false);
+
+	const onDragStart = (e: React.DragEvent, idx: number) => {
+		dragIdxRef.current = idx;
+		setDragIdx(idx);
+		e.dataTransfer.effectAllowed = 'move';
+		e.dataTransfer.setData('text/plain', String(idx));
+	};
+
+	const onDragOver = (e: React.DragEvent, idx: number) => {
+		if (dragIdxRef.current === null) return;
+		e.preventDefault();
+		e.dataTransfer.dropEffect = 'move';
+		const rect = e.currentTarget.getBoundingClientRect();
+		const after = e.clientY - rect.top > rect.height / 2;
+		if (dropIdx !== idx || dropAfter !== after) {
+			setDropIdx(idx);
+			setDropAfter(after);
+		}
+	};
+
+	const onDrop = (e: React.DragEvent, idx: number) => {
+		e.preventDefault();
+		const from = dragIdxRef.current;
+		if (from === null) return;
+		const target = dropAfter ? idx + 1 : idx;
+		if (from !== idx) onReorderFavorites(from, target);
+		dragIdxRef.current = null;
+		setDragIdx(null);
+		setDropIdx(null);
+	};
+
+	const onDragEnd = () => {
+		dragIdxRef.current = null;
+		setDragIdx(null);
+		setDropIdx(null);
+	};
+
+	return (
+		<aside className="fb-sidebar">
+			<ul className="fb-tree">
+				{favorites.map((fav, idx) => {
+					const isDragging = dragIdx === idx;
+					const showBefore = dropIdx === idx && !dropAfter && dragIdx !== null && dragIdx !== idx;
+					const showAfter = dropIdx === idx && dropAfter && dragIdx !== null && dragIdx !== idx;
+					return (
+						<li key={fav.path}>
+							<div
+								draggable
+								tabIndex={0}
+								role="button"
+								title={fav.path}
+								onDragEnd={onDragEnd}
+								onDrop={(e) => onDrop(e, idx)}
+								onDragOver={(e) => onDragOver(e, idx)}
+								onDragStart={(e) => onDragStart(e, idx)}
+								onClick={() => onNavigate(pathSegments(fav.path))}
+								onDragEnter={(e) => {
+									if (dragIdxRef.current !== null) e.preventDefault();
+								}}
+								onKeyDown={(e) => {
+									if (e.key === 'Enter' || e.key === ' ') {
+										e.preventDefault();
+										onNavigate(pathSegments(fav.path));
+									}
+								}}
+								className={
+									'fb-tree-row' +
+									(pathsEqual(fav.path, currentString) ? ' fb-tree-row-active' : '') +
+									(isDragging ? ' fb-tree-row-dragging' : '') +
+									(showBefore ? ' fb-tree-row-drop-before' : '') +
+									(showAfter ? ' fb-tree-row-drop-after' : '')
+								}
+							>
+								<span className="fb-caret-spacer" />
+								<Folder size={15} className="fb-tree-icon fb-icon-folder" />
+								<span className="fb-tree-label">{fav.name}</span>
+								<button
+									type="button"
+									title="Remove from favorites"
+									className="fb-tree-pin-button"
+									aria-label="Remove from favorites"
+									onClick={(e) => {
+										e.stopPropagation();
+										onRemoveFavorite(fav.path);
+									}}
+								>
+									<X size={11} />
+								</button>
+							</div>
+						</li>
+					);
+				})}
+
+				{systemDirs.length > 0 && (
+					<li className="fb-tree-section">
+						<ul className="fb-tree-children">
+							{systemDirs.map((dir) => {
+								const isActive = pathsEqual(pathString(currentPath), dir.path);
+								return (
+									<li key={dir.path}>
+										<button
+											type="button"
+											onClick={() => onNavigate(pathSegments(dir.path))}
+											className={'fb-tree-row' + (isActive ? ' fb-tree-row-active' : '')}
+										>
+											<span className="fb-caret-spacer" />
+											{quickAccessIcons[dir.name] ?? <Folder size={14} className="fb-tree-icon" />}
+											<span>{dir.name}</span>
+										</button>
+									</li>
+								);
+							})}
+						</ul>
+					</li>
+				)}
+
+				<li className="fb-tree-section">
+					<button type="button" onClick={onToggleComputer} className="fb-tree-row fb-tree-header">
+						<Caret open={computerExpanded} />
+						<Computer size={15} className="fb-tree-icon" />
+						<span>This PC</span>
+					</button>
+					{computerExpanded && (
+						<ul className="fb-tree-children">
+							{drives.map((d) => {
+								const isActive = currentPath.length === 1 && currentPath[0] === d.letter;
+								return (
+									<li key={d.letter}>
+										<button
+											type="button"
+											onClick={() => onNavigate([d.letter])}
+											className={'fb-tree-row' + (isActive ? ' fb-tree-row-active' : '')}
+										>
+											<span className="fb-caret-spacer" />
+											<HardDrive size={14} className="fb-tree-icon" />
+											<span>{d.label}</span>
+										</button>
+									</li>
+								);
+							})}
+						</ul>
+					)}
+				</li>
+			</ul>
+		</aside>
+	);
+}
+
+function Caret({ open }: { open: boolean }) {
+	return (
+		<span className={'fb-caret' + (open ? ' fb-caret-open' : '')}>
+			<ChevronRight size={14} />
+		</span>
+	);
+}
+
+/* ---------- File list ---------- */
+
+interface FileListProps {
+	loading: boolean;
+	entries: DirEntry[];
+	error: null | string;
+	currentPath: string[];
+	selected: null | string;
+	favorites: FavoriteFolder[];
+	onRowClick: (e: DirEntry) => void;
+	onRowDoubleClick: (e: DirEntry) => void;
+	onToggleFavorite: (path: string) => void;
+}
+
+function FileList({
+	error,
+	entries,
+	loading,
+	selected,
+	favorites,
+	onRowClick,
+	currentPath,
+	onRowDoubleClick,
+	onToggleFavorite
+}: FileListProps) {
+	return (
+		<div className="fb-list">
+			<div className="fb-list-header">
+				<div className="fb-col fb-col-name">
+					<span>Name</span>
+				</div>
+				<div className="fb-col fb-col-modified">Date modified</div>
+				<div className="fb-col fb-col-type">Type</div>
+				<div className="fb-col fb-col-size">Size</div>
+			</div>
+			<div className="fb-list-body">
+				{error ? (
+					<div className="fb-list-empty">Could not open this folder.</div>
+				) : loading ? (
+					<div className="fb-list-empty">Loading…</div>
+				) : entries.length === 0 ? (
+					<div className="fb-list-empty">This folder is empty.</div>
+				) : (
+					entries.map((entry) => {
+						const entryPath = currentPath.length === 0 ? entry.path : pathString([...currentPath, entry.name]);
+						const favorited = entry.is_dir && favorites.some((f) => pathsEqual(f.path, entryPath));
+						const disabled = !entry.is_dir;
+						return (
+							<div
+								key={entry.path}
+								onClick={() => onRowClick(entry)}
+								onDoubleClick={() => onRowDoubleClick(entry)}
+								className={
+									'fb-list-row' +
+									(selected === entry.path ? ' fb-list-row-active' : '') +
+									(disabled ? ' fb-list-row-disabled' : '')
+								}
+							>
+								<div className="fb-col fb-col-name">
+									{entry.is_dir ? (
+										<Folder size={15} className="fb-row-icon fb-icon-folder" />
+									) : (
+										<FileText size={15} className="fb-row-icon" />
+									)}
+									<span className="fb-row-name">{entry.name}</span>
+									{entry.is_dir && currentPath.length > 0 && (
+										<button
+											type="button"
+											className={'fb-row-star' + (favorited ? ' fb-row-star-on' : '')}
+											title={favorited ? 'Remove from favorites' : 'Add to favorites'}
+											onClick={(e) => {
+												e.stopPropagation();
+												onToggleFavorite(entryPath);
+											}}
+										>
+											<Star size={15} fill={favorited ? 'currentColor' : 'none'} />
+										</button>
+									)}
+								</div>
+								<div className="fb-col fb-col-modified">{formatModified(entry.modified_ms)}</div>
+								<div className="fb-col fb-col-type">{entryType(entry)}</div>
+								<div className="fb-col fb-col-size">{formatSize(entry.size)}</div>
+							</div>
+						);
+					})
+				)}
+			</div>
+		</div>
+	);
+}
