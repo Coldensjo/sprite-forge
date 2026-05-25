@@ -24,7 +24,7 @@
 				"decorations": false,
 				"transparent": true,
 				"shadow": false,
-				"dragDropEnabled": true,
+				"dragDropEnabled": false,
 				"backgroundColor": [
 					0,
 					0,

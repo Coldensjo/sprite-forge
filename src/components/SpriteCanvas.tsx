@@ -4,7 +4,6 @@ import { blendOutfit } from '@/lib/tibia/outfit';
 import { Loader2, ImagePlus } from 'lucide-react';
 import { useDragDrop } from '@/contexts/DragDropContext';
 import { useTibiaData } from '@/contexts/TibiaDataContext';
-import { listen, TauriEvent } from '@tauri-apps/api/event';
 import { memo, useRef, useMemo, useState, useEffect, useCallback } from 'react';
 import { SPRITE_SIZE, getSpriteIndex, type ThingType, isValidSpriteId, importObjectSheet } from '@/lib/tibia';
 
@@ -939,93 +938,93 @@ export const SpriteCanvas = memo(
 		// Track if current drag contains an image file (set on DRAG_ENTER, cleared on DRAG_LEAVE/DRAG_DROP)
 		const isDraggingImageRef = useRef(false);
 
-		// Tauri native file drop event handlers (works on Windows, macOS, Linux)
-		// This replaces HTML5 dataTransfer.files which doesn't work on Windows in Tauri
-		// Only enable when allowFileDrop is true (PropertiesPanel only)
 		useEffect(() => {
 			const containerElement = containerRef.current;
-			// Only enable file drops when explicitly allowed (PropertiesPanel canvas)
 			if (!containerElement || !allowFileDrop) return;
 
-			// Helper to check if position is within container bounds
-			const isPositionInContainer = (x: number, y: number): boolean => {
-				const rect = containerElement.getBoundingClientRect();
-				return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
+			const dragHasFiles = (e: DragEvent) => Array.from(e.dataTransfer?.types ?? []).some((t) => t === 'Files');
+
+			let windowDragDepth = 0;
+
+			const onWindowDragEnter = (e: DragEvent) => {
+				if (!dragHasFiles(e)) return;
+				windowDragDepth++;
+				if (windowDragDepth === 1) {
+					isDraggingImageRef.current = true;
+					setIsFileDragging(true);
+				}
 			};
 
-			// Listen for drag-enter to check if it's an image file
-			const unlistenEnter = listen<{ paths: string[]; position: { x: number; y: number } }>(TauriEvent.DRAG_ENTER, (event) => {
-				const { paths } = event.payload;
-				const hasImage = paths?.some((p) => /\.(png|bmp|jpg|jpeg)$/i.test(p)) ?? false;
-				isDraggingImageRef.current = hasImage;
-				setIsFileDragging(hasImage);
-			});
-
-			// Listen for Tauri drag-drop event
-			const unlistenDrop = listen<{ paths: string[]; position: { x: number; y: number } }>(
-				TauriEvent.DRAG_DROP,
-				async (event) => {
-					const { paths, position } = event.payload;
+			const onWindowDragLeave = (e: DragEvent) => {
+				if (!dragHasFiles(e)) return;
+				windowDragDepth--;
+				if (windowDragDepth <= 0) {
+					windowDragDepth = 0;
 					isDraggingImageRef.current = false;
 					setIsFileDragging(false);
 					setIsFileDragOver(false);
-
-					if (!paths || paths.length === 0) return;
-
-					// Check if drop position is within this canvas container
-					if (!isPositionInContainer(position.x, position.y)) return;
-
-					// Filter for image files only
-					const imagePath = paths.find((p) => /\.(png|bmp|jpg|jpeg)$/i.test(p));
-					if (!imagePath) return;
-
-					// Need thing and data to import
-					if (!thing || !data) {
-						return;
-					}
-
-					// Import the sprite sheet using the file path
-					const result = await importObjectSheet(thing, data, imagePath);
-					if (result.success && result.updatedThing) {
-						notifySpritesLoaded();
-						if (notifyDataChanged && result.spriteIds) {
-							notifyDataChanged(result.spriteIds);
-						}
-						notifySpriteImport();
-					}
 				}
-			);
+			};
 
-			// Listen for drag-over to show visual feedback
-			const unlistenOver = listen<{ position: { x: number; y: number } }>(TauriEvent.DRAG_OVER, (event) => {
-				const { position } = event.payload;
-
-				// Only show feedback if dragging an image file
-				if (!isDraggingImageRef.current) {
-					setIsFileDragOver(false);
-					return;
-				}
-
-				// Check if position is over this canvas
-				if (isPositionInContainer(position.x, position.y)) {
-					setIsFileDragOver(true);
-				} else {
-					setIsFileDragOver(false);
-				}
-			});
-
-			// Listen for drag-leave to clear overlay
-			const unlistenLeave = listen(TauriEvent.DRAG_LEAVE, () => {
+			const onWindowDrop = () => {
+				windowDragDepth = 0;
 				isDraggingImageRef.current = false;
 				setIsFileDragging(false);
 				setIsFileDragOver(false);
-			});
+			};
+
+			const onDragOver = (e: DragEvent) => {
+				if (!dragHasFiles(e)) return;
+				e.preventDefault();
+				e.stopPropagation();
+				if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+				setIsFileDragOver(true);
+			};
+
+			const onDragLeave = (e: DragEvent) => {
+				if (e.relatedTarget && containerElement.contains(e.relatedTarget as Node)) return;
+				setIsFileDragOver(false);
+			};
+
+			const onDrop = async (e: DragEvent) => {
+				if (!dragHasFiles(e)) return;
+				e.preventDefault();
+				e.stopPropagation();
+				windowDragDepth = 0;
+				isDraggingImageRef.current = false;
+				setIsFileDragging(false);
+				setIsFileDragOver(false);
+
+				const files = Array.from(e.dataTransfer?.files ?? []);
+				const imageFile = files.find((f) => /\.(png|bmp|jpg|jpeg)$/i.test(f.name));
+				if (!imageFile || !thing || !data) return;
+
+				const result = await importObjectSheet(thing, data, imageFile);
+				if (result.success && result.updatedThing) {
+					notifySpritesLoaded();
+					if (notifyDataChanged && result.spriteIds) {
+						notifyDataChanged(result.spriteIds);
+					}
+					notifySpriteImport();
+				}
+			};
+
+			window.addEventListener('dragenter', onWindowDragEnter);
+			window.addEventListener('dragleave', onWindowDragLeave);
+			window.addEventListener('drop', onWindowDrop);
+
+			containerElement.addEventListener('dragover', onDragOver);
+			containerElement.addEventListener('dragleave', onDragLeave);
+			containerElement.addEventListener('drop', onDrop);
 
 			return () => {
-				unlistenEnter.then((fn) => fn());
-				unlistenDrop.then((fn) => fn());
-				unlistenOver.then((fn) => fn());
-				unlistenLeave.then((fn) => fn());
+				window.removeEventListener('dragenter', onWindowDragEnter);
+				window.removeEventListener('dragleave', onWindowDragLeave);
+				window.removeEventListener('drop', onWindowDrop);
+
+				containerElement.removeEventListener('dragover', onDragOver);
+				containerElement.removeEventListener('dragleave', onDragLeave);
+				containerElement.removeEventListener('drop', onDrop);
 			};
 		}, [thing, data, allowFileDrop, notifySpritesLoaded, notifyDataChanged, notifySpriteImport]);
 
