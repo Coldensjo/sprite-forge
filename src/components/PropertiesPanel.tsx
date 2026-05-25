@@ -1279,7 +1279,7 @@ export const PropertiesPanel = () => {
 	// Show empty state if no data loaded or no item selected
 	if (!data || !item) {
 		return (
-			<div className="flex-1 bg-card rounded-lg shadow-island-lg flex flex-col overflow-hidden">
+			<div className="w-full h-full bg-card rounded-lg shadow-island-lg flex flex-col overflow-hidden">
 				<div className="h-8 px-4 flex items-center border-b border-border/50 bg-secondary/80">
 					<h2 className="text-xs font-semibold text-foreground uppercase tracking-wide">Object Properties</h2>
 				</div>
@@ -1319,7 +1319,7 @@ export const PropertiesPanel = () => {
 	// Wait for draft to be initialized
 	if (!draftItem) {
 		return (
-			<div className="flex-1 bg-card rounded-lg shadow-island-lg flex flex-col overflow-hidden">
+			<div className="w-full h-full bg-card rounded-lg shadow-island-lg flex flex-col overflow-hidden">
 				<div className="h-8 px-4 flex items-center border-b border-border/50 bg-secondary/80">
 					<h2 className="text-xs font-semibold text-foreground uppercase tracking-wide">Object Properties</h2>
 				</div>
@@ -1355,7 +1355,7 @@ export const PropertiesPanel = () => {
 	}
 
 	return (
-		<div className="flex-1 bg-card rounded-lg shadow-island-lg flex flex-col overflow-hidden">
+		<div className="w-full h-full bg-card rounded-lg shadow-island-lg flex flex-col overflow-hidden">
 			<div className="h-8 px-4 flex items-center border-b border-border/50 bg-secondary/80">
 				<h2 className="text-xs font-semibold text-foreground uppercase tracking-wide">
 					{itemCategory === ThingCategory.ITEM

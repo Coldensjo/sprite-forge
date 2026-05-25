@@ -275,7 +275,7 @@ export const VisualizationPanel = () => {
 
 	if (!data || !item) {
 		return (
-			<div className="w-[216px] h-[150px] bg-card rounded-lg shadow-island flex flex-col overflow-hidden flex-shrink-0">
+			<div className="w-full h-[150px] bg-card rounded-lg shadow-island flex flex-col overflow-hidden flex-shrink-0">
 				<div className="h-8 px-3 flex items-center border-b border-border/50 bg-secondary/80 flex-shrink-0">
 					<h2 className="text-xs font-semibold text-foreground uppercase tracking-wide">Visualization</h2>
 				</div>
@@ -292,7 +292,7 @@ export const VisualizationPanel = () => {
 	// hasAnimation is already computed above with getAnimationFrameGroup()
 
 	return (
-		<div className="w-[216px] h-[150px] bg-card rounded-lg shadow-island flex flex-col overflow-hidden flex-shrink-0">
+		<div className="w-full h-[150px] bg-card rounded-lg shadow-island flex flex-col overflow-hidden flex-shrink-0">
 			<div className="h-8 px-3 flex items-center border-b border-border/50 bg-secondary/80 flex-shrink-0">
 				<h2 className="text-xs font-semibold text-foreground uppercase tracking-wide">Visualization</h2>
 			</div>
