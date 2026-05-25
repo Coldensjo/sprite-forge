@@ -1,8 +1,8 @@
 [package]
 name = "sprite-forge"
-version = "0.0.9"
-description = "A Tauri App"
-authors = ["you"]
+version = "0.1.0"
+description = "A modern Tibia .spr/.dat editor for Open Tibia"
+authors = ["Frenvius <frenvius@gmail.com>"]
 edition = "2021"
 
 [lib]
