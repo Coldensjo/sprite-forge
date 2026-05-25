@@ -402,6 +402,22 @@ struct AppConfig {
     default_scene: Option<String>,
     item_list_view_mode: Option<String>,
     sprite_list_view_mode: Option<String>,
+    general_settings: Option<GeneralSettings>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+struct GeneralSettings {
+    list_amount_objects: u32,
+    list_amount_sprites: u32,
+}
+
+impl Default for GeneralSettings {
+    fn default() -> Self {
+        Self {
+            list_amount_objects: 100,
+            list_amount_sprites: 100,
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
@@ -531,6 +547,19 @@ fn get_sprite_list_view_mode() -> Result<Option<String>, String> {
 fn set_sprite_list_view_mode(mode: String) -> Result<(), String> {
     let mut config = get_config()?;
     config.sprite_list_view_mode = Some(mode);
+    save_config(config)
+}
+
+#[tauri::command]
+fn get_general_settings() -> Result<GeneralSettings, String> {
+    let config = get_config()?;
+    Ok(config.general_settings.unwrap_or_default())
+}
+
+#[tauri::command]
+fn set_general_settings(settings: GeneralSettings) -> Result<(), String> {
+    let mut config = get_config()?;
+    config.general_settings = Some(settings);
     save_config(config)
 }
 
@@ -1834,6 +1863,8 @@ tauri::Builder::default()
             set_item_list_view_mode,
             get_sprite_list_view_mode,
             set_sprite_list_view_mode,
+            get_general_settings,
+            set_general_settings,
             get_config_dir_path,
             ensure_versions_dir,
             write_json_file,

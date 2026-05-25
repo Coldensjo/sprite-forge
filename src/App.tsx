@@ -8,6 +8,7 @@ import { TibiaDataProvider } from '@/contexts/TibiaDataContext';
 import { ErrorDialogProvider } from '@/contexts/ErrorDialogContext';
 import { PanelSettingsProvider } from '@/contexts/PanelSettingsContext';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { GeneralSettingsProvider } from '@/contexts/GeneralSettingsContext';
 
 import Index from './pages/Index';
 import NotFound from './pages/NotFound';
@@ -21,16 +22,18 @@ const App = () => (
 				<ErrorDialogProvider>
 					<TibiaDataProvider>
 						<PanelSettingsProvider>
-							<DragDropProvider>
-								<Toaster />
-								<Sonner />
-								<BrowserRouter>
-									<Routes>
-										<Route path="/" element={<Index />} />
-										<Route path="*" element={<NotFound />} />
-									</Routes>
-								</BrowserRouter>
-							</DragDropProvider>
+							<GeneralSettingsProvider>
+								<DragDropProvider>
+									<Toaster />
+									<Sonner />
+									<BrowserRouter>
+										<Routes>
+											<Route path="/" element={<Index />} />
+											<Route path="*" element={<NotFound />} />
+										</Routes>
+									</BrowserRouter>
+								</DragDropProvider>
+							</GeneralSettingsProvider>
 						</PanelSettingsProvider>
 					</TibiaDataProvider>
 				</ErrorDialogProvider>

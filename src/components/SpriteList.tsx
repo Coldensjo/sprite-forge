@@ -3,6 +3,7 @@ import { type Sprite } from '@/lib/tibia';
 import { invoke } from '@tauri-apps/api/core';
 import { useDragDrop } from '@/contexts/DragDropContext';
 import { useTibiaData } from '@/contexts/TibiaDataContext';
+import { useGeneralSettings } from '@/contexts/GeneralSettingsContext';
 import { useRef, useMemo, useState, useEffect, useCallback } from 'react';
 import { ContextMenu, ContextMenuItem, ContextMenuContent, ContextMenuTrigger } from '@/components/ui/context-menu';
 import { DropdownMenu, DropdownMenuItem, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -70,7 +71,8 @@ export const SpriteList = () => {
 	const shouldScrollToHighlightedRef = useRef(false);
 	const isInternalHighlightChange = useRef(false);
 	const pendingNewSpriteId = useRef<null | number>(null);
-	const itemsPerPage = 100;
+	const { settings: generalSettings } = useGeneralSettings();
+	const itemsPerPage = generalSettings.listAmountSprites;
 
 	// Get all sprite IDs from the loaded data
 	const allSpriteIds = useMemo(() => {
@@ -84,12 +86,16 @@ export const SpriteList = () => {
 		return ids;
 	}, [data, updateCounter]);
 
-	const totalPages = Math.ceil(allSpriteIds.length / itemsPerPage);
+	const totalPages = Math.max(1, Math.ceil(allSpriteIds.length / itemsPerPage));
 	const paginatedSpriteIds = useMemo(() => {
 		const start = (currentPage - 1) * itemsPerPage;
 		const end = start + itemsPerPage;
 		return allSpriteIds.slice(start, end);
-	}, [currentPage, allSpriteIds]);
+	}, [currentPage, allSpriteIds, itemsPerPage]);
+
+	useEffect(() => {
+		if (currentPage > totalPages) setCurrentPage(totalPages);
+	}, [currentPage, totalPages]);
 
 	// Reset to page 1 when data changes
 	useEffect(() => {

@@ -4,6 +4,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { logger, EventCode } from '@/lib/debug';
 import { useTibiaData } from '@/contexts/TibiaDataContext';
 import { exportObjectSheet, importObjectSheet } from '@/lib/tibia';
+import { useGeneralSettings } from '@/contexts/GeneralSettingsContext';
 import { useRef, useMemo, useState, useEffect, useCallback } from 'react';
 import { ContextMenu, ContextMenuItem, ContextMenuContent, ContextMenuTrigger } from '@/components/ui/context-menu';
 import { DropdownMenu, DropdownMenuItem, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -112,7 +113,8 @@ export const ItemList = () => {
 	const pendingNewItemId = useRef<null | number>(null);
 	const prevCategoryRef = useRef<null | ThingCategory>(null);
 	const prevDataRef = useRef<null | typeof data>(null);
-	const itemsPerPage = 100;
+	const { settings: generalSettings } = useGeneralSettings();
+	const itemsPerPage = generalSettings.listAmountObjects;
 
 	const categoryLabels: Record<ThingCategory, string> = {
 		[ThingCategory.ITEM]: 'Item',
@@ -192,12 +194,16 @@ export const ItemList = () => {
 		return ids;
 	}, [data, selectedCategory, updateCounter]);
 
-	const totalPages = Math.ceil(allItemIds.length / itemsPerPage);
+	const totalPages = Math.max(1, Math.ceil(allItemIds.length / itemsPerPage));
 	const paginatedItemIds = useMemo(() => {
 		const start = (currentPage - 1) * itemsPerPage;
 		const end = start + itemsPerPage;
 		return allItemIds.slice(start, end);
-	}, [currentPage, allItemIds]);
+	}, [currentPage, allItemIds, itemsPerPage]);
+
+	useEffect(() => {
+		if (currentPage > totalPages) setCurrentPage(totalPages);
+	}, [currentPage, totalPages]);
 
 	useEffect(() => {
 		if (data) {

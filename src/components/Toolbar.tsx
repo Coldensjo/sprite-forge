@@ -22,6 +22,7 @@ import {
 	History,
 	Grid3x3,
 	Sparkles,
+	Settings,
 	HardDrive,
 	FolderOpen,
 	HelpCircle
@@ -30,6 +31,7 @@ import {
 import { Button } from './ui/button';
 import { AboutDialog } from './AboutDialog';
 import { LoadingDialog } from './LoadingDialog';
+import { SettingsDialog } from './SettingsDialog';
 import { LoadOptions } from './FolderSelectDialog';
 import { FolderSelectDialog } from './FolderSelectDialog';
 import { ThemeSettingsDialog } from './ThemeSettingsDialog';
@@ -56,6 +58,7 @@ export const Toolbar = () => {
 	);
 	const [sceneEditorOpen, setSceneEditorOpen] = useState(false);
 	const [aboutDialogOpen, setAboutDialogOpen] = useState(false);
+	const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
 	const [isMaximized, setIsMaximized] = useState(false);
 
 	useEffect(() => {
@@ -562,6 +565,23 @@ export const Toolbar = () => {
 							<p>Theme Settings</p>
 						</TooltipContent>
 					</Tooltip>
+
+					<Tooltip>
+						<TooltipTrigger asChild>
+							<Button
+								size="icon"
+								variant="ghost"
+								className="h-8 w-8"
+								onMouseDown={(e) => e.stopPropagation()}
+								onClick={() => setSettingsDialogOpen(true)}
+							>
+								<Settings className="h-4 w-4" />
+							</Button>
+						</TooltipTrigger>
+						<TooltipContent>
+							<p>Settings</p>
+						</TooltipContent>
+					</Tooltip>
 				</TooltipProvider>
 
 				<div className="ml-auto text-[11px] text-muted-foreground flex-shrink-0 flex items-center gap-2">
@@ -669,6 +689,7 @@ export const Toolbar = () => {
 			<ThemeSettingsDialog open={themeDialogOpen} onOpenChange={setThemeDialogOpen} />
 			<VersionHistoryDialog open={versionHistoryOpen} onOpenChange={setVersionHistoryOpen} />
 			<AboutDialog open={aboutDialogOpen} onOpenChange={setAboutDialogOpen} />
+			<SettingsDialog open={settingsDialogOpen} onOpenChange={setSettingsDialogOpen} />
 			<SpriteOptimizerDialog
 				open={optimizerOpen}
 				result={optimizerResult}
