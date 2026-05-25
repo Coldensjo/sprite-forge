@@ -11,10 +11,10 @@ mod logger;
 use logger::{Logger, LoggerState, EventCode};
 
 mod dat_writer;
-use dat_writer::{write_dat_file, write_dat_from_buffer, ThingType, FrameGroup};
+use dat_writer::{write_dat_from_buffer, read_thing, Reader, ThingType, FrameGroup};
 
 mod spr_writer;
-use spr_writer::{write_spr_file, update_sprites_in_spr, copy_spr_with_modifications, SpriteWrite};
+use spr_writer::{update_sprites_in_spr, copy_spr_with_modifications, SpriteWrite};
 
 mod dat_manager;
 use dat_manager::{DatManager, DatManagerState};
@@ -80,27 +80,6 @@ fn open_spr_file(
 }
 
 #[tauri::command]
-fn read_sprite(
-    path: String,
-    id: u32,
-    spr_state: tauri::State<SprManagerState>,
-    log_state: tauri::State<LoggerState>,
-) -> Result<SpriteData, String> {
-    let mut manager = spr_state.lock().map_err(|e| format!("Lock error: {}", e))?;
-    let result = manager.read_sprite(&path, id);
-
-    if let Ok(ref sprite) = result {
-        let mut logger = log_state.lock().unwrap();
-        logger.log(
-            EventCode::SprRead,
-            serde_json::json!({"id": id, "em": sprite.is_empty})
-        );
-    }
-
-    result
-}
-
-#[tauri::command]
 fn close_spr_file(
     path: String,
     state: tauri::State<SprManagerState>,
@@ -109,138 +88,7 @@ fn close_spr_file(
     manager.close_file(&path)
 }
 
-#[tauri::command]
-fn get_spr_header(
-    path: String,
-    state: tauri::State<SprManagerState>,
-) -> Result<SprHeader, String> {
-    let manager = state.lock().map_err(|e| format!("Lock error: {}", e))?;
-    manager.get_header(&path)
-}
-
-#[tauri::command]
-fn read_sprites_batch(
-    path: String,
-    start_id: u32,
-    count: u32,
-    spr_state: tauri::State<SprManagerState>,
-    log_state: tauri::State<LoggerState>,
-) -> Result<Vec<SpriteData>, String> {
-    let mut manager = spr_state.lock().map_err(|e| format!("Lock error: {}", e))?;
-    let result = manager.read_sprites_batch(&path, start_id, count);
-
-    if let Ok(ref sprites) = result {
-        let mut logger = log_state.lock().unwrap();
-        logger.log(
-            EventCode::SprBatch,
-            serde_json::json!({"s": start_id, "c": count, "ok": sprites.len()})
-        );
-    }
-
-    result
-}
-
-#[tauri::command]
-fn read_sprites_list(
-    path: String,
-    ids: Vec<u32>,
-    spr_state: tauri::State<SprManagerState>,
-    log_state: tauri::State<LoggerState>,
-) -> Result<Vec<SpriteData>, String> {
-    let mut manager = spr_state.lock().map_err(|e| format!("Lock error: {}", e))?;
-    let result = manager.read_sprites_list(&path, ids);
-
-    if let Ok(ref sprites) = result {
-        let mut logger = log_state.lock().unwrap();
-        logger.log(
-            EventCode::SprBatch,
-            serde_json::json!({"c": sprites.len(), "list": true})
-        );
-    }
-
-    result
-}
-
 use tauri::ipc::Response;
-
-// Binary protocol for search (receives criteria, returns results)
-// Note: Currently searches happen in frontend since DAT data is there
-// This command maintains the binary IPC protocol structure
-#[tauri::command]
-fn search_thing_types_bin(
-    criteria: FileBytes,
-    log_state: tauri::State<LoggerState>,
-) -> Result<Response, String> {
-    // For now, return empty results since DAT data is in frontend
-    // In future, we could add DAT reading to Rust and perform search here
-    let mut logger = log_state.lock().unwrap();
-    logger.log(
-        EventCode::SprBatch, // Reuse event code for now
-        serde_json::json!({"sz": criteria.0.len(), "bin": true, "search": true})
-    );
-    
-    // Return empty results buffer: [Count: u32] = [0, 0, 0, 0]
-    let empty_results = vec![0u8, 0u8, 0u8, 0u8];
-    Ok(Response::new(empty_results))
-}
-
-#[tauri::command]
-fn read_sprites_list_bin(
-    path: String,
-    ids: Vec<u32>,
-    spr_state: tauri::State<SprManagerState>,
-    log_state: tauri::State<LoggerState>,
-) -> Result<Response, String> {
-    let mut manager = spr_state.lock().map_err(|e| format!("Lock error: {}", e))?;
-    let bytes = manager.read_sprites_list_binary(&path, ids)?;
-
-    let mut logger = log_state.lock().unwrap();
-    logger.log(
-        EventCode::SprBatch,
-        serde_json::json!({"sz": bytes.len(), "bin": true})
-    );
-    
-    Ok(Response::new(bytes))
-}
-
-#[tauri::command]
-fn read_sprites_batch_bin(
-    path: String,
-    start_id: u32,
-    count: u32,
-    spr_state: tauri::State<SprManagerState>,
-    log_state: tauri::State<LoggerState>,
-) -> Result<Response, String> {
-    let mut manager = spr_state.lock().map_err(|e| format!("Lock error: {}", e))?;
-    let bytes = manager.read_sprites_batch_binary(&path, start_id, count)?;
-
-    let mut logger = log_state.lock().unwrap();
-    logger.log(
-        EventCode::SprBatch,
-        serde_json::json!({"sz": bytes.len(), "bin": true, "batch": true})
-    );
-    
-    Ok(Response::new(bytes))
-}
-
-#[tauri::command]
-fn read_sprite_bin(
-    path: String,
-    id: u32,
-    spr_state: tauri::State<SprManagerState>,
-    log_state: tauri::State<LoggerState>,
-) -> Result<Response, String> {
-    let mut manager = spr_state.lock().map_err(|e| format!("Lock error: {}", e))?;
-    let bytes = manager.read_sprite_binary(&path, id)?;
-
-    let mut logger = log_state.lock().unwrap();
-    logger.log(
-        EventCode::SprRead,
-        serde_json::json!({"sz": bytes.len(), "bin": true})
-    );
-
-    Ok(Response::new(bytes))
-}
 
 /// Read sprites and return decompressed RGBA pixels ready for canvas rendering
 /// Format: [Count: u32] -> ([ID: u32][IsEmpty: u8][RGBA pixels: 4096 bytes])*
@@ -310,17 +158,20 @@ fn read_sprites_rgba_lz4(
 }
 
 /// Compress RGBA pixels to Tibia RLE format
-/// Input: 4096 bytes of RGBA data (32x32 pixels, 4 bytes per pixel)
-/// Output: RLE compressed data ready for SPR file
+/// Request body (raw binary): [transparent: u8][pixels: 4096 RGBA bytes]
+/// Response: RLE compressed bytes
 #[tauri::command]
-fn compress_sprite_rgba(
-    pixels: Vec<u8>,
-    transparent: bool,
-) -> Result<Vec<u8>, String> {
-    if pixels.len() != 4096 {
-        return Err(format!("Invalid pixel data length: {} (expected 4096)", pixels.len()));
+fn compress_sprite_rgba(request: tauri::ipc::Request) -> Result<Response, String> {
+    let bytes = match request.body() {
+        tauri::ipc::InvokeBody::Raw(b) => b.as_slice(),
+        _ => return Err("compress_sprite_rgba expects a raw binary payload".to_string()),
+    };
+    if bytes.len() != 4097 {
+        return Err(format!("Invalid payload length: {} (expected 4097 = 1 flag + 4096 RGBA)", bytes.len()));
     }
-    Ok(compress_to_rle(&pixels, transparent))
+    let transparent = bytes[0] != 0;
+    let pixels = &bytes[1..];
+    Ok(Response::new(compress_to_rle(pixels, transparent)))
 }
 
 #[tauri::command]
@@ -723,77 +574,12 @@ fn delete_scene(name: String) -> Result<(), String> {
 
 // DAT/SPR Writer Commands
 
-// TODO: PERFORMANCE - This command currently uses JSON serialization which violates RULE #1
-// This causes slowdown when writing large numbers of items (6000+ items)
-// SOLUTION: Rewrite to use binary IPC buffers:
-//   1. TypeScript encodes ThingType[] to binary buffer using DataView
-//   2. Rust parses binary buffer manually
-//   3. See CLAUDE.md "RULE #1: NEVER USE JSON FOR TAURI IPC" for implementation guide
-//   4. Reference: read_sprites_batch_bin command for binary IPC example
-// Current implementation is ACCEPTABLE as temporary solution but should be optimized
-#[tauri::command]
-fn write_dat(
-    path: String,
-    signature: u32,
-    version: u32,
-    extended: bool,
-    #[allow(non_snake_case)]
-    frameDurations: bool,
-    #[allow(non_snake_case)]
-    itemsMinId: u16,
-    #[allow(non_snake_case)]
-    itemsMaxId: u16,
-    #[allow(non_snake_case)]
-    outfitsMinId: u16,
-    #[allow(non_snake_case)]
-    outfitsMaxId: u16,
-    #[allow(non_snake_case)]
-    effectsMinId: u16,
-    #[allow(non_snake_case)]
-    effectsMaxId: u16,
-    #[allow(non_snake_case)]
-    missilesMinId: u16,
-    #[allow(non_snake_case)]
-    missilesMaxId: u16,
-    items: Vec<ThingType>,
-    outfits: Vec<ThingType>,
-    effects: Vec<ThingType>,
-    missiles: Vec<ThingType>,
-) -> Result<(), String> {
-    write_dat_file(&path, signature, version, extended, frameDurations,
-                   itemsMinId, itemsMaxId,
-                   outfitsMinId, outfitsMaxId,
-                   effectsMinId, effectsMaxId,
-                   missilesMinId, missilesMaxId,
-                   items, outfits, effects, missiles)
-}
-
 #[tauri::command]
 fn write_dat_bin(request: tauri::ipc::Request) -> Result<(), String> {
     match request.body() {
         tauri::ipc::InvokeBody::Raw(bytes) => write_dat_from_buffer(bytes),
         _ => Err("write_dat_bin expects a raw binary payload".to_string()),
     }
-}
-
-#[tauri::command]
-fn write_spr(
-    path: String,
-    signature: u32,
-    extended: bool,
-    sprites: Vec<SpriteWrite>,
-) -> Result<(), String> {
-    write_spr_file(&path, signature, extended, sprites)
-}
-
-#[tauri::command]
-fn update_spr_sprites(
-    path: String,
-    extended: bool,
-    sprites: Vec<SpriteWrite>,
-    sprites_count: u32,
-) -> Result<(), String> {
-    update_sprites_in_spr(&path, extended, sprites, sprites_count)
 }
 
 #[tauri::command]
@@ -928,33 +714,6 @@ fn update_spr_sprites_bin(request: tauri::ipc::Request) -> Result<(), String> {
 
 // DAT Manager Commands
 
-#[tauri::command]
-fn store_dat_data(
-    path: String,
-    items: Vec<ThingType>,
-    outfits: Vec<ThingType>,
-    effects: Vec<ThingType>,
-    missiles: Vec<ThingType>,
-    dat_state: tauri::State<DatManagerState>,
-) -> Result<(), String> {
-    let mut manager = dat_state.lock().map_err(|e| format!("Lock error: {}", e))?;
-    manager.store_data(path, items, outfits, effects, missiles)
-}
-
-#[tauri::command]
-fn load_dat_file(
-    path: String,
-    dat_state: tauri::State<DatManagerState>,
-) -> Result<u32, String> {
-    let mut reader = DatReader::open(&path)?;
-    let (signature, items, outfits, effects, missiles) = reader.read_dat()?;
-
-    let mut manager = dat_state.lock().map_err(|e| format!("Lock error: {}", e))?;
-    manager.store_data(path, items, outfits, effects, missiles)?;
-
-    Ok(signature)
-}
-
 /// Parse DAT file in Rust and return binary buffer for fast IPC transfer
 /// This replaces slow TypeScript parsing + JSON serialization with:
 /// 1. Native Rust parsing (fast)
@@ -1013,25 +772,6 @@ fn parse_dat_file_bin(
 }
 
 #[tauri::command]
-fn search_things(
-    path: String,
-    category: Option<String>,
-    name: Option<String>,
-    properties: std::collections::HashMap<String, bool>,
-    limit: usize,
-    dat_state: tauri::State<DatManagerState>,
-) -> Result<Vec<(u32, String)>, String> {
-    let manager = dat_state.lock().map_err(|e| format!("Lock error: {}", e))?;
-    manager.search(
-        &path,
-        category.as_deref(),
-        name.as_deref(),
-        &properties,
-        limit
-    )
-}
-
-#[tauri::command]
 fn search_things_bin(
     path: String,
     category: Option<String>,
@@ -1061,37 +801,11 @@ fn clear_dat_data(
     Ok(())
 }
 
-#[tauri::command]
-fn get_thing(
-    path: String,
-    id: u32,
-    category: String,
-    dat_state: tauri::State<DatManagerState>,
-) -> Result<ThingType, String> {
-    let manager = dat_state.lock().map_err(|e| format!("Lock error: {}", e))?;
-    manager.get_thing(&path, id, &category)
-        .ok_or_else(|| format!("Thing not found: {} #{}", category, id))
-}
-
 // Helper to calculate dimensions
 fn get_group_dimensions(group: &FrameGroup) -> (u32, u32) {
     let total_x = (group.pattern_z as u32) * (group.pattern_x as u32) * (group.layers as u32);
     let total_y = (group.frames as u32) * (group.pattern_y as u32);
     (total_x, total_y)
-}
-
-// Helper to calculate texture index (position in sheet)
-fn get_texture_index(
-    group: &FrameGroup,
-    layer: u32,
-    pattern_x: u32,
-    pattern_y: u32,
-    pattern_z: u32,
-    frame: u32,
-) -> u32 {
-    (((frame % group.frames as u32) * group.pattern_z as u32 + pattern_z) * group.pattern_y as u32 + pattern_y) * group.pattern_x as u32 * group.layers as u32
-        + pattern_x * group.layers as u32
-        + layer
 }
 
 // Helper to calculate sprite index
@@ -1301,199 +1015,38 @@ fn export_object_sheet_rust(
     Ok(())
 }
 
-#[tauri::command]
-fn import_object_sheet_rust(
-    mut thing: ThingType,
-    spr_path: String,
-    image_path: Option<String>,
-    image_bytes: Option<Vec<u8>>,
-    transparent: bool,
-    next_sprite_id: u32, // ID to start allocating new sprites from
-    spr_state: tauri::State<SprManagerState>,
-) -> Result<ThingType, String> {
-    let mut manager = spr_state.lock().map_err(|e| format!("Lock error: {}", e))?;
-    
-    // ... (Loading and Analysis Logic same as before)
-    
-    // 1. Load Image
-    let img = if let Some(path) = image_path {
-        image::open(&path)
-            .map_err(|e| format!("Failed to load image from path: {}", e))?
-            .to_rgba8()
-    } else if let Some(bytes) = image_bytes {
-        image::load_from_memory(&bytes)
-            .map_err(|e| format!("Failed to load image from bytes: {}", e))?
-            .to_rgba8()
-    } else {
-        return Err("No image source provided".to_string());
-    };
-
-    let width = img.width();
-    let height = img.height();
-
-    let cols = width / 32;
-    let rows = height / 32;
-    let total_sprites = cols * rows;
-
-    if total_sprites == 0 {
-        return Err("Image is too small (must be at least 32x32)".to_string());
-    }
-
-    let mut has_mask = false;
-    'mask_check: for pixel in img.pixels() {
-        if pixel[3] == 0 { continue; }
-        let r = pixel[0];
-        let g = pixel[1];
-        let b = pixel[2];
-        let is_red = r > 200 && g < 50 && b < 50;
-        let is_green = r < 50 && g > 200 && b < 50;
-        let is_blue = r < 50 && g < 50 && b > 200;
-        let is_yellow = r > 200 && g > 200 && b < 50;
-        if is_red || is_green || is_blue || is_yellow {
-            has_mask = true;
-            break 'mask_check;
-        }
-    }
-
-    let mut layers = if has_mask { 2 } else { 1 };
-    if total_sprites % layers != 0 { layers = 1; }
-    let sprites_per_layer = total_sprites / layers;
-    
-    let mut pattern_x = 4;
-    let mut frames = 1;
-    if sprites_per_layer % 4 == 0 {
-        pattern_x = 4;
-        frames = sprites_per_layer / 4;
-    } else {
-        pattern_x = 1;
-        frames = sprites_per_layer;
-    }
-    
-    // Adjust logic with strict dimensions
-    let detected_frames = cols; 
-    let detected_rows = rows;
-    
-    frames = detected_frames;
-    
-    if detected_rows % 4 == 0 {
-         pattern_x = 4;
-         layers = detected_rows / 4;
-    } else {
-         pattern_x = detected_rows;
-         layers = 1;
-    }
-    
-    if has_mask && layers < 2 {
-        if detected_rows >= 2 && detected_rows % 2 == 0 {
-             layers = 2;
-             pattern_x = detected_rows / 2;
-        }
-    }
-    if layers > 2 {
-        // Cap? Or allow? Let's leave it as detected for flexibility.
-    }
-
-    let mut group = if let Some(fgs) = &thing.frame_groups_data {
-        if !fgs.is_empty() { fgs[0].clone() } else { create_synthetic_group(&thing) }
-    } else {
-         create_synthetic_group(&thing)
-    };
-    
-    group.width = 1;
-    group.height = 1;
-    group.layers = layers as u8;
-    group.pattern_x = pattern_x as u8;
-    group.pattern_y = 1;
-    group.pattern_z = 1;
-    group.frames = frames as u8;
-
-    let mut current_indices = group.sprite_index.clone();
-    let mut reusable_ids: Vec<u32> = current_indices.iter().cloned().filter(|&id| id != 0).collect();
-    reusable_ids.sort();
-    reusable_ids.dedup();
-    
-    let mut new_sprite_index = Vec::new();
-    let mut id_alloc_idx = 0;
-    
-    // Use Provided Next ID
-    let mut current_next_id = next_sprite_id;
-    
-    for f in 0..frames {
-        for x in 0..pattern_x { 
-             for l in 0..layers {
-                 let img_row = (l as u32 * pattern_x) + x;
-                 let img_col = f;
-                 
-                 let src_x = img_col * 32;
-                 let src_y = img_row * 32;
-                 
-                 let sprite_id = if id_alloc_idx < reusable_ids.len() {
-                     reusable_ids[id_alloc_idx]
-                 } else {
-                     let id = current_next_id;
-                     current_next_id += 1;
-                     id
-                 };
-                 if id_alloc_idx < reusable_ids.len() {
-                     id_alloc_idx += 1;
-                 }
-                 
-                 new_sprite_index.push(sprite_id);
-                 
-                 if src_x + 32 <= width && src_y + 32 <= height {
-                      let sub_img = img.view(src_x, src_y, 32, 32);
-                      let mut sub_img_buffer = sub_img.to_image();
-                      
-                      for pixel in sub_img_buffer.pixels_mut() {
-                          if pixel[3] == 0 { pixel.0 = [0, 0, 0, 0]; }
-                      }
-                      
-                      let raw_pixels = sub_img_buffer.as_raw();
-                      let compressed_pixels = compress_to_rle(raw_pixels, transparent);
-                      
-                      manager.update_sprite(&spr_path, sprite_id, SpriteData {
-                          id: sprite_id,
-                          is_empty: false,
-                          compressed_pixels,
-                      })?;
-                 }
-             }
-        }
-    }
-    
-    group.sprite_index = new_sprite_index;
-    
-    let mut new_thing = thing.clone();
-    new_thing.frame_groups_data = Some(vec![group]);
-    new_thing.width = 1;
-    new_thing.height = 1;
-    new_thing.layers = layers as u8;
-    new_thing.pattern_x = pattern_x as u8;
-    new_thing.pattern_y = 1;
-    new_thing.pattern_z = 1;
-    new_thing.frames = frames as u8;
-    new_thing.sprite_index = new_thing.frame_groups_data.as_ref().unwrap()[0].sprite_index.clone();
-
-    Ok(new_thing)
-}
-
 /// Import object sheet with binary response - returns both ThingType and sprites in one call
 /// This eliminates the need for a second IPC call to reload sprites
+///
+/// Request body (raw binary):
+///   [transparent: u8][version: u32 LE][next_sprite_id: u32 LE]
+///   [spr_path: u16-len-prefixed UTF-8][category: u16-len-prefixed UTF-8]
+///   [thing: encodeThing payload][image bytes: rest]
+///
 /// Response format: [JSON len: u32][ThingType JSON][sprites in RGBA format (LZ4 compressed)]
 #[tauri::command]
 fn import_object_sheet_binary(
-    image_bytes: Vec<u8>,
-    thing: ThingType,
-    spr_path: String,
-    transparent: bool,
-    next_sprite_id: u32,
-    version: u32, // DAT version to determine frame groups support (>= 1057)
+    request: tauri::ipc::Request,
     spr_state: tauri::State<SprManagerState>,
 ) -> Result<tauri::ipc::Response, String> {
+    let bytes = match request.body() {
+        tauri::ipc::InvokeBody::Raw(b) => b.as_slice(),
+        _ => return Err("import_object_sheet_binary expects a raw binary payload".to_string()),
+    };
+
+    let mut r = Reader::new(bytes);
+    let transparent = r.bool()?;
+    let version = r.u32()?;
+    let next_sprite_id = r.u32()?;
+    let spr_path = r.string()?;
+    let category = r.string()?;
+    let thing = read_thing(&mut r, &category)?;
+    let image_bytes = r.rest();
+
     let mut manager = spr_state.lock().map_err(|e| format!("Lock error: {}", e))?;
 
     // 1. Load image from bytes
-    let img = image::load_from_memory(&image_bytes)
+    let img = image::load_from_memory(image_bytes)
         .map_err(|e| format!("Failed to load image from bytes: {}", e))?
         .to_rgba8();
 
@@ -1891,19 +1444,11 @@ tauri::Builder::default()
             read_file_text,
             read_file_header,
             open_spr_file,
-            read_sprite,
             close_spr_file,
-            get_spr_header,
-            read_sprites_batch,
-            read_sprites_list,
-            read_sprites_list_bin,
-            read_sprites_batch_bin,
-            read_sprite_bin,
             read_sprites_rgba,
             read_sprites_batch_rgba,
             read_sprites_rgba_lz4,
             compress_sprite_rgba,
-            search_thing_types_bin,
             set_debug_logging,
             get_debug_logging,
             list_directory,
@@ -1927,23 +1472,15 @@ tauri::Builder::default()
             list_scenes,
             load_scene,
             delete_scene,
-            write_dat,
             write_dat_bin,
-            write_spr,
-            update_spr_sprites,
             update_spr_sprites_bin,
             copy_spr_file_with_mods,
-            store_dat_data,
-            load_dat_file,
             parse_dat_file_bin,
-            search_things,
             search_things_bin,
             clear_dat_data,
-            get_thing,
             optimize_sprites_rust,
             apply_optimization,
             export_object_sheet_rust,
-            import_object_sheet_rust,
             import_object_sheet_binary
         ])
         .setup(move |app| {

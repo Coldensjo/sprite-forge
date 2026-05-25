@@ -167,30 +167,11 @@ impl SprManager {
         Ok(header)
     }
 
-    pub fn read_sprite(&mut self, path: &str, id: u32) -> Result<SpriteData, String> {
-        // Check overrides first
-        if let Some(path_overrides) = self.overrides.get(path) {
-            if let Some(sprite) = path_overrides.get(&id) {
-                return Ok(sprite.clone());
-            }
-        }
-
-        let reader = self.readers.get_mut(path)
-            .ok_or_else(|| format!("SPR file not open: {}", path))?;
-        reader.read_sprite(id)
-    }
-
     pub fn close_file(&mut self, path: &str) -> Result<(), String> {
         // Remove the reader if it exists, silently succeed if not
         // This allows cleanup to be called safely even if file wasn't opened
         self.readers.remove(path);
         Ok(())
-    }
-
-    pub fn get_header(&self, path: &str) -> Result<SprHeader, String> {
-        let reader = self.readers.get(path)
-            .ok_or_else(|| format!("SPR file not open: {}", path))?;
-        Ok(reader.get_header().clone())
     }
 
     /// Read multiple sprites at once (batch operation)
@@ -490,52 +471,6 @@ impl SprManager {
         Ok(())
     }
 
-    /// Read a list of sprites and return them as a compact binary buffer
-    /// Format: [Count: u32] -> ([ID: u32][IsEmpty: u8][Len: u32][Data...])*
-    pub fn read_sprites_list_binary(&mut self, path: &str, ids: Vec<u32>) -> Result<Vec<u8>, String> {
-        let sprites = self.read_sprites_list(path, ids)?;
-        Ok(Self::pack_sprites(sprites))
-    }
-
-    /// Read a batch of sprites and return them as a compact binary buffer
-    pub fn read_sprites_batch_binary(&mut self, path: &str, start_id: u32, count: u32) -> Result<Vec<u8>, String> {
-        let sprites = self.read_sprites_batch(path, start_id, count)?;
-        Ok(Self::pack_sprites(sprites))
-    }
-
-    /// Read a single sprite and return it as a compact binary buffer (list of 1)
-    pub fn read_sprite_binary(&mut self, path: &str, id: u32) -> Result<Vec<u8>, String> {
-        let sprite = self.read_sprite(path, id)?;
-        Ok(Self::pack_sprites(vec![sprite]))
-    }
-
-    /// Helper to pack sprites into binary format
-    fn pack_sprites(sprites: Vec<SpriteData>) -> Vec<u8> {
-        let total_pixel_bytes: usize = sprites.iter().map(|s| s.compressed_pixels.len()).sum();
-        let metadata_bytes = sprites.len() * (4 + 1 + 4); // ID(4) + Empty(1) + Len(4)
-        let header_bytes = 4; // Count(4)
-
-        let mut buffer = Vec::with_capacity(header_bytes + metadata_bytes + total_pixel_bytes);
-
-        // Write Count
-        buffer.extend_from_slice(&(sprites.len() as u32).to_le_bytes());
-
-        for sprite in sprites {
-            // Write ID
-            buffer.extend_from_slice(&sprite.id.to_le_bytes());
-
-            // Write IsEmpty
-            buffer.push(if sprite.is_empty { 1 } else { 0 });
-
-            // Write Length
-            buffer.extend_from_slice(&(sprite.compressed_pixels.len() as u32).to_le_bytes());
-
-            // Write Data
-            buffer.extend_from_slice(&sprite.compressed_pixels);
-        }
-        buffer
-    }
-
     /// Read sprites and return decompressed RGBA pixels
     /// Format: [Count: u32] -> ([ID: u32][IsEmpty: u8][RGBA pixels: 4096 bytes])*
     /// Each sprite is exactly 4096 bytes (32x32x4 RGBA)
@@ -555,12 +490,6 @@ impl SprManager {
     /// This reduces IPC transfer size by ~5x (7-8MB -> 1.5MB for outfit pages)
     pub fn read_sprites_rgba_lz4(&mut self, path: &str, ids: Vec<u32>, transparent: bool) -> Result<Vec<u8>, String> {
         let sprites = self.read_sprites_list(path, ids)?;
-        Ok(Self::pack_sprites_rgba_lz4(sprites, transparent))
-    }
-
-    /// Read a batch of sprites and return LZ4-compressed RGBA pixels
-    pub fn read_sprites_batch_rgba_lz4(&mut self, path: &str, start_id: u32, count: u32, transparent: bool) -> Result<Vec<u8>, String> {
-        let sprites = self.read_sprites_batch(path, start_id, count)?;
         Ok(Self::pack_sprites_rgba_lz4(sprites, transparent))
     }
 

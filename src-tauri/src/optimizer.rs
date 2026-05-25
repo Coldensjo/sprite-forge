@@ -3,24 +3,32 @@ use sha1::{Sha1, Digest};
 use crate::spr_manager::{SprManagerState, SprFileReader};
 use crate::spr_writer::SpriteWrite;
 
-#[derive(serde::Serialize)]
-pub struct OptimizationResult {
-    #[serde(with = "serde_bytes")]
-    pub remap_blob: Vec<u8>,
-    pub removed_count: u32,
-    pub old_total: u32,
-    pub new_total: u32,
-    pub temp_path: String,
-}
-
+/// Request body (raw binary):
+///   [extended: u8][path: u16-len + UTF-8][used_ids_blob: rest (4 bytes per u32 LE)]
+///
+/// Response body:
+///   [old_total: u32 LE][new_total: u32 LE][removed_count: u32 LE]
+///   [temp_path: u16-len + UTF-8][remap_blob: rest (8 bytes per pair)]
 #[tauri::command]
 pub async fn optimize_sprites_rust(
     app: tauri::AppHandle,
-    path: String,
-    used_ids_blob: Vec<u8>,
-    extended: bool,
+    request: tauri::ipc::Request<'_>,
     _spr_state: tauri::State<'_, SprManagerState>,
-) -> Result<OptimizationResult, String> {
+) -> Result<tauri::ipc::Response, String> {
+    let bytes = match request.body() {
+        tauri::ipc::InvokeBody::Raw(b) => b.as_slice(),
+        _ => return Err("optimize_sprites_rust expects a raw binary payload".to_string()),
+    };
+    if bytes.len() < 3 {
+        return Err("optimize_sprites_rust payload too small".to_string());
+    }
+    let extended = bytes[0] != 0;
+    let path_len = u16::from_le_bytes([bytes[1], bytes[2]]) as usize;
+    if bytes.len() < 3 + path_len {
+        return Err("optimize_sprites_rust payload truncated at path".to_string());
+    }
+    let path = String::from_utf8_lossy(&bytes[3..3 + path_len]).into_owned();
+    let used_ids_blob: Vec<u8> = bytes[3 + path_len..].to_vec();
     // 1. Read all sprites using a local reader (avoids locking the shared manager)
     // We run this in a blocking task to avoid blocking the async runtime
     let path_clone = path.clone();
@@ -177,16 +185,17 @@ pub async fn optimize_sprites_rust(
         ))
     }).await.map_err(|e| format!("Task join error: {}", e))??;
 
-    // 5. Result is already persisted
-    let temp_path = temp_path; // Just to be explicit
+    // 5. Pack response as binary
+    let path_bytes = temp_path.as_bytes();
+    let mut response = Vec::with_capacity(4 + 4 + 4 + 2 + path_bytes.len() + remap_blob.len());
+    response.extend_from_slice(&old_total.to_le_bytes());
+    response.extend_from_slice(&new_total.to_le_bytes());
+    response.extend_from_slice(&removed_count.to_le_bytes());
+    response.extend_from_slice(&(path_bytes.len() as u16).to_le_bytes());
+    response.extend_from_slice(path_bytes);
+    response.extend_from_slice(&remap_blob);
 
-    Ok(OptimizationResult {
-        remap_blob,
-        removed_count,
-        old_total,
-        new_total,
-        temp_path,
-    })
+    Ok(tauri::ipc::Response::new(response))
 }
 
 #[tauri::command]

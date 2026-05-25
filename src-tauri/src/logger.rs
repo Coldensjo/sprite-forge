@@ -11,14 +11,8 @@ use serde_json;
 pub enum EventCode {
     /// SPR file opened
     SprOpen,
-    /// Single sprite read
-    SprRead,
     /// Batch sprite read
     SprBatch,
-    /// SPR file closed
-    SprClose,
-    /// Error occurred
-    Error,
 }
 
 /// Compact log entry (minimal tokens)
@@ -84,11 +78,6 @@ impl Logger {
                 let _ = writeln!(file, "{}", json);
             }
         }
-    }
-
-    /// Close logger
-    pub fn close(&mut self) {
-        self.file = None;
     }
 
     /// Enable/disable logging

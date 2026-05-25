@@ -10,7 +10,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { ThingCategory } from './types';
 import { createCommit } from '../versionControl';
 
-class ByteWriter {
+export class ByteWriter {
 	private buf: Uint8Array;
 	private view: DataView;
 	private len = 0;
@@ -108,7 +108,7 @@ class ByteWriter {
 	}
 }
 
-function encodeThing(w: ByteWriter, t: ThingType): void {
+export function encodeThing(w: ByteWriter, t: ThingType): void {
 	w.u32(t.id);
 	w.u8(t.width);
 	w.u8(t.height);
@@ -333,11 +333,6 @@ function fixSpriteIndex(thing: ThingType): void {
 /**
  * Compile DAT file
  * CRITICAL: Always writes ALL items/outfits/effects/missiles, not just modified ones!
- *
- * PERFORMANCE NOTE: This function currently sends data via JSON serialization (violates RULE #1)
- * - Current: Sends ~6000 ThingType objects as JSON (~60% payload reduction from original 11,604)
- * - TODO: Encode to binary buffer using DataView for 10-100x performance improvement
- * - See CLAUDE.md "RULE #1: NEVER USE JSON FOR TAURI IPC" for implementation guide
  */
 export async function compileDatFile(path: string, data: TibiaData): Promise<void> {
 	// Collect all items from each category

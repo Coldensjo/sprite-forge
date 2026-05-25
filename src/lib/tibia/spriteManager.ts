@@ -18,11 +18,11 @@ import { isEmptyPixels } from './spriteReader';
  * @returns Compressed RLE data
  */
 async function compressPixelsRust(pixels: Uint8Array, transparent: boolean): Promise<Uint8Array> {
-	const result = await invoke<number[]>('compress_sprite_rgba', {
-		transparent,
-		pixels: Array.from(pixels)
-	});
-	return new Uint8Array(result);
+	const buf = new Uint8Array(4097);
+	buf[0] = transparent ? 1 : 0;
+	buf.set(pixels, 1);
+	const result = await invoke<ArrayBuffer>('compress_sprite_rgba', buf);
+	return result instanceof Uint8Array ? result : new Uint8Array(result);
 }
 
 /**

@@ -74,93 +74,9 @@ impl DatManager {
         self.files.get(path)
     }
 
-    /// Get a single ThingType by ID and category
-    pub fn get_thing(&self, path: &str, id: u32, category: &str) -> Option<ThingType> {
-        let dat_data = self.get_data(path)?;
-
-        let collection = match category {
-            "item" => &dat_data.items,
-            "outfit" => &dat_data.outfits,
-            "effect" => &dat_data.effects,
-            "missile" => &dat_data.missiles,
-            _ => return None,
-        };
-
-        collection.get(&id).cloned()
-    }
-
     /// Remove DAT data for a path
     pub fn remove_data(&mut self, path: &str) {
         self.files.remove(path);
-    }
-
-    /// Clear all stored DAT data
-    pub fn clear(&mut self) {
-        self.files.clear();
-    }
-
-    /// Search for ThingTypes matching criteria
-    /// Matches Object Builder's findThingTypeByProperties logic
-    /// Returns (id, category) pairs
-    pub fn search(
-        &self,
-        path: &str,
-        category: Option<&str>,
-        name: Option<&str>,
-        properties: &HashMap<String, bool>,
-        limit: usize,
-    ) -> Result<Vec<(u32, String)>, String> {
-        let dat_data = self.get_data(path)
-            .ok_or_else(|| format!("No DAT data loaded for path: {}", path))?;
-
-        let mut results = Vec::new();
-
-        // Helper to search a collection
-        let mut search_collection = |collection: &HashMap<u32, ThingType>, category_name: &str| {
-            for thing in collection.values() {
-                if Self::matches_criteria(thing, name, properties) {
-                    results.push((thing.id, category_name.to_string()));
-                    if limit > 0 && results.len() >= limit {
-                        return true; // Stop searching
-                    }
-                }
-            }
-            false // Continue searching
-        };
-
-        // Search based on category filter
-        match category {
-            Some("item") => {
-                search_collection(&dat_data.items, "item");
-            }
-            Some("outfit") => {
-                search_collection(&dat_data.outfits, "outfit");
-            }
-            Some("effect") => {
-                search_collection(&dat_data.effects, "effect");
-            }
-            Some("missile") => {
-                search_collection(&dat_data.missiles, "missile");
-            }
-            None => {
-                // Search all categories
-                if search_collection(&dat_data.items, "item") {
-                    return Ok(results);
-                }
-                if search_collection(&dat_data.outfits, "outfit") {
-                    return Ok(results);
-                }
-                if search_collection(&dat_data.effects, "effect") {
-                    return Ok(results);
-                }
-                search_collection(&dat_data.missiles, "missile");
-            }
-            Some(cat) => {
-                return Err(format!("Invalid category: {}", cat));
-            }
-        }
-
-        Ok(results)
     }
 
     /// Check if a ThingType matches search criteria

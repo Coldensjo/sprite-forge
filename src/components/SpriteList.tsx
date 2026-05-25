@@ -357,11 +357,12 @@ export const SpriteList = () => {
 									}
 
 									// The `pixels` from canvas are in RGBA format
-									// Compress using Rust (accepts RGBA directly)
-									const compressedPixels = await invoke<Uint8Array>('compress_sprite_rgba', {
-										pixels: Array.from(pixels),
-										transparent: data.transparency
-									});
+									// Compress using Rust via raw binary IPC
+									const compressBuf = new Uint8Array(4097);
+									compressBuf[0] = data.transparency ? 1 : 0;
+									compressBuf.set(pixels, 1);
+									const compressResp = await invoke<ArrayBuffer>('compress_sprite_rgba', compressBuf);
+									const compressedPixels = compressResp instanceof Uint8Array ? compressResp : new Uint8Array(compressResp);
 
 									let spriteId: number;
 

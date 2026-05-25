@@ -1,9 +1,11 @@
+import type { ThingType, TibiaData } from './types';
+
 import { invoke } from '@tauri-apps/api/core';
 import { logger, EventCode } from '@/lib/debug';
 import { open } from '@tauri-apps/plugin-dialog';
 
 import { parseImportResponse } from './loader';
-import { ThingType, TibiaData } from './types';
+import { ByteWriter, encodeThing } from './compiler';
 
 export interface ImportResult {
 	success: boolean;
@@ -67,15 +69,18 @@ export async function importObjectSheet(thing: ThingType, data: TibiaData, file?
 	});
 
 	try {
-		// 3. Single IPC call - returns binary response with ThingType + sprites
-		const response = await invoke<ArrayBuffer>('import_object_sheet_binary', {
-			thing,
-			nextSpriteId: nextId,
-			sprPath: data.sprPath,
-			version: data.version.value, // Pass version so Rust knows if frame groups are supported
-			transparent: data.transparency,
-			imageBytes: Array.from(imageBytes)
-		});
+		// 3. Pack everything into a single raw binary buffer (no JSON IPC)
+		const w = new ByteWriter(imageBytes.length + 8192);
+		w.bool(data.transparency);
+		w.u32(data.version.value);
+		w.u32(nextId);
+		w.str(data.sprPath);
+		w.str(thing.category);
+		encodeThing(w, thing);
+		w.bytes(imageBytes);
+
+		// Single IPC call - returns binary response with ThingType + sprites
+		const response = await invoke<ArrayBuffer>('import_object_sheet_binary', w.finish());
 
 		// Convert to Uint8Array if needed
 		const buffer = response instanceof Uint8Array ? response : new Uint8Array(response);

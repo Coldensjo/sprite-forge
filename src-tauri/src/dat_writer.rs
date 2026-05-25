@@ -1557,17 +1557,17 @@ fn append_category(out: &mut Vec<u8>, map: &HashMap<u32, Vec<u8>>, min_id: u16, 
     }
 }
 
-struct Reader<'a> {
+pub struct Reader<'a> {
     buf: &'a [u8],
     pos: usize,
 }
 
 impl<'a> Reader<'a> {
-    fn new(buf: &'a [u8]) -> Self {
+    pub fn new(buf: &'a [u8]) -> Self {
         Self { buf, pos: 0 }
     }
 
-    fn need(&self, n: usize) -> Result<(), String> {
+    pub fn need(&self, n: usize) -> Result<(), String> {
         if self.pos + n > self.buf.len() {
             Err(format!(
                 "DAT buffer truncated at offset {}: need {} more bytes, have {}",
@@ -1580,49 +1580,53 @@ impl<'a> Reader<'a> {
         }
     }
 
-    fn u8(&mut self) -> Result<u8, String> {
+    pub fn u8(&mut self) -> Result<u8, String> {
         self.need(1)?;
         let v = self.buf[self.pos];
         self.pos += 1;
         Ok(v)
     }
 
-    fn i8(&mut self) -> Result<i8, String> {
+    pub fn i8(&mut self) -> Result<i8, String> {
         Ok(self.u8()? as i8)
     }
 
-    fn bool(&mut self) -> Result<bool, String> {
+    pub fn bool(&mut self) -> Result<bool, String> {
         Ok(self.u8()? != 0)
     }
 
-    fn u16(&mut self) -> Result<u16, String> {
+    pub fn u16(&mut self) -> Result<u16, String> {
         self.need(2)?;
         let v = u16::from_le_bytes([self.buf[self.pos], self.buf[self.pos + 1]]);
         self.pos += 2;
         Ok(v)
     }
 
-    fn i16(&mut self) -> Result<i16, String> {
+    pub fn i16(&mut self) -> Result<i16, String> {
         Ok(self.u16()? as i16)
     }
 
-    fn u32(&mut self) -> Result<u32, String> {
+    pub fn u32(&mut self) -> Result<u32, String> {
         self.need(4)?;
         let v = u32::from_le_bytes(self.buf[self.pos..self.pos + 4].try_into().unwrap());
         self.pos += 4;
         Ok(v)
     }
 
-    fn i32(&mut self) -> Result<i32, String> {
+    pub fn i32(&mut self) -> Result<i32, String> {
         Ok(self.u32()? as i32)
     }
 
-    fn string(&mut self) -> Result<String, String> {
+    pub fn string(&mut self) -> Result<String, String> {
         let n = self.u16()? as usize;
         self.need(n)?;
         let s = String::from_utf8_lossy(&self.buf[self.pos..self.pos + n]).into_owned();
         self.pos += n;
         Ok(s)
+    }
+
+    pub fn rest(&self) -> &'a [u8] {
+        &self.buf[self.pos..]
     }
 }
 
@@ -1692,7 +1696,7 @@ fn read_frame_group(r: &mut Reader) -> Result<FrameGroup, String> {
     })
 }
 
-fn read_thing(r: &mut Reader, category: &str) -> Result<ThingType, String> {
+pub fn read_thing(r: &mut Reader, category: &str) -> Result<ThingType, String> {
     let id = r.u32()?;
     let width = r.u8()?;
     let height = r.u8()?;

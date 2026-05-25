@@ -1,16 +1,9 @@
+import type { ThingType, TibiaData } from './types';
+
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 
 import { loadSpriteIds } from './loader';
-import { ThingType, TibiaData } from './types';
-
-interface OptimizationResult {
-	old_total: number;
-	new_total: number;
-	temp_path: string;
-	remap_blob: number[]; // Rust returns Vec<u8> as array of numbers
-	removed_count: number;
-}
 
 /**
  * Optimize sprites by removing duplicates and unused sprites
@@ -68,21 +61,42 @@ export async function optimizeSprites(
 	});
 
 	try {
-		const result = await invoke<OptimizationResult>('optimize_sprites_rust', {
-			path: data.sprPath,
-			extended: data.extended,
-			usedIdsBlob: usedIdsArray
-		});
+		// Pack args as raw binary: [extended: u8][path: u16-len + UTF-8][used_ids_blob: rest]
+		const pathBytes = new TextEncoder().encode(data.sprPath);
+		const argsBuf = new Uint8Array(1 + 2 + pathBytes.length + usedIdsArray.length);
+		const argsView = new DataView(argsBuf.buffer);
+		argsView.setUint8(0, data.extended ? 1 : 0);
+		argsView.setUint16(1, pathBytes.length, true);
+		argsBuf.set(pathBytes, 3);
+		argsBuf.set(usedIdsArray, 3 + pathBytes.length);
+
+		const response = await invoke<ArrayBuffer>('optimize_sprites_rust', argsBuf);
 
 		unlisten(); // Clean up listener
+
+		// Parse binary response: [old_total: u32][new_total: u32][removed_count: u32][temp_path: u16-len + UTF-8][remap_blob: rest]
+		const resultBytes = response instanceof Uint8Array ? response : new Uint8Array(response);
+		const rv = new DataView(resultBytes.buffer, resultBytes.byteOffset, resultBytes.byteLength);
+		let ro = 0;
+		const oldTotal = rv.getUint32(ro, true);
+		ro += 4;
+		const newTotal = rv.getUint32(ro, true);
+		ro += 4;
+		const removedCount = rv.getUint32(ro, true);
+		ro += 4;
+		const pathLen = rv.getUint16(ro, true);
+		ro += 2;
+		const tempPath = new TextDecoder().decode(resultBytes.subarray(ro, ro + pathLen));
+		ro += pathLen;
+		const remapBytes = resultBytes.subarray(ro);
 
 		// 3. Apply remapping
 		if (onProgress) onProgress('Updating object references...', currentStep++, steps);
 
-		// Decode remap blob
+		// Decode remap blob (8 bytes per pair: u32 old, u32 new)
 		const remap = new Map<number, number>();
-		const remapView = new DataView(new Uint8Array(result.remap_blob).buffer);
-		for (let i = 0; i < result.remap_blob.length; i += 8) {
+		const remapView = new DataView(remapBytes.buffer, remapBytes.byteOffset, remapBytes.byteLength);
+		for (let i = 0; i < remapBytes.length; i += 8) {
 			const oldId = remapView.getUint32(i, true);
 			const newId = remapView.getUint32(i + 4, true);
 			remap.set(oldId, newId);
@@ -123,22 +137,21 @@ export async function optimizeSprites(
 		// CRITICAL: Open the new temp file in the backend so we can read from it
 		// The backend SprManager needs to have the file open before read_sprites commands work
 		await invoke('open_spr_file', {
-			path: result.temp_path,
+			path: tempPath,
 			extended: data.extended
 		});
 
 		// DO NOT mutate data.sprPath here!
 		// If we mutate it, the Context will see the new path when we call setData,
 		// and it will try to close the NEW path instead of the OLD path.
-		// data.sprPath = result.temp_path;
 
 		// We can mutate cache as it doesn't affect file handles
 		data.sprites.clear();
 
 		// Preload first 100 sprites to ensure UI works
 		await loadSpriteIds(
-			result.temp_path,
-			Array.from({ length: Math.min(100, result.new_total) }, (_, i) => i + 1),
+			tempPath,
+			Array.from({ length: Math.min(100, newTotal) }, (_, i) => i + 1),
 			data.transparency,
 			data.sprites
 		);
@@ -146,10 +159,10 @@ export async function optimizeSprites(
 		if (onProgress) onProgress('Optimization complete', steps, steps);
 
 		return {
-			oldTotal: result.old_total,
-			newTotal: result.new_total,
-			tempPath: result.temp_path,
-			removedCount: result.removed_count
+			oldTotal,
+			newTotal,
+			tempPath,
+			removedCount
 		};
 	} catch (error) {
 		unlisten();
