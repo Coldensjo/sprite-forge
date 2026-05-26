@@ -128,46 +128,35 @@ export const FindWindow = () => {
 	};
 
 	const handleFind = useCallback(async () => {
-		console.log('handleFind called', { name, properties, selectedCategory });
-
-		// Get the DAT path from localStorage (set by main window when files are loaded)
 		const datPath = localStorage.getItem('sprite-forge-dat-path');
 		if (!datPath) {
-			console.warn('No DAT file loaded in main window - cannot search');
 			setSearchResults([]);
 			return;
 		}
 
-		// Filter properties to only include those that are true AND relevant to the selected category
 		const activeProperties: Record<string, boolean> = {};
 		const relevantProps = ['hasLight', 'hasOffset', 'animateAlways'];
 
 		for (const [propName, value] of Object.entries(properties)) {
 			if (value === true) {
-				// If category is NOT item or all, check if property is relevant
 				if (selectedCategory !== 'all' && selectedCategory !== 'item') {
 					if (!relevantProps.includes(propName)) {
-						continue; // Skip irrelevant property
+						continue;
 					}
 				}
 				activeProperties[propName] = true;
 			}
 		}
 
-		console.log('Search criteria:', { datPath, activeProperties, selectedCategory, name: name.trim() });
-
 		setIsSearching(true);
 		try {
-			console.log('Invoking search_things_bin...');
 			const response: any = await invoke('search_things_bin', {
-				limit: 0, // 0 = unlimited
+				limit: 0,
 				path: datPath,
 				name: name.trim() || null,
 				properties: activeProperties,
 				category: selectedCategory === 'all' ? null : selectedCategory
 			});
-
-			console.log('Search response received', response);
 
 			let bytes: Uint8Array;
 			if (response instanceof Uint8Array) {
@@ -184,8 +173,6 @@ export const FindWindow = () => {
 			let offset = 0;
 			const count = view.getUint32(offset, true);
 			offset += 4;
-
-			console.log(`Parsing ${count} results from ${bytes.byteLength} bytes`);
 
 			const newResults: Array<{ id: number; category: ThingCategory }> = [];
 			const newThings = new Map<string, ThingType>();
