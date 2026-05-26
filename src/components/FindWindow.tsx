@@ -462,12 +462,10 @@ export const FindWindow = () => {
 	const isMac = navigator.userAgent.includes('Mac');
 
 	return (
-		<div
-			className={`h-screen w-screen flex flex-col bg-background ${isMac ? 'rounded-xl overflow-hidden border border-white/10 shadow-2xl' : ''}`}
-		>
+		<div className="h-screen w-screen flex flex-col bg-background rounded-xl overflow-hidden border border-white/10 shadow-2xl">
 			<div
 				data-tauri-drag-region
-				className="h-8 bg-toolbar-bg border-b border-border/50 flex items-center justify-between px-4 relative"
+				className="h-8 bg-toolbar-bg border-b border-border/50 flex items-center justify-between px-4 relative flex-shrink-0"
 			>
 				{isMac ? (
 					<>
@@ -534,7 +532,7 @@ export const FindWindow = () => {
 			</div>
 
 			<Tabs defaultValue="objects" className="flex-1 flex flex-col overflow-hidden">
-				<div className="border-b border-border px-4">
+				<div className="border-b border-border px-4 flex-shrink-0">
 					<TabsList className="h-8 bg-transparent p-0 gap-0">
 						<TabsTrigger
 							value="objects"
@@ -545,250 +543,268 @@ export const FindWindow = () => {
 					</TabsList>
 				</div>
 
-				<TabsContent value="objects" className="flex-1 flex overflow-hidden mt-0">
-					<div className="flex-1 flex overflow-hidden">
-						<div className="w-80 border-r border-border p-4 flex flex-col overflow-hidden">
-							<div className="mb-4">
-								<label className="text-xs font-medium mb-2 block">Category</label>
-								<Select value={selectedCategory} onValueChange={(value) => setSelectedCategory(value as 'all' | ThingCategory)}>
-									<SelectTrigger className="h-8 text-xs">
-										<SelectValue placeholder="All" />
-									</SelectTrigger>
-									<SelectContent>
-										<SelectItem value="all">All</SelectItem>
-										<SelectItem value="item">Item</SelectItem>
-										<SelectItem value="outfit">Outfit</SelectItem>
-										<SelectItem value="effect">Effect</SelectItem>
-										<SelectItem value="missile">Missile</SelectItem>
-									</SelectContent>
-								</Select>
-							</div>
-
-							<ScrollArea className="flex-1 pr-2">
-								<div className="space-y-2">
-									{PROPERTIES.filter((prop) => {
-										if (selectedCategory === 'all' || selectedCategory === 'item') return true;
-										// For non-item categories, only show relevant properties
-										const relevantProps = ['hasLight', 'hasOffset', 'animateAlways'];
-										return relevantProps.includes(prop.property);
-									}).map((prop) => (
-										<div key={prop.property} className="flex items-center justify-between">
-											<span className="text-xs">{prop.display}</span>
-											<Switch
-												checked={properties[prop.property] || false}
-												onCheckedChange={() => handlePropertyToggle(prop.property)}
-											/>
-										</div>
-									))}
-								</div>
-							</ScrollArea>
-
-							<div className="mt-4 pt-4 border-t border-border">
-								<label className="text-xs font-medium mb-2 block">Name:</label>
-								<Input value={name} placeholder="" className="h-8 text-xs" onChange={(e) => setName(e.target.value)} />
-							</div>
+				<TabsContent value="objects" className="flex-1 flex overflow-hidden mt-0 p-2 gap-2">
+					<div className="w-72 bg-card rounded-lg shadow-island flex flex-col overflow-hidden flex-shrink-0">
+						<div className="h-8 px-3 flex items-center border-b border-border/50 bg-secondary/80 flex-shrink-0">
+							<h2 className="text-xs font-semibold text-foreground uppercase tracking-wide">Filters</h2>
+						</div>
+						<div className="p-3 flex-shrink-0">
+							<label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">
+								Category
+							</label>
+							<Select value={selectedCategory} onValueChange={(value) => setSelectedCategory(value as 'all' | ThingCategory)}>
+								<SelectTrigger className="h-8 text-xs">
+									<SelectValue placeholder="All" />
+								</SelectTrigger>
+								<SelectContent>
+									<SelectItem value="all">All</SelectItem>
+									<SelectItem value="item">Item</SelectItem>
+									<SelectItem value="outfit">Outfit</SelectItem>
+									<SelectItem value="effect">Effect</SelectItem>
+									<SelectItem value="missile">Missile</SelectItem>
+								</SelectContent>
+							</Select>
 						</div>
 
-						<div className="flex-1 p-4 flex flex-col">
-							<div className="flex items-center justify-between mb-2">
-								<div className="text-xs font-medium">Found {searchResults.length > 0 ? `(${searchResults.length})` : ''}</div>
-								{searchResults.length > 0 && (
-									<DropdownMenu>
-										<DropdownMenuTrigger asChild>
-											<Button size="icon" variant="ghost" className="h-6 w-6 p-0 hover:bg-secondary">
-												{viewMode === 'list' && <List className="h-3.5 w-3.5 text-muted-foreground" />}
-												{viewMode === 'grid' && <LayoutGrid className="h-3.5 w-3.5 text-muted-foreground" />}
-												{viewMode === 'compact' && <Columns className="h-3.5 w-3.5 text-muted-foreground" />}
-												{viewMode === 'large' && <Square className="h-3.5 w-3.5 text-muted-foreground" />}
-											</Button>
-										</DropdownMenuTrigger>
-										<DropdownMenuContent align="end">
-											<DropdownMenuItem onClick={() => setViewMode('list')}>
-												<List className="mr-2 h-4 w-4" />
-												<span>List</span>
-											</DropdownMenuItem>
-											<DropdownMenuItem onClick={() => setViewMode('grid')}>
-												<LayoutGrid className="mr-2 h-4 w-4" />
-												<span>Grid (50/50)</span>
-											</DropdownMenuItem>
-											<DropdownMenuItem onClick={() => setViewMode('compact')}>
-												<Columns className="mr-2 h-4 w-4" />
-												<span>Compact</span>
-											</DropdownMenuItem>
-											<DropdownMenuItem onClick={() => setViewMode('large')}>
-												<Square className="mr-2 h-4 w-4" />
-												<span>Large</span>
-											</DropdownMenuItem>
-										</DropdownMenuContent>
-									</DropdownMenu>
-								)}
-							</div>
-							<div className="flex-1 border border-border rounded bg-muted/20 p-2 overflow-hidden flex flex-col">
-								{isSearching ? (
-									<div className="text-xs text-muted-foreground p-4 text-center">Searching...</div>
-								) : searchResults.length === 0 ? (
-									<div className="text-xs text-muted-foreground p-4 text-center">
-										{name.trim() === '' && Object.values(properties).every((v) => !v)
-											? 'Enter a name or select properties to search'
-											: 'No results'}
+						<div className="px-3 pb-1 flex-shrink-0">
+							<label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block">Properties</label>
+						</div>
+						<ScrollArea className="flex-1 px-3">
+							<div className="space-y-2 pb-2">
+								{PROPERTIES.filter((prop) => {
+									if (selectedCategory === 'all' || selectedCategory === 'item') return true;
+									const relevantProps = ['hasLight', 'hasOffset', 'animateAlways'];
+									return relevantProps.includes(prop.property);
+								}).map((prop) => (
+									<div key={prop.property} className="flex items-center justify-between">
+										<span className="text-xs">{prop.display}</span>
+										<Switch
+											checked={properties[prop.property] || false}
+											onCheckedChange={() => handlePropertyToggle(prop.property)}
+										/>
 									</div>
-								) : (
-									<div ref={parentRef} className="h-full overflow-auto">
-										<div
-											style={{
-												width: '100%',
-												position: 'relative',
-												height: `${virtualizer.getTotalSize()}px`
-											}}
-										>
-											{virtualizer.getVirtualItems().map((virtualRow) => {
-												const rowStartIndex = virtualRow.index * itemsPerRow;
-												const rowEndIndex = Math.min(rowStartIndex + itemsPerRow, searchResults.length);
-												const rowItems = searchResults.slice(rowStartIndex, rowEndIndex);
+								))}
+							</div>
+						</ScrollArea>
 
-												return (
-													<div
-														key={virtualRow.index}
-														data-index={virtualRow.index}
-														ref={virtualizer.measureElement}
-														className={cn(
-															viewMode === 'list' && 'px-2',
-															viewMode === 'grid' && 'px-1',
-															viewMode === 'compact' && 'px-1',
-															viewMode === 'large' && 'px-1'
-														)}
-														style={{
-															top: 0,
-															left: 0,
-															width: '100%',
-															display: 'flex',
-															position: 'absolute',
-															gap: viewMode === 'compact' ? '2px' : '4px',
-															transform: `translateY(${virtualRow.start}px)`
-														}}
-													>
-														{rowItems.map((result) => {
-															const key = `${result.category}-${result.id}`;
-															const thing = resultThings.get(key);
-															const spriteId = thing?.spriteIndex?.[0];
+						<div className="p-3 border-t border-border/50 flex-shrink-0">
+							<label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">
+								Name
+							</label>
+							<Input value={name} placeholder="" className="h-8 text-xs" onChange={(e) => setName(e.target.value)} />
+						</div>
+					</div>
 
-															return (
-																<div
-																	key={key}
-																	onClick={() => handleResultClick(result.id, result.category)}
-																	style={{
-																		width: viewMode === 'list' || viewMode === 'large' ? '100%' : `${100 / itemsPerRow}%`,
-																		flex:
-																			viewMode === 'list' || viewMode === 'large'
-																				? '1'
-																				: `0 0 calc(${100 / itemsPerRow}% - ${viewMode === 'compact' ? 2 : 4}px)`
-																	}}
-																	className={cn(
-																		'text-xs rounded cursor-pointer transition-colors',
-																		selectedResultId === result.id && selectedResultCategory === result.category
-																			? 'bg-primary text-primary-foreground'
-																			: 'hover:bg-muted',
-																		viewMode === 'list' && 'p-2 flex items-center gap-2 h-10',
-																		viewMode === 'grid' && 'p-1 flex items-center gap-1.5 h-[50px]',
-																		viewMode === 'compact' && 'p-0.5 flex flex-col items-center gap-0.5 h-[74px]',
-																		viewMode === 'large' && 'p-1 flex items-center gap-1.5 h-[140px]'
-																	)}
-																>
-																	{spriteId && (
-																		<CheckerBoard
-																			className={cn(
-																				'flex-shrink-0 border border-border/50 rounded overflow-hidden flex items-center justify-center',
-																				viewMode === 'list' && 'w-8 h-8',
-																				viewMode === 'grid' && 'w-12 h-12',
-																				viewMode === 'compact' && 'w-12 h-12',
-																				viewMode === 'large' && 'w-32 h-32'
-																			)}
-																		>
-																			{thing ? (
-																				<SpriteCanvas
-																					showEmpty
-																					thing={thing}
-																					renderMode="list"
-																					width={thing.width}
-																					height={thing.height}
-																					scale={
-																						viewMode === 'list'
-																							? 32 / (Math.max(thing.width, thing.height) * 32)
-																							: viewMode === 'grid' || viewMode === 'compact'
-																								? 48 / (Math.max(thing.width, thing.height) * 32)
-																								: 128 / (Math.max(thing.width, thing.height) * 32)
-																					}
-																				/>
-																			) : (
-																				<span className="text-[8px] text-muted-foreground">{spriteId}</span>
-																			)}
-																		</CheckerBoard>
-																	)}
-																	<div
+					<div className="flex-1 bg-card rounded-lg shadow-island flex flex-col overflow-hidden">
+						<div className="h-8 px-3 flex items-center border-b border-border/50 bg-secondary/80 flex-shrink-0">
+							<h2 className="text-xs font-semibold text-foreground uppercase tracking-wide">Found</h2>
+							{searchResults.length > 0 && (
+								<span className="ml-auto text-xs text-muted-foreground font-mono">{searchResults.length}</span>
+							)}
+							{searchResults.length > 0 && (
+								<DropdownMenu>
+									<DropdownMenuTrigger asChild>
+										<Button size="icon" variant="ghost" className="h-6 w-6 p-0 ml-2 hover:bg-secondary">
+											{viewMode === 'list' && <List className="h-3.5 w-3.5 text-muted-foreground" />}
+											{viewMode === 'grid' && <LayoutGrid className="h-3.5 w-3.5 text-muted-foreground" />}
+											{viewMode === 'compact' && <Columns className="h-3.5 w-3.5 text-muted-foreground" />}
+											{viewMode === 'large' && <Square className="h-3.5 w-3.5 text-muted-foreground" />}
+										</Button>
+									</DropdownMenuTrigger>
+									<DropdownMenuContent align="end">
+										<DropdownMenuItem onClick={() => setViewMode('list')}>
+											<List className="mr-2 h-4 w-4" />
+											<span>List</span>
+										</DropdownMenuItem>
+										<DropdownMenuItem onClick={() => setViewMode('grid')}>
+											<LayoutGrid className="mr-2 h-4 w-4" />
+											<span>Grid (50/50)</span>
+										</DropdownMenuItem>
+										<DropdownMenuItem onClick={() => setViewMode('compact')}>
+											<Columns className="mr-2 h-4 w-4" />
+											<span>Compact</span>
+										</DropdownMenuItem>
+										<DropdownMenuItem onClick={() => setViewMode('large')}>
+											<Square className="mr-2 h-4 w-4" />
+											<span>Large</span>
+										</DropdownMenuItem>
+									</DropdownMenuContent>
+								</DropdownMenu>
+							)}
+						</div>
+						<div className="flex-1 p-2 overflow-hidden flex flex-col">
+							{isSearching ? (
+								<div className="text-xs text-muted-foreground p-4 text-center">Searching...</div>
+							) : searchResults.length === 0 ? (
+								<div className="text-xs text-muted-foreground p-4 text-center">
+									{name.trim() === '' && Object.values(properties).every((v) => !v)
+										? 'Enter a name or select properties to search'
+										: 'No results'}
+								</div>
+							) : (
+								<div ref={parentRef} className="h-full overflow-auto">
+									<div
+										style={{
+											width: '100%',
+											position: 'relative',
+											height: `${virtualizer.getTotalSize()}px`
+										}}
+									>
+										{virtualizer.getVirtualItems().map((virtualRow) => {
+											const rowStartIndex = virtualRow.index * itemsPerRow;
+											const rowEndIndex = Math.min(rowStartIndex + itemsPerRow, searchResults.length);
+											const rowItems = searchResults.slice(rowStartIndex, rowEndIndex);
+
+											return (
+												<div
+													key={virtualRow.index}
+													data-index={virtualRow.index}
+													ref={virtualizer.measureElement}
+													className={cn(
+														viewMode === 'list' && 'px-2',
+														viewMode === 'grid' && 'px-1',
+														viewMode === 'compact' && 'px-1',
+														viewMode === 'large' && 'px-1'
+													)}
+													style={{
+														top: 0,
+														left: 0,
+														width: '100%',
+														display: 'flex',
+														position: 'absolute',
+														gap: viewMode === 'compact' ? '2px' : '4px',
+														transform: `translateY(${virtualRow.start}px)`
+													}}
+												>
+													{rowItems.map((result) => {
+														const key = `${result.category}-${result.id}`;
+														const thing = resultThings.get(key);
+														const spriteId = thing?.spriteIndex?.[0];
+
+														return (
+															<div
+																key={key}
+																onClick={() => handleResultClick(result.id, result.category)}
+																style={{
+																	width: viewMode === 'list' || viewMode === 'large' ? '100%' : `${100 / itemsPerRow}%`,
+																	flex:
+																		viewMode === 'list' || viewMode === 'large'
+																			? '1'
+																			: `0 0 calc(${100 / itemsPerRow}% - ${viewMode === 'compact' ? 2 : 4}px)`
+																}}
+																className={cn(
+																	'text-xs rounded cursor-pointer transition-colors',
+																	selectedResultId === result.id && selectedResultCategory === result.category
+																		? 'bg-primary text-primary-foreground'
+																		: 'hover:bg-muted',
+																	viewMode === 'list' && 'p-2 flex items-center gap-2 h-10',
+																	viewMode === 'grid' && 'p-1 flex items-center gap-1.5 h-[50px]',
+																	viewMode === 'compact' && 'p-0.5 flex flex-col items-center gap-0.5 h-[74px]',
+																	viewMode === 'large' && 'p-1 flex items-center gap-1.5 h-[140px]'
+																)}
+															>
+																{spriteId && (
+																	<CheckerBoard
 																		className={cn(
-																			'min-w-0',
-																			viewMode === 'list' && 'flex-1 text-left',
-																			viewMode === 'grid' && 'flex-1 text-right',
-																			viewMode === 'compact' && 'text-center w-full truncate',
-																			viewMode === 'large' && 'flex-1 text-right'
+																			'flex-shrink-0 border border-border/50 rounded overflow-hidden flex items-center justify-center',
+																			viewMode === 'list' && 'w-8 h-8',
+																			viewMode === 'grid' && 'w-12 h-12',
+																			viewMode === 'compact' && 'w-12 h-12',
+																			viewMode === 'large' && 'w-32 h-32'
 																		)}
 																	>
-																		{viewMode === 'grid' || viewMode === 'large' ? (
-																			<div className="text-[11px] text-foreground font-mono font-medium leading-tight">
-																				{result.id}
-																			</div>
-																		) : viewMode === 'compact' ? (
-																			<div className="text-[11px] text-foreground font-mono font-medium leading-tight">
-																				{result.id}
-																			</div>
+																		{thing ? (
+																			<SpriteCanvas
+																				showEmpty
+																				thing={thing}
+																				renderMode="list"
+																				width={thing.width}
+																				height={thing.height}
+																				scale={
+																					viewMode === 'list'
+																						? 32 / (Math.max(thing.width, thing.height) * 32)
+																						: viewMode === 'grid' || viewMode === 'compact'
+																							? 48 / (Math.max(thing.width, thing.height) * 32)
+																							: 128 / (Math.max(thing.width, thing.height) * 32)
+																				}
+																			/>
 																		) : (
-																			<span>
-																				{result.category.charAt(0).toUpperCase() + result.category.slice(1)} #{result.id}
-																			</span>
+																			<span className="text-[8px] text-muted-foreground">{spriteId}</span>
 																		)}
-																	</div>
+																	</CheckerBoard>
+																)}
+																<div
+																	className={cn(
+																		'min-w-0',
+																		viewMode === 'list' && 'flex-1 text-left',
+																		viewMode === 'grid' && 'flex-1 text-right',
+																		viewMode === 'compact' && 'text-center w-full truncate',
+																		viewMode === 'large' && 'flex-1 text-right'
+																	)}
+																>
+																	{viewMode === 'grid' || viewMode === 'large' ? (
+																		<div className="text-[11px] text-foreground font-mono font-medium leading-tight">
+																			{result.id}
+																		</div>
+																	) : viewMode === 'compact' ? (
+																		<div className="text-[11px] text-foreground font-mono font-medium leading-tight">
+																			{result.id}
+																		</div>
+																	) : (
+																		<span>
+																			{result.category.charAt(0).toUpperCase() + result.category.slice(1)} #{result.id}
+																		</span>
+																	)}
 																</div>
-															);
-														})}
-													</div>
-												);
-											})}
-										</div>
+															</div>
+														);
+													})}
+												</div>
+											);
+										})}
 									</div>
-								)}
-							</div>
+								</div>
+							)}
 						</div>
 					</div>
 				</TabsContent>
 			</Tabs>
 
-			<div className="h-12 border-t border-border flex items-center justify-between gap-2 px-4">
-				<Button
-					size="sm"
-					variant="outline"
-					onClick={handleClear}
-					className="h-8 text-xs"
-					disabled={name.trim() === '' && Object.values(properties).every((v) => !v) && searchResults.length === 0}
-				>
-					<Trash2 className="h-3.5 w-3.5 mr-1.5" />
-					Clear
-				</Button>
-				<div className="flex items-center gap-2">
+			<div className="px-2 pb-2 flex-shrink-0">
+				<div className="h-10 bg-card rounded-lg shadow-island flex items-center justify-between gap-2 px-3">
 					<Button
 						size="sm"
+						variant="outline"
+						onClick={handleClear}
 						className="h-8 text-xs"
-						disabled={isSearching || (name.trim() === '' && Object.values(properties).every((v) => !v))}
-						onClick={(e) => {
-							e.preventDefault();
-							e.stopPropagation();
-							handleFind();
-						}}
+						disabled={name.trim() === '' && Object.values(properties).every((v) => !v) && searchResults.length === 0}
 					>
-						{isSearching ? 'Searching...' : 'Find'}
+						<Trash2 className="h-3.5 w-3.5 mr-1.5" />
+						Clear
 					</Button>
-					<Button size="sm" variant="outline" onClick={handleSelect} className="h-8 text-xs" disabled={selectedResultId === null}>
-						Select
-					</Button>
+					<div className="flex items-center gap-2">
+						<Button
+							size="sm"
+							className="h-8 text-xs"
+							disabled={isSearching || (name.trim() === '' && Object.values(properties).every((v) => !v))}
+							onClick={(e) => {
+								e.preventDefault();
+								e.stopPropagation();
+								handleFind();
+							}}
+						>
+							{isSearching ? 'Searching...' : 'Find'}
+						</Button>
+						<Button
+							size="sm"
+							variant="outline"
+							onClick={handleSelect}
+							className="h-8 text-xs"
+							disabled={selectedResultId === null}
+						>
+							Select
+						</Button>
+					</div>
 				</div>
 			</div>
 		</div>
