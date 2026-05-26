@@ -2,7 +2,7 @@ import { Play, Pause, FileQuestion } from 'lucide-react';
 import { ThingCategory, loadSpriteIds } from '@/lib/tibia';
 import { useTibiaData } from '@/contexts/TibiaDataContext';
 import { useRef, useMemo, useState, useEffect } from 'react';
-import { getPingPongFrame, getDefaultDuration, AnimationDirection } from '@/lib/tibia/animation';
+import { getPingPongFrame, AnimationDirection } from '@/lib/tibia/animation';
 
 import { Button } from './ui/button';
 import { SpriteCanvas } from './SpriteCanvas';
@@ -56,41 +56,31 @@ export const VisualizationPanel = () => {
 		}
 	}, [highlightedItemId, selectedCategory]);
 
-	// Fast load walking sprites when outfit is highlighted
-	// This enables immediate animation playback in the visualization panel
 	useEffect(() => {
 		if (!data?.sprPath || !item) return;
 
-		// Only for outfits with walking frame groups
-		if (item.category !== ThingCategory.OUTFIT || !item.frameGroupsData || item.frameGroupsData.length < 2) {
-			return;
+		const spriteIds = new Set<number>();
+		for (const id of item.spriteIndex ?? []) {
+			if (id > 0 && !data.sprites.has(id)) spriteIds.add(id);
+		}
+		if (item.frameGroupsData) {
+			for (const group of item.frameGroupsData) {
+				for (const id of group.spriteIndex ?? []) {
+					if (id > 0 && !data.sprites.has(id)) spriteIds.add(id);
+				}
+			}
 		}
 
-		const walkingGroup = item.frameGroupsData[1];
-		if (!walkingGroup?.spriteIndex || walkingGroup.spriteIndex.length === 0) {
-			return;
-		}
+		if (spriteIds.size === 0) return;
 
-		// Check if walking sprites are already cached
-		const uncachedIds = walkingGroup.spriteIndex.filter((id) => id > 0 && !data.sprites.has(id));
-
-		if (uncachedIds.length === 0) {
-			return; // Already loaded
-		}
-
-		// Load walking sprites immediately (small batch - ~24 sprites max)
-		// Use non-LZ4 version since batch is small - less overhead
-		loadSpriteIds(data.sprPath, uncachedIds, data.transparency, data.sprites).then(() => {
+		loadSpriteIds(data.sprPath, Array.from(spriteIds), data.transparency, data.sprites).then(() => {
 			notifySpritesLoaded();
 		});
 	}, [highlightedItemId, item, data, notifySpritesLoaded]);
 
-	// Determine which frame group to use for animation
-	// For outfits with frame groups, use walking group (index 1) if it has animation
-	const getAnimationFrameGroup = () => {
+	const animationInfo = useMemo(() => {
 		if (!item) return null;
 
-		// Check if outfit has frame groups with walking animation
 		if (item.category === ThingCategory.OUTFIT && item.frameGroupsData && item.frameGroupsData.length > 1) {
 			const walkingGroup = item.frameGroupsData[1];
 			if (walkingGroup && walkingGroup.frames > 1) {
@@ -98,21 +88,17 @@ export const VisualizationPanel = () => {
 			}
 		}
 
-		// Fallback to first frame group
 		const idleGroup = item.frameGroupsData?.[0];
 		if (idleGroup && idleGroup.frames > 1) {
 			return { index: 0, group: idleGroup };
 		}
 
-		// Use top-level frames if no frame groups
 		if (item.frames > 1) {
 			return { index: -1, group: null };
 		}
 
 		return null;
-	};
-
-	const animationInfo = getAnimationFrameGroup();
+	}, [item]);
 	const hasAnimation = animationInfo !== null;
 
 	// Create synthetic thing with correct frame group's sprite data for animation
@@ -221,7 +207,17 @@ export const VisualizationPanel = () => {
 			} else if (item.frameDurations && item.frameDurations.length > 0) {
 				durations = item.frameDurations.map((d) => d.minimum);
 			} else {
-				durations = new Array(frameCount).fill(getDefaultDuration(item.category));
+				let defaultDuration = 500;
+				if (item.category === ThingCategory.OUTFIT) defaultDuration = 300;
+				else if (item.category === ThingCategory.EFFECT) defaultDuration = 100;
+				else if (item.category === ThingCategory.MISSILE) defaultDuration = 150;
+				durations = new Array(frameCount).fill(defaultDuration);
+			}
+
+			const isGroupWalking = currentGroup?.type === 1;
+			if (isGroupWalking && frameCount > 2) {
+				const walkingDuration = Math.floor(1000 / frameCount);
+				durations = durations.map(() => walkingDuration);
 			}
 
 			durations = durations.map((d) => Math.max(d, 50));
@@ -244,7 +240,7 @@ export const VisualizationPanel = () => {
 			animationState.current.currentLoop = 0;
 			animationState.current.isComplete = false;
 			animationState.current.skipFirstFrame = skipFirstFrame;
-			animationState.current.timeRemaining = durations[initialFrame] || getDefaultDuration(item.category);
+			animationState.current.timeRemaining = durations[initialFrame] || 200;
 			animationState.current.lastTime = 0;
 			setCurrentFrame(initialFrame);
 
@@ -328,7 +324,7 @@ export const VisualizationPanel = () => {
 							scale={1}
 							showEmpty
 							renderMode="preview"
-							thing={displayThing!} // Assume displayThing exists but is empty
+							thing={displayThing!}
 							width={displayThing?.width || 1}
 							height={displayThing?.height || 1}
 						/>
