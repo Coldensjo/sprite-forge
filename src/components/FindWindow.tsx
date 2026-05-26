@@ -169,25 +169,23 @@ export const FindWindow = () => {
 
 			console.log('Search response received', response);
 
-			let buffer: ArrayBufferLike;
+			let bytes: Uint8Array;
 			if (response instanceof Uint8Array) {
-				buffer = response.buffer;
+				bytes = response;
 			} else if (Array.isArray(response)) {
-				buffer = new Uint8Array(response).buffer;
+				bytes = new Uint8Array(response);
 			} else if (response && response.buffer instanceof ArrayBuffer) {
-				buffer = response.buffer;
+				bytes = new Uint8Array(response.buffer, response.byteOffset ?? 0, response.byteLength ?? response.buffer.byteLength);
 			} else {
-				// Fallback: try to treat as array
-				buffer = new Uint8Array(response).buffer;
+				bytes = new Uint8Array(response);
 			}
 
-			// Parse binary response
-			const view = new DataView(buffer);
+			const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
 			let offset = 0;
 			const count = view.getUint32(offset, true);
 			offset += 4;
 
-			console.log(`Parsing ${count} results from ${buffer.byteLength} bytes`);
+			console.log(`Parsing ${count} results from ${bytes.byteLength} bytes`);
 
 			const newResults: Array<{ id: number; category: ThingCategory }> = [];
 			const newThings = new Map<string, ThingType>();
