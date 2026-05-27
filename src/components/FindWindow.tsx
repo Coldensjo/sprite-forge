@@ -20,6 +20,8 @@ import { DropdownMenu, DropdownMenuItem, DropdownMenuContent, DropdownMenuTrigge
 
 type ViewMode = 'list' | 'grid' | 'large' | 'compact';
 
+const VIEW_MODES: ViewMode[] = ['list', 'grid', 'compact', 'large'];
+
 // Property display names and their corresponding ThingType property names
 const PROPERTIES: Array<{ display: string; property: string }> = [
 	{ display: 'Is Ground', property: 'isGround' },
@@ -74,12 +76,28 @@ export const FindWindow = () => {
 		PROPERTIES.reduce((acc, prop) => ({ ...acc, [prop.property]: false }), {})
 	);
 	const [name, setName] = useState('');
+	const [spriteIdInput, setSpriteIdInput] = useState('');
 	const [searchResults, setSearchResults] = useState<Array<{ id: number; category: ThingCategory }>>([]);
 	const [resultThings, setResultThings] = useState<Map<string, ThingType>>(new Map());
 	const [isSearching, setIsSearching] = useState(false);
 	const [selectedResultId, setSelectedResultId] = useState<null | number>(null);
 	const [selectedResultCategory, setSelectedResultCategory] = useState<null | ThingCategory>(null);
-	const [viewMode, setViewMode] = useState<ViewMode>('list');
+	const [viewMode, setViewModeState] = useState<ViewMode>('list');
+
+	useEffect(() => {
+		invoke<null | string>('get_find_list_view_mode')
+			.then((mode) => {
+				if (mode && VIEW_MODES.includes(mode as ViewMode)) {
+					setViewModeState(mode as ViewMode);
+				}
+			})
+			.catch(() => {});
+	}, []);
+
+	const setViewMode = useCallback((mode: ViewMode) => {
+		setViewModeState(mode);
+		invoke('set_find_list_view_mode', { mode }).catch(() => {});
+	}, []);
 	const parentRef = useRef<HTMLDivElement>(null);
 
 	const [parentWidth, setParentWidth] = useState(0);
@@ -148,10 +166,14 @@ export const FindWindow = () => {
 			}
 		}
 
+		const parsedSpriteId = parseInt(spriteIdInput.trim(), 10);
+		const spriteId = !isNaN(parsedSpriteId) && parsedSpriteId > 0 ? parsedSpriteId : null;
+
 		setIsSearching(true);
 		try {
 			const response: any = await invoke('search_things_bin', {
 				limit: 0,
+				spriteId,
 				path: datPath,
 				name: name.trim() || null,
 				properties: activeProperties,
@@ -317,26 +339,36 @@ export const FindWindow = () => {
 		} finally {
 			setIsSearching(false);
 		}
-	}, [name, properties, selectedCategory]);
+	}, [name, properties, selectedCategory, spriteIdInput]);
 
-	const handleSelect = useCallback(async () => {
-		if (selectedResultId !== null && selectedResultCategory !== null) {
-			// Emit event for main window to handle selection
+	const selectResult = useCallback(
+		async (id: number, category: ThingCategory) => {
 			const { emit } = await import('@tauri-apps/api/event');
-			await emit('select_thing', {
-				id: selectedResultId,
-				category: selectedResultCategory
-			});
+			await emit('select_thing', { id, category });
+			setOpenedItemId(id, category);
+		},
+		[setOpenedItemId]
+	);
 
-			// Also open locally in FindWindow (optional, but good for feedback)
-			setOpenedItemId(selectedResultId, selectedResultCategory);
+	const handleSelect = useCallback(() => {
+		if (selectedResultId !== null && selectedResultCategory !== null) {
+			selectResult(selectedResultId, selectedResultCategory);
 		}
-	}, [selectedResultId, selectedResultCategory, setOpenedItemId]);
+	}, [selectedResultId, selectedResultCategory, selectResult]);
 
 	const handleResultClick = useCallback((id: number, category: ThingCategory) => {
 		setSelectedResultId(id);
 		setSelectedResultCategory(category);
 	}, []);
+
+	const handleResultDoubleClick = useCallback(
+		(id: number, category: ThingCategory) => {
+			setSelectedResultId(id);
+			setSelectedResultCategory(category);
+			selectResult(id, category);
+		},
+		[selectResult]
+	);
 
 	// Fetch ThingType logic removed - now handled by binary search response
 	useEffect(() => {
@@ -400,6 +432,7 @@ export const FindWindow = () => {
 	const handleClear = useCallback(() => {
 		setProperties(PROPERTIES.reduce((acc, prop) => ({ ...acc, [prop.property]: false }), {}));
 		setName('');
+		setSpriteIdInput('');
 		setSearchResults([]);
 		setResultThings(new Map());
 		setSelectedResultId(null);
@@ -445,6 +478,34 @@ export const FindWindow = () => {
 			if (unlisten) unlisten();
 		};
 	}, [handleClose]);
+
+	const pendingSpriteIdRef = useRef<null | number>(null);
+	useEffect(() => {
+		let unlisten: undefined | (() => void);
+		const setupListener = async () => {
+			const { listen } = await import('@tauri-apps/api/event');
+			unlisten = await listen<{ spriteId: number }>('find_by_sprite', (event) => {
+				const sid = event.payload?.spriteId;
+				if (!sid || sid <= 0) return;
+				setProperties(PROPERTIES.reduce((acc, prop) => ({ ...acc, [prop.property]: false }), {}));
+				setName('');
+				setSelectedCategory('all');
+				setSpriteIdInput(String(sid));
+				pendingSpriteIdRef.current = sid;
+			});
+		};
+		setupListener();
+		return () => {
+			if (unlisten) unlisten();
+		};
+	}, []);
+
+	useEffect(() => {
+		if (pendingSpriteIdRef.current !== null && spriteIdInput === String(pendingSpriteIdRef.current)) {
+			pendingSpriteIdRef.current = null;
+			handleFind();
+		}
+	}, [spriteIdInput, handleFind]);
 
 	const isMac = navigator.userAgent.includes('Mac');
 
@@ -580,6 +641,19 @@ export const FindWindow = () => {
 							</label>
 							<Input value={name} placeholder="" className="h-8 text-xs" onChange={(e) => setName(e.target.value)} />
 						</div>
+
+						<div className="px-3 pb-3 flex-shrink-0">
+							<label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">
+								Sprite ID
+							</label>
+							<Input
+								placeholder=""
+								inputMode="numeric"
+								value={spriteIdInput}
+								className="h-8 text-xs font-mono"
+								onChange={(e) => setSpriteIdInput(e.target.value.replace(/\D/g, ''))}
+							/>
+						</div>
 					</div>
 
 					<div className="flex-1 bg-card rounded-lg shadow-island flex flex-col overflow-hidden">
@@ -624,8 +698,8 @@ export const FindWindow = () => {
 								<div className="text-xs text-muted-foreground p-4 text-center">Searching...</div>
 							) : searchResults.length === 0 ? (
 								<div className="text-xs text-muted-foreground p-4 text-center">
-									{name.trim() === '' && Object.values(properties).every((v) => !v)
-										? 'Enter a name or select properties to search'
+									{name.trim() === '' && spriteIdInput.trim() === '' && Object.values(properties).every((v) => !v)
+										? 'Enter a name, sprite ID or select properties to search'
 										: 'No results'}
 								</div>
 							) : (
@@ -672,6 +746,7 @@ export const FindWindow = () => {
 															<div
 																key={key}
 																onClick={() => handleResultClick(result.id, result.category)}
+																onDoubleClick={() => handleResultDoubleClick(result.id, result.category)}
 																style={{
 																	width: viewMode === 'list' || viewMode === 'large' ? '100%' : `${100 / itemsPerRow}%`,
 																	flex:
@@ -764,7 +839,12 @@ export const FindWindow = () => {
 						variant="outline"
 						onClick={handleClear}
 						className="h-8 text-xs"
-						disabled={name.trim() === '' && Object.values(properties).every((v) => !v) && searchResults.length === 0}
+						disabled={
+							name.trim() === '' &&
+							spriteIdInput.trim() === '' &&
+							Object.values(properties).every((v) => !v) &&
+							searchResults.length === 0
+						}
 					>
 						<Trash2 className="h-3.5 w-3.5 mr-1.5" />
 						Clear
@@ -773,12 +853,14 @@ export const FindWindow = () => {
 						<Button
 							size="sm"
 							className="h-8 text-xs"
-							disabled={isSearching || (name.trim() === '' && Object.values(properties).every((v) => !v))}
 							onClick={(e) => {
 								e.preventDefault();
 								e.stopPropagation();
 								handleFind();
 							}}
+							disabled={
+								isSearching || (name.trim() === '' && spriteIdInput.trim() === '' && Object.values(properties).every((v) => !v))
+							}
 						>
 							{isSearching ? 'Searching...' : 'Find'}
 						</Button>

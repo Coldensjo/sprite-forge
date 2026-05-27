@@ -79,14 +79,12 @@ impl DatManager {
         self.files.remove(path);
     }
 
-    /// Check if a ThingType matches search criteria
-    /// Matches Object Builder's matching logic
     fn matches_criteria(
         thing: &ThingType,
         name: Option<&str>,
         properties: &HashMap<String, bool>,
+        sprite_id: Option<u32>,
     ) -> bool {
-        // Check name (case-insensitive partial match)
         if let Some(search_name) = name {
             if !search_name.is_empty() {
                 let thing_name = thing.market_name.to_lowercase();
@@ -97,14 +95,24 @@ impl DatManager {
             }
         }
 
-        // Check properties - only properties set to true in criteria must match
         for (prop_name, required) in properties {
             if *required {
-                // Get property value from ThingType using reflection-like matching
                 let value = Self::get_property_value(thing, prop_name);
                 if value != *required {
                     return false;
                 }
+            }
+        }
+
+        if let Some(sid) = sprite_id {
+            let in_main = thing.sprite_index.iter().any(|&id| id == sid);
+            let in_groups = thing
+                .frame_groups_data
+                .as_ref()
+                .map(|gs| gs.iter().any(|g| g.sprite_index.iter().any(|&id| id == sid)))
+                .unwrap_or(false);
+            if !in_main && !in_groups {
+                return false;
             }
         }
 
@@ -173,6 +181,7 @@ impl DatManager {
         category: Option<&str>,
         name: Option<&str>,
         properties: &HashMap<String, bool>,
+        sprite_id: Option<u32>,
         limit: usize,
     ) -> Result<Vec<u8>, String> {
         let dat_data = self.get_data(path)
@@ -197,7 +206,7 @@ impl DatManager {
             let mut found_items: Vec<&ThingType> = Vec::new();
             
             for thing in collection.values() {
-                if Self::matches_criteria(thing, name, properties) {
+                if Self::matches_criteria(thing, name, properties, sprite_id) {
                     found_items.push(thing);
                 }
             }

@@ -1,20 +1,30 @@
 import { cn } from '@/lib/utils';
 import { type Sprite } from '@/lib/tibia';
+import { useToast } from '@/hooks/use-toast';
 import { invoke } from '@tauri-apps/api/core';
 import { useDragDrop } from '@/contexts/DragDropContext';
 import { useTibiaData } from '@/contexts/TibiaDataContext';
 import { useGeneralSettings } from '@/contexts/GeneralSettingsContext';
 import { useRef, useMemo, useState, useEffect, useCallback } from 'react';
-import { ContextMenu, ContextMenuItem, ContextMenuContent, ContextMenuTrigger } from '@/components/ui/context-menu';
 import { DropdownMenu, DropdownMenuItem, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import {
+	ContextMenu,
+	ContextMenuItem,
+	ContextMenuContent,
+	ContextMenuTrigger,
+	ContextMenuSeparator
+} from '@/components/ui/context-menu';
 import {
 	List,
 	Copy,
 	Plus,
 	Image,
+	Search,
 	Square,
 	Trash2,
+	Upload,
 	Grid3x3,
+	Download,
 	SkipBack,
 	LayoutGrid,
 	ChevronLeft,
@@ -36,7 +46,6 @@ const VIEW_MODES: ViewMode[] = ['list', 'grid', 'grid-3', 'grid-4', 'large'];
 export const SpriteList = () => {
 	const {
 		data,
-		getSprite,
 		updateCounter,
 		openedSpriteId,
 		setOpenedSpriteId,
@@ -47,6 +56,7 @@ export const SpriteList = () => {
 		setHighlightedSpriteId
 	} = useTibiaData();
 	const { startDrag } = useDragDrop();
+	const { toast } = useToast();
 	const [currentPage, setCurrentPage] = useState<number>(1);
 	// const [highlightedSpriteId, setHighlightedSpriteId] = useState<null | number>(null); // Moved to context
 	const [selectedSpriteIds, setSelectedSpriteIds] = useState<Set<number>>(new Set());
@@ -456,6 +466,160 @@ export const SpriteList = () => {
 		}
 	};
 
+	const ensureSpriteLoaded = useCallback(
+		async (id: number): Promise<null | Sprite> => {
+			if (!data || !data.sprPath) return null;
+			const cached = data.sprites.get(id);
+			if (cached) return cached;
+			const { loadSpriteIds } = await import('@/lib/tibia');
+			await loadSpriteIds(data.sprPath, [id], data.transparency, data.sprites);
+			notifySpritesLoaded();
+			return data.sprites.get(id) ?? null;
+		},
+		[data, notifySpritesLoaded]
+	);
+
+	const rgbaToPngBlob = useCallback((rgba: Uint8Array, width = 32, height = 32): Promise<null | Blob> => {
+		return new Promise((resolve) => {
+			const canvas = document.createElement('canvas');
+			canvas.width = width;
+			canvas.height = height;
+			const ctx = canvas.getContext('2d');
+			if (!ctx) return resolve(null);
+			const imageData = ctx.createImageData(width, height);
+			imageData.data.set(rgba);
+			ctx.putImageData(imageData, 0, 0);
+			canvas.toBlob((blob) => resolve(blob), 'image/png');
+		});
+	}, []);
+
+	const handleCopySpriteImage = useCallback(
+		async (id: number) => {
+			const sprite = await ensureSpriteLoaded(id);
+			if (!sprite) return;
+			const blob = await rgbaToPngBlob(sprite.rgbaPixels);
+			if (!blob) return;
+			try {
+				await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+				toast({ title: 'Copied', description: `Sprite ${id} copied to clipboard` });
+			} catch (err) {
+				console.error('Clipboard write failed:', err);
+				toast({ title: 'Copy failed', variant: 'destructive', description: 'Could not write image to clipboard' });
+			}
+		},
+		[ensureSpriteLoaded, rgbaToPngBlob, toast]
+	);
+
+	const handleFindUsages = useCallback(
+		async (id: number) => {
+			try {
+				const { WebviewWindow } = await import('@tauri-apps/api/webviewWindow');
+				const { emit } = await import('@tauri-apps/api/event');
+				const existing = await WebviewWindow.getByLabel('find');
+				if (existing) {
+					await existing.show();
+					await existing.setFocus();
+				} else {
+					const win = new WebviewWindow('find', {
+						width: 900,
+						height: 600,
+						center: true,
+						minWidth: 700,
+						shadow: false,
+						minHeight: 500,
+						resizable: true,
+						url: 'find.html',
+						transparent: true,
+						decorations: false,
+						title: 'Find - Sprite Forge',
+						backgroundColor: [0, 0, 0, 0]
+					});
+					await new Promise<void>((resolve) => {
+						win.once('tauri://created', () => resolve());
+						win.once('tauri://error', () => resolve());
+					});
+					// Give the React app a moment to mount its listener
+					await new Promise((r) => setTimeout(r, 300));
+				}
+				await emit('find_by_sprite', { spriteId: id });
+			} catch (err) {
+				console.error('Failed to open find window:', err);
+				toast({ title: 'Error', variant: 'destructive', description: 'Failed to open Find window' });
+			}
+		},
+		[toast]
+	);
+
+	const handleExportSpritePng = useCallback(
+		async (id: number) => {
+			const sprite = await ensureSpriteLoaded(id);
+			if (!sprite) return;
+			try {
+				const { save } = await import('@tauri-apps/plugin-dialog');
+				const filePath = await save({
+					defaultPath: `sprite_${id}.png`,
+					filters: [{ name: 'PNG Image', extensions: ['png'] }]
+				});
+				if (!filePath) return;
+				await invoke('write_sprite_png', { path: filePath, rgba: Array.from(sprite.rgbaPixels) });
+				toast({ title: 'Exported', description: `Sprite ${id} saved` });
+			} catch (err) {
+				console.error('Export failed:', err);
+				toast({ title: 'Export failed', variant: 'destructive', description: String(err) });
+			}
+		},
+		[ensureSpriteLoaded, toast]
+	);
+
+	const handleReplaceFromPng = useCallback(
+		async (id: number) => {
+			if (!data) return;
+			try {
+				const { open } = await import('@tauri-apps/plugin-dialog');
+				const filePath = await open({
+					multiple: false,
+					filters: [{ name: 'Image', extensions: ['png', 'bmp', 'jpg', 'jpeg'] }]
+				});
+				if (!filePath || typeof filePath !== 'string') return;
+
+				const rgbaArr = await invoke<number[] | Uint8Array>('read_sprite_png', { path: filePath });
+				const pixels = rgbaArr instanceof Uint8Array ? rgbaArr : new Uint8Array(rgbaArr);
+
+				const compressBuf = new Uint8Array(4097);
+				compressBuf[0] = data.transparency ? 1 : 0;
+				compressBuf.set(pixels, 1);
+				const compressResp = await invoke<ArrayBuffer>('compress_sprite_rgba', compressBuf);
+				const compressedPixels = compressResp instanceof Uint8Array ? compressResp : new Uint8Array(compressResp);
+
+				const sprite = data.sprites.get(id);
+				if (sprite) {
+					sprite.rgbaPixels = pixels;
+					sprite.compressedPixels = compressedPixels;
+					sprite.isEmpty = pixels.every((p) => p === 0);
+					sprite.imageData = undefined;
+					sprite.pixels = undefined;
+				} else {
+					data.sprites.set(id, {
+						id,
+						compressedPixels,
+						rgbaPixels: pixels,
+						imageData: undefined,
+						transparent: data.transparency,
+						isEmpty: pixels.every((p) => p === 0)
+					});
+				}
+
+				notifySpritesLoaded();
+				notifyDataChanged([id]);
+				toast({ title: 'Replaced', description: `Sprite ${id} replaced from PNG` });
+			} catch (err) {
+				console.error('Replace failed:', err);
+				toast({ variant: 'destructive', title: 'Replace failed', description: String(err) });
+			}
+		},
+		[data, notifySpritesLoaded, notifyDataChanged, toast]
+	);
+
 	// Handle global clipboard paste events (creates new sprites)
 	useEffect(() => {
 		const handlePaste = async (e: ClipboardEvent) => {
@@ -624,189 +788,173 @@ export const SpriteList = () => {
 					)}
 				>
 					{paginatedSpriteIds.map((id) => (
-						<div
-							key={id}
-							role="button"
-							data-sprite-id={id}
-							onMouseUp={(e) => {
-								const timer = (e.target as any)._dragTimer;
-								if (timer) clearTimeout(timer);
-							}}
-							style={{
-								userSelect: 'none',
-								msUserSelect: 'none',
-								MozUserSelect: 'none',
-								WebkitUserSelect: 'none'
-							}}
-							onDoubleClick={(e) => {
-								e.stopPropagation();
-								setOpenedSpriteId(id);
-								setHighlightedSpriteId(id);
-								isInternalHighlightChange.current = true;
-							}}
-							className={cn(
-								'w-full rounded-md transition-all hover:bg-item-hover cursor-grab active:cursor-grabbing relative',
-								(selectedSpriteIds.has(id) || highlightedSpriteId === id) && 'bg-primary/15 ring-1 ring-primary/50',
-								viewMode === 'list' && 'flex items-center gap-2 px-2 py-1',
-								viewMode === 'grid' && 'flex items-center px-1 py-0.5 gap-1.5',
-								viewMode === 'grid-3' && 'flex flex-col items-center px-1 py-1 gap-1',
-								viewMode === 'grid-4' && 'flex flex-col items-center px-0.5 py-1 gap-0.5',
-								viewMode === 'large' && 'flex items-center px-1 py-0.5 gap-1.5'
-							)}
-							onClick={(e) => {
-								e.stopPropagation();
-
-								const newSelection = new Set(e.ctrlKey ? selectedSpriteIds : []);
-
-								if (e.shiftKey && highlightedSpriteId) {
-									const start = Math.min(highlightedSpriteId, id);
-									const end = Math.max(highlightedSpriteId, id);
-									for (let i = start; i <= end; i++) {
-										newSelection.add(i);
-									}
-								} else if (e.ctrlKey) {
-									if (newSelection.has(id)) {
-										newSelection.delete(id);
-									} else {
-										newSelection.add(id);
-									}
-									setHighlightedSpriteId(id);
-								} else {
-									newSelection.add(id);
-									setHighlightedSpriteId(id);
-								}
-
-								isInternalHighlightChange.current = true;
-								setSelectedSpriteIds(newSelection);
-							}}
-							onMouseDown={(e) => {
-								// Only left click
-								if (e.button !== 0) return;
-
-								// Prevent text selection and stop propagation
-								e.preventDefault();
-								e.stopPropagation();
-
-								// Start drag immediately (or we could add a small threshold)
-								// Using a small timeout to distinguish from click
-								const timer = setTimeout(() => {
-									let idsToDrag: number[] = [];
-									if (selectedSpriteIds.has(id)) {
-										idsToDrag = Array.from(selectedSpriteIds).sort((a, b) => a - b);
-									} else {
-										idsToDrag = [id];
-										setSelectedSpriteIds(new Set([id]));
+						<ContextMenu key={id}>
+							<ContextMenuTrigger asChild>
+								<div
+									role="button"
+									data-sprite-id={id}
+									onMouseUp={(e) => {
+										const timer = (e.target as any)._dragTimer;
+										if (timer) clearTimeout(timer);
+									}}
+									style={{
+										userSelect: 'none',
+										msUserSelect: 'none',
+										MozUserSelect: 'none',
+										WebkitUserSelect: 'none'
+									}}
+									onDoubleClick={(e) => {
+										e.stopPropagation();
+										setOpenedSpriteId(id);
 										setHighlightedSpriteId(id);
-									}
+										isInternalHighlightChange.current = true;
+									}}
+									className={cn(
+										'w-full rounded-md transition-all hover:bg-item-hover cursor-grab active:cursor-grabbing relative',
+										(selectedSpriteIds.has(id) || highlightedSpriteId === id) && 'bg-primary/15 ring-1 ring-primary/50',
+										viewMode === 'list' && 'flex items-center gap-2 px-2 py-1',
+										viewMode === 'grid' && 'flex items-center px-1 py-0.5 gap-1.5',
+										viewMode === 'grid-3' && 'flex flex-col items-center px-1 py-1 gap-1',
+										viewMode === 'grid-4' && 'flex flex-col items-center px-0.5 py-1 gap-0.5',
+										viewMode === 'large' && 'flex items-center px-1 py-0.5 gap-1.5'
+									)}
+									onClick={(e) => {
+										e.stopPropagation();
 
-									const preview = (
-										<div className="bg-background border border-border rounded-md shadow-lg overflow-hidden w-12 h-12 flex items-center justify-center relative">
-											<SpriteCanvas showEmpty scale={1.5} spriteId={id} renderMode="list" />
-											{idsToDrag.length > 1 && (
-												<div className="absolute top-0 right-0 bg-primary text-primary-foreground text-[10px] font-bold px-1 rounded-bl-md">
-													{idsToDrag.length}
+										const newSelection = new Set(e.ctrlKey ? selectedSpriteIds : []);
+
+										if (e.shiftKey && highlightedSpriteId) {
+											const start = Math.min(highlightedSpriteId, id);
+											const end = Math.max(highlightedSpriteId, id);
+											for (let i = start; i <= end; i++) {
+												newSelection.add(i);
+											}
+										} else if (e.ctrlKey) {
+											if (newSelection.has(id)) {
+												newSelection.delete(id);
+											} else {
+												newSelection.add(id);
+											}
+											setHighlightedSpriteId(id);
+										} else {
+											newSelection.add(id);
+											setHighlightedSpriteId(id);
+										}
+
+										isInternalHighlightChange.current = true;
+										setSelectedSpriteIds(newSelection);
+									}}
+									onMouseDown={(e) => {
+										if (e.button !== 0) return;
+
+										e.preventDefault();
+										e.stopPropagation();
+
+										const timer = setTimeout(() => {
+											let idsToDrag: number[] = [];
+											if (selectedSpriteIds.has(id)) {
+												idsToDrag = Array.from(selectedSpriteIds).sort((a, b) => a - b);
+											} else {
+												idsToDrag = [id];
+												setSelectedSpriteIds(new Set([id]));
+												setHighlightedSpriteId(id);
+											}
+
+											const preview = (
+												<div className="bg-background border border-border rounded-md shadow-lg overflow-hidden w-12 h-12 flex items-center justify-center relative">
+													<SpriteCanvas showEmpty scale={1.5} spriteId={id} renderMode="list" />
+													{idsToDrag.length > 1 && (
+														<div className="absolute top-0 right-0 bg-primary text-primary-foreground text-[10px] font-bold px-1 rounded-bl-md">
+															{idsToDrag.length}
+														</div>
+													)}
 												</div>
-											)}
-										</div>
-									);
-									startDrag(idsToDrag, 'sprites', preview);
-								}, 150);
+											);
+											startDrag(idsToDrag, 'sprites', preview);
+										}, 150);
 
-								// Store timer to clear on mouse up if it was just a click
-								(e.target as any)._dragTimer = timer;
-							}}
-						>
-							<ContextMenu>
-								<ContextMenuTrigger asChild>
-									<div className="contents">
+										(e.target as any)._dragTimer = timer;
+									}}
+								>
+									<div
+										className={cn(
+											'rounded-md border border-border/50 flex items-center justify-center flex-shrink-0 overflow-hidden bg-muted pointer-events-none select-none',
+											viewMode === 'list' && 'w-8 h-8',
+											viewMode === 'grid' && 'w-12 h-12',
+											viewMode === 'grid-3' && 'w-11 h-11',
+											viewMode === 'grid-4' && 'w-9 h-9',
+											viewMode === 'large' && 'w-32 h-32'
+										)}
+									>
+										<SpriteCanvas
+											showEmpty
+											spriteId={id}
+											renderMode="list"
+											className="pointer-events-none select-none"
+											scale={
+												viewMode === 'list'
+													? 1
+													: viewMode === 'grid'
+														? 1.5
+														: viewMode === 'grid-3'
+															? 1.375
+															: viewMode === 'grid-4'
+																? 1.125
+																: 4
+											}
+										/>
+									</div>
+									<div
+										className={cn(
+											'min-w-0 pointer-events-none select-none',
+											viewMode === 'list' && 'flex-1 text-left',
+											viewMode === 'grid' && 'flex-1 text-right',
+											viewMode === 'grid-3' && 'w-full text-center',
+											viewMode === 'grid-4' && 'w-full text-center',
+											viewMode === 'large' && 'flex-1 text-right'
+										)}
+									>
 										<div
 											className={cn(
-												'rounded-md border border-border/50 flex items-center justify-center flex-shrink-0 overflow-hidden bg-muted pointer-events-none select-none',
-												viewMode === 'list' && 'w-8 h-8',
-												viewMode === 'grid' && 'w-12 h-12',
-												viewMode === 'grid-3' && 'w-11 h-11',
-												viewMode === 'grid-4' && 'w-9 h-9',
-												viewMode === 'large' && 'w-32 h-32'
+												'text-foreground font-mono font-medium leading-tight truncate',
+												viewMode === 'grid-4' ? 'text-[9px]' : viewMode === 'grid-3' ? 'text-[10px]' : 'text-[11px]'
 											)}
 										>
-											<SpriteCanvas
-												showEmpty
-												spriteId={id}
-												renderMode="list"
-												className="pointer-events-none select-none"
-												scale={
-													viewMode === 'list'
-														? 1
-														: viewMode === 'grid'
-															? 1.5
-															: viewMode === 'grid-3'
-																? 1.375
-																: viewMode === 'grid-4'
-																	? 1.125
-																	: 4
-												}
-											/>
-										</div>
-										<div
-											className={cn(
-												'min-w-0 pointer-events-none select-none',
-												viewMode === 'list' && 'flex-1 text-left',
-												viewMode === 'grid' && 'flex-1 text-right',
-												viewMode === 'grid-3' && 'w-full text-center',
-												viewMode === 'grid-4' && 'w-full text-center',
-												viewMode === 'large' && 'flex-1 text-right'
-											)}
-										>
-											<div
-												className={cn(
-													'text-foreground font-mono font-medium leading-tight truncate',
-													viewMode === 'grid-4' ? 'text-[9px]' : viewMode === 'grid-3' ? 'text-[10px]' : 'text-[11px]'
-												)}
-											>
-												{id}
-											</div>
+											{id}
 										</div>
 									</div>
-								</ContextMenuTrigger>
-								<ContextMenuContent>
-									<ContextMenuItem
-										onClick={() => {
-											if (id && data) {
-												const sprite = getSprite(id);
-												if (sprite) {
-													// Copy logic here (simplified for now)
-													console.log('Copy sprite', id);
-												}
-											}
-										}}
-									>
-										<Copy className="mr-2 h-4 w-4" />
-										<span>Copy</span>
-									</ContextMenuItem>
-									<ContextMenuItem
-										onClick={async () => {
-											if (id && data) {
-												await pasteClipboardImage(id);
-											}
-										}}
-									>
-										<ClipboardPaste className="mr-2 h-4 w-4" />
-										<span>Paste from Clipboard</span>
-									</ContextMenuItem>
-									<ContextMenuItem
-										className="text-destructive focus:text-destructive"
-										onClick={() => {
-											if (id) {
-												handleDeleteSprite(id);
-											}
-										}}
-									>
-										<Trash2 className="mr-2 h-4 w-4" />
-										<span>Remove</span>
-									</ContextMenuItem>
-								</ContextMenuContent>
-							</ContextMenu>
-						</div>
+								</div>
+							</ContextMenuTrigger>
+							<ContextMenuContent>
+								<ContextMenuItem onClick={() => id && handleCopySpriteImage(id)}>
+									<Copy className="mr-2 h-4 w-4" />
+									<span>Copy Image</span>
+								</ContextMenuItem>
+								<ContextMenuItem onClick={() => id && data && pasteClipboardImage(id)}>
+									<ClipboardPaste className="mr-2 h-4 w-4" />
+									<span>Paste from Clipboard</span>
+								</ContextMenuItem>
+								<ContextMenuSeparator />
+								<ContextMenuItem onClick={() => id && handleFindUsages(id)}>
+									<Search className="mr-2 h-4 w-4" />
+									<span>Find Usages</span>
+								</ContextMenuItem>
+								<ContextMenuSeparator />
+								<ContextMenuItem onClick={() => id && handleExportSpritePng(id)}>
+									<Download className="mr-2 h-4 w-4" />
+									<span>Export PNG...</span>
+								</ContextMenuItem>
+								<ContextMenuItem onClick={() => id && handleReplaceFromPng(id)}>
+									<Upload className="mr-2 h-4 w-4" />
+									<span>Replace from PNG...</span>
+								</ContextMenuItem>
+								<ContextMenuSeparator />
+								<ContextMenuItem onClick={() => id && handleDeleteSprite(id)} className="text-destructive focus:text-destructive">
+									<Trash2 className="mr-2 h-4 w-4" />
+									<span>Remove</span>
+								</ContextMenuItem>
+							</ContextMenuContent>
+						</ContextMenu>
 					))}
 				</div>
 			</div>

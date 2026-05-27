@@ -402,6 +402,7 @@ struct AppConfig {
     default_scene: Option<String>,
     item_list_view_mode: Option<String>,
     sprite_list_view_mode: Option<String>,
+    find_list_view_mode: Option<String>,
     general_settings: Option<GeneralSettings>,
 }
 
@@ -547,6 +548,19 @@ fn get_sprite_list_view_mode() -> Result<Option<String>, String> {
 fn set_sprite_list_view_mode(mode: String) -> Result<(), String> {
     let mut config = get_config()?;
     config.sprite_list_view_mode = Some(mode);
+    save_config(config)
+}
+
+#[tauri::command]
+fn get_find_list_view_mode() -> Result<Option<String>, String> {
+    let config = get_config()?;
+    Ok(config.find_list_view_mode)
+}
+
+#[tauri::command]
+fn set_find_list_view_mode(mode: String) -> Result<(), String> {
+    let mut config = get_config()?;
+    config.find_list_view_mode = Some(mode);
     save_config(config)
 }
 
@@ -856,6 +870,7 @@ fn search_things_bin(
     category: Option<String>,
     name: Option<String>,
     properties: std::collections::HashMap<String, bool>,
+    sprite_id: Option<u32>,
     limit: usize,
     dat_state: tauri::State<DatManagerState>,
 ) -> Result<Response, String> {
@@ -865,6 +880,7 @@ fn search_things_bin(
         category.as_deref(),
         name.as_deref(),
         &properties,
+        sprite_id,
         limit
     )?;
     Ok(Response::new(bytes))
@@ -878,6 +894,31 @@ fn clear_dat_data(
     let mut manager = dat_state.lock().map_err(|e| format!("Lock error: {}", e))?;
     manager.remove_data(&path);
     Ok(())
+}
+
+#[tauri::command]
+fn write_sprite_png(path: String, rgba: Vec<u8>) -> Result<(), String> {
+    if rgba.len() != 32 * 32 * 4 {
+        return Err(format!("Expected 4096 RGBA bytes, got {}", rgba.len()));
+    }
+    let img = image::RgbaImage::from_raw(32, 32, rgba)
+        .ok_or_else(|| "Failed to build RGBA image".to_string())?;
+    img.save(&path).map_err(|e| format!("Failed to write PNG: {}", e))
+}
+
+#[tauri::command]
+fn read_sprite_png(path: String) -> Result<Vec<u8>, String> {
+    let img = image::open(&path)
+        .map_err(|e| format!("Failed to open image: {}", e))?
+        .to_rgba8();
+    if img.width() != 32 || img.height() != 32 {
+        return Err(format!(
+            "Image must be exactly 32x32 pixels (got {}x{})",
+            img.width(),
+            img.height()
+        ));
+    }
+    Ok(img.into_raw())
 }
 
 fn get_group_dimensions(group: &FrameGroup) -> (u32, u32) {
@@ -1863,6 +1904,8 @@ tauri::Builder::default()
             set_item_list_view_mode,
             get_sprite_list_view_mode,
             set_sprite_list_view_mode,
+            get_find_list_view_mode,
+            set_find_list_view_mode,
             get_general_settings,
             set_general_settings,
             get_config_dir_path,
@@ -1879,6 +1922,8 @@ tauri::Builder::default()
             parse_dat_file_bin,
             search_things_bin,
             clear_dat_data,
+            write_sprite_png,
+            read_sprite_png,
             optimize_sprites_rust,
             apply_optimization,
             export_object_sheet_rust,
