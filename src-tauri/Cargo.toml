@@ -4,6 +4,7 @@ version = "0.1.1"
 description = "A modern Tibia .spr/.dat editor for Open Tibia"
 authors = ["Frenvius <frenvius@gmail.com>"]
 edition = "2021"
+license = "MIT"
 
 [lib]
 name = "sprite_forge_lib"
