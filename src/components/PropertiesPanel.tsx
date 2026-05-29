@@ -150,21 +150,14 @@ export const PropertiesPanel = () => {
 	const [selectedFrameGroup, setSelectedFrameGroup] = useState(0);
 	const selectedFrameGroupRef = useRef(0);
 	const originalItemRef = useRef<typeof item>(null);
+	const isNewItemRef = useRef(isNewItem);
+	const hasUnsavedChangesRef = useRef(hasUnsavedChanges);
+	isNewItemRef.current = isNewItem;
+	hasUnsavedChangesRef.current = hasUnsavedChanges;
 
 	// Initialize draft when item changes
 	useEffect(() => {
 		if (item && openedItemId && openedItemCategory) {
-			console.log('PropertiesPanel useEffect triggered:', {
-				updateCounter,
-				reason: 'item/updateCounter changed',
-				itemFromContext: {
-					id: item.id,
-					frames: item.frames,
-					spriteIndexLength: item.spriteIndex?.length,
-					spriteIndexFirst20: item.spriteIndex?.slice(0, 20)
-				}
-			});
-
 			let initialItem = { ...item };
 			let initialGroup = 0;
 
@@ -241,24 +234,8 @@ export const PropertiesPanel = () => {
 				// For version < 1057 (no frame groups), use top-level properties directly
 			}
 
-			console.log('PropertiesPanel draftItem set:', {
-				updateCounter,
-				id: initialItem.id,
-				width: initialItem.width,
-				frames: initialItem.frames,
-				layers: initialItem.layers,
-				height: initialItem.height,
-				category: initialItem.category,
-				patternX: initialItem.patternX,
-				patternY: initialItem.patternY,
-				patternZ: initialItem.patternZ,
-				source: 'useEffect initialization',
-				spriteIndexLength: initialItem.spriteIndex?.length,
-				spriteIndexFirst20: initialItem.spriteIndex?.slice(0, 20)
-			});
-
-			const isNew = isNewItem(openedItemId, openedItemCategory);
-			const wasMarkedUnsaved = hasUnsavedChanges(openedItemId, openedItemCategory);
+			const isNew = isNewItemRef.current(openedItemId, openedItemCategory);
+			const wasMarkedUnsaved = hasUnsavedChangesRef.current(openedItemId, openedItemCategory);
 			setDraftItem(initialItem);
 			setHasChanges(isNew || wasMarkedUnsaved);
 			setSelectedFrameGroup(initialGroup);
@@ -270,7 +247,7 @@ export const PropertiesPanel = () => {
 			setDraftItem(null);
 			setHasChanges(false);
 		}
-	}, [item, openedItemId, openedItemCategory, updateCounter, isNewItem, hasUnsavedChanges, markUnsavedChanges]);
+	}, [item, openedItemId, openedItemCategory, updateCounter]);
 
 	const handlePropertyChange = useCallback(
 		(property: string, value: any) => {
