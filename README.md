@@ -23,9 +23,9 @@ This project leverages modern web technologies to create a powerful desktop appl
 
 Install the following tools before building Sprite Forge:
 
-- **(Node.js)[https://nodejs.org/en]**
-- **(Bun)[https://bun.sh/]**
-- **(Rust)[https://rustup.rs/]**
+- **[Node.js](https://nodejs.org/en)**
+- **[Bun](https://bun.sh/)**
+- **[Rust](https://rustup.rs/)**
 
 For Windows builds, install the Microsoft C++ Build Tools through Visual Studio Installer and include the Windows SDK. For other operating systems, follow the Tauri prerequisites guide: https://tauri.app/start/prerequisites/
 
