@@ -1,0 +1,47 @@
+name: Warm Rust cache
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'src-tauri/Cargo.lock'
+      - 'src-tauri/Cargo.toml'
+  workflow_dispatch:
+
+jobs:
+  warm:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('**/bun.lockb') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install dependencies (frontend)
+        run: bun install --frozen-lockfile
+
+      - name: Rust setup
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          shared-key: tauri-release
+
+      - name: Compile to warm the cache
+        run: bun run tauri build --no-bundle

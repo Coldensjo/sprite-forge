@@ -23,7 +23,7 @@ jobs:
           bun-version: latest
 
       - name: Cache Bun dependencies
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: ~/.bun/install/cache
           key: ${{ runner.os }}-bun-${{ hashFiles('**/bun.lockb') }}
@@ -31,7 +31,7 @@ jobs:
             ${{ runner.os }}-bun-
 
       - name: Install dependencies (frontend)
-        run: bun install
+        run: bun install --frozen-lockfile
 
       - name: Rust setup
         uses: dtolnay/rust-toolchain@stable
@@ -42,9 +42,7 @@ jobs:
         uses: swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
-
-      - name: Install Tauri CLI
-        run: bun add -g @tauri-apps/cli
+          shared-key: tauri-release
 
       - name: Get version
         id: version
