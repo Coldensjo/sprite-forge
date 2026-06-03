@@ -3443,7 +3443,7 @@ dependencies = [
 
 [[package]]
 name = "sprite-forge"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "cocoa",
  "dirs 5.0.1",
