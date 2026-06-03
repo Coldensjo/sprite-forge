@@ -756,34 +756,68 @@ export const ItemList = () => {
 														newId++;
 													}
 
-													// Create duplicate
 													const duplicate: ThingType = {
 														...item,
-														id: newId
+														id: newId,
+														spriteIndex: [...item.spriteIndex],
+														frameDurations: item.frameDurations?.map((d) => ({ ...d })),
+														frameGroupsData: item.frameGroupsData?.map((g) => ({
+															...g,
+															spriteIndex: [...g.spriteIndex],
+															frameDurations: g.frameDurations?.map((d) => ({ ...d }))
+														}))
 													};
 
-													// Add to map
 													map?.set(newId, duplicate);
 
-													const dupCount = map?.size ?? 0;
+													let minId: number;
+													let updatedCount: number;
 													switch (selectedCategory) {
 														case ThingCategory.ITEM:
-															data.itemsCount = dupCount;
+															minId = MIN_ITEM_ID;
+															updatedCount = Math.max(data.itemsCount, newId - minId + 1);
+															data.itemsCount = updatedCount;
 															break;
 														case ThingCategory.OUTFIT:
-															data.outfitsCount = dupCount;
+															minId = MIN_OUTFIT_ID;
+															updatedCount = Math.max(data.outfitsCount, newId - minId + 1);
+															data.outfitsCount = updatedCount;
 															break;
 														case ThingCategory.EFFECT:
-															data.effectsCount = dupCount;
+															minId = MIN_EFFECT_ID;
+															updatedCount = Math.max(data.effectsCount, newId - minId + 1);
+															data.effectsCount = updatedCount;
 															break;
 														case ThingCategory.MISSILE:
-															data.missilesCount = dupCount;
+															minId = MIN_MISSILE_ID;
+															updatedCount = Math.max(data.missilesCount, newId - minId + 1);
+															data.missilesCount = updatedCount;
 															break;
+														default:
+															minId = MIN_ITEM_ID;
+															updatedCount = Math.max(data.itemsCount, newId - minId + 1);
+															data.itemsCount = updatedCount;
 													}
 
-													// Highlight and open the new item
-													setHighlightedItemId(newId);
-													setOpenedItemId(newId);
+													const updatedMaxId = minId + updatedCount - 1;
+													const updatedAllItemIds: number[] = [];
+													if (map) {
+														for (let scanId = minId; scanId <= updatedMaxId; scanId++) {
+															if (map.has(scanId)) {
+																updatedAllItemIds.push(scanId);
+															}
+														}
+													}
+
+													const itemIndex = updatedAllItemIds.indexOf(newId);
+													const targetPage = Math.floor(itemIndex / itemsPerPage) + 1;
+
+													markAsNewItem(newId, selectedCategory);
+													markUnsavedChanges(newId, selectedCategory, true);
+
+													pendingNewItemId.current = newId;
+													notifyDataChanged();
+													setCurrentPage(targetPage);
 												}
 											}}
 										>
