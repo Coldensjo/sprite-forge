@@ -66,6 +66,9 @@ jobs:
           # Copy portable exe
           cp "src-tauri/target/release/sprite-forge.exe" "src-tauri/target/release/sprite-forge-portable.exe"
 
+          # Copy installer under a stable, version-less name for a permanent latest link
+          cp "$NSIS_DIR/sprite-forge_${VERSION}_x64-setup.exe" "$NSIS_DIR/sprite-forge-setup.exe"
+
           # Create the update zip bundle
           cd "$NSIS_DIR"
           7z a -tzip "sprite-forge_${VERSION}_x64-setup.nsis.zip" "sprite-forge_${VERSION}_x64-setup.exe"
@@ -95,6 +98,7 @@ jobs:
           body: 'See the assets to download this version and install.'
           files: |
             src-tauri/target/release/bundle/nsis/sprite-forge_${{ steps.version.outputs.version }}_x64-setup.exe
+            src-tauri/target/release/bundle/nsis/sprite-forge-setup.exe
             src-tauri/target/release/bundle/nsis/sprite-forge_${{ steps.version.outputs.version }}_x64-setup.nsis.zip
             src-tauri/target/release/sprite-forge-portable.exe
         env:

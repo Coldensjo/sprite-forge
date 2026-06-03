@@ -10,6 +10,15 @@ It is currently an **experiment** focused on delivering a new and improved user 
 
 **Always create a backup of your SPR and DAT files before using Sprite Forge.** This application is experimental and may corrupt your files.
 
+## Download
+
+Grab the latest release for Windows:
+
+- **Installer (recommended)**: [sprite-forge-setup.exe](https://github.com/Frenvius/sprite-forge/releases/latest/download/sprite-forge-setup.exe)
+- **Portable**: [sprite-forge-portable.exe](https://github.com/Frenvius/sprite-forge/releases/latest/download/sprite-forge-portable.exe)
+
+The app updates itself automatically on launch.
+
 ## About
 
 This project leverages modern web technologies to create a powerful desktop application:
