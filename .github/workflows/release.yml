@@ -51,6 +51,36 @@ jobs:
           VERSION=$(grep -o '"version": "[^"]*"' src-tauri/tauri.conf.json | head -1 | cut -d'"' -f4)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
+      - name: Extract release notes from CHANGELOG.md
+        id: notes
+        shell: bash
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          if [ ! -f CHANGELOG.md ]; then
+            echo "CHANGELOG.md not found" >&2
+            exit 1
+          fi
+
+          awk -v ver="$VERSION" '
+            /^## \[/ {
+              if (found) exit
+              if (index($0, "[" ver "]")) { found = 1; next }
+            }
+            found { print }
+          ' CHANGELOG.md | sed -e '/./,$!d' | awk 'NF {p=1} p' > release-notes.md
+
+          if [ ! -s release-notes.md ]; then
+            echo "No CHANGELOG.md section found for version $VERSION" >&2
+            exit 1
+          fi
+
+          tac release-notes.md | awk 'NF {p=1} p' | tac > release-notes.trimmed.md
+          mv release-notes.trimmed.md release-notes.md
+
+          echo "::group::Release notes for v$VERSION"
+          cat release-notes.md
+          echo "::endgroup::"
+
       - name: Build Tauri app
         run: bun run tauri build
         env:
@@ -63,13 +93,9 @@ jobs:
           VERSION="${{ steps.version.outputs.version }}"
           NSIS_DIR="src-tauri/target/release/bundle/nsis"
 
-          # Copy portable exe
           cp "src-tauri/target/release/sprite-forge.exe" "src-tauri/target/release/sprite-forge-portable.exe"
-
-          # Copy installer under a stable, version-less name for a permanent latest link
           cp "$NSIS_DIR/sprite-forge_${VERSION}_x64-setup.exe" "$NSIS_DIR/sprite-forge-setup.exe"
 
-          # Create the update zip bundle
           cd "$NSIS_DIR"
           7z a -tzip "sprite-forge_${VERSION}_x64-setup.nsis.zip" "sprite-forge_${VERSION}_x64-setup.exe"
 
@@ -78,8 +104,6 @@ jobs:
         run: |
           VERSION="${{ steps.version.outputs.version }}"
           NSIS_DIR="src-tauri/target/release/bundle/nsis"
-
-          # Sign the zip file by passing the private key directly
           bun tauri signer sign --private-key "${{ secrets.TAURI_PRIVATE_KEY }}" --password "${{ secrets.TAURI_KEY_PASSWORD }}" "$NSIS_DIR/sprite-forge_${VERSION}_x64-setup.nsis.zip"
 
       - name: Read signature file
@@ -95,9 +119,8 @@ jobs:
         with:
           tag_name: v${{ steps.version.outputs.version }}
           name: 'Sprite Forge v${{ steps.version.outputs.version }}'
-          body: 'See the assets to download this version and install.'
+          body_path: release-notes.md
           files: |
-            src-tauri/target/release/bundle/nsis/sprite-forge_${{ steps.version.outputs.version }}_x64-setup.exe
             src-tauri/target/release/bundle/nsis/sprite-forge-setup.exe
             src-tauri/target/release/bundle/nsis/sprite-forge_${{ steps.version.outputs.version }}_x64-setup.nsis.zip
             src-tauri/target/release/sprite-forge-portable.exe
@@ -107,13 +130,23 @@ jobs:
       - name: Update updater.json
         shell: bash
         run: |
-          cat > public/updater.json << EOF
-          {
-            "url": "https://github.com/Frenvius/sprite-forge/releases/download/v${{ steps.version.outputs.version }}/sprite-forge_${{ steps.version.outputs.version }}_x64-setup.nsis.zip",
-            "version": "${{ steps.version.outputs.version }}",
-            "signature": "${{ steps.signature.outputs.signature }}"
-          }
-          EOF
+          VERSION="${{ steps.version.outputs.version }}"
+          PUB_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          URL="https://github.com/Frenvius/sprite-forge/releases/download/v${VERSION}/sprite-forge_${VERSION}_x64-setup.nsis.zip"
+          SIGNATURE='${{ steps.signature.outputs.signature }}'
+
+          jq -n \
+            --arg version "$VERSION" \
+            --arg notes "$(cat release-notes.md)" \
+            --arg pub_date "$PUB_DATE" \
+            --arg url "$URL" \
+            --arg signature "$SIGNATURE" \
+            '{version: $version, notes: $notes, pub_date: $pub_date, url: $url, signature: $signature}' \
+            > public/updater.json
+
+          echo "::group::updater.json"
+          cat public/updater.json
+          echo "::endgroup::"
 
       - name: Commit updater.json
         shell: bash

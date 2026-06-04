@@ -33,6 +33,7 @@ import { AboutDialog } from './AboutDialog';
 import { LoadingDialog } from './LoadingDialog';
 import { SettingsDialog } from './SettingsDialog';
 import { LoadOptions } from './FolderSelectDialog';
+import { UpdateIndicator } from './UpdateIndicator';
 import { FolderSelectDialog } from './FolderSelectDialog';
 import { ThemeSettingsDialog } from './ThemeSettingsDialog';
 import { VersionHistoryDialog } from './VersionHistoryDialog';
@@ -585,6 +586,7 @@ export const Toolbar = () => {
 				</TooltipProvider>
 
 				<div className="ml-auto text-[11px] text-muted-foreground flex-shrink-0 flex items-center gap-2">
+					<UpdateIndicator />
 					<Button
 						size="icon"
 						variant="ghost"
