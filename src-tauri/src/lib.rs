@@ -27,6 +27,9 @@ use optimizer::{optimize_sprites_rust, apply_optimization};
 
 mod sprite_protocol;
 
+mod similarity;
+use similarity::{SpriteSignature, signature_compressed};
+
 // Wrapper to use serde_bytes for efficient binary transfer
 #[derive(Serialize, Deserialize)]
 struct FileBytes(#[serde(with = "serde_bytes")] Vec<u8>);
@@ -884,6 +887,142 @@ fn search_things_bin(
         limit
     )?;
     Ok(Response::new(bytes))
+}
+
+#[tauri::command]
+fn find_similar_bin(
+    request: tauri::ipc::Request,
+    spr_state: tauri::State<SprManagerState>,
+    dat_state: tauri::State<DatManagerState>,
+    log_state: tauri::State<LoggerState>,
+) -> Result<Response, String> {
+    use std::collections::HashMap;
+    let start = std::time::Instant::now();
+
+    let bytes = match request.body() {
+        tauri::ipc::InvokeBody::Raw(b) => b.as_slice(),
+        _ => return Err("find_similar_bin expects a raw binary payload".to_string()),
+    };
+
+    let mut cursor = 0usize;
+    let need = |cursor: usize, n: usize, total: usize| -> Result<(), String> {
+        if cursor + n > total {
+            Err(format!("Payload truncated at offset {} (need {} bytes, have {})", cursor, n, total - cursor))
+        } else { Ok(()) }
+    };
+    let total = bytes.len();
+
+    need(cursor, 2, total)?;
+    let ref_count = u16::from_le_bytes([bytes[cursor], bytes[cursor + 1]]) as usize;
+    cursor += 2;
+
+    need(cursor, ref_count * 5, total)?;
+    let mut ref_pairs: Vec<(u32, u8)> = Vec::with_capacity(ref_count);
+    for _ in 0..ref_count {
+        let id = u32::from_le_bytes([
+            bytes[cursor], bytes[cursor + 1], bytes[cursor + 2], bytes[cursor + 3],
+        ]);
+        cursor += 4;
+        let cat = bytes[cursor]; cursor += 1;
+        ref_pairs.push((id, cat));
+    }
+
+    need(cursor, 8, total)?;
+    let category_byte = bytes[cursor]; cursor += 1;
+    let transparent = bytes[cursor] != 0; cursor += 1;
+    let threshold_pct = bytes[cursor].min(100); cursor += 1;
+    let _reserved = bytes[cursor]; cursor += 1;
+    let max_results = u32::from_le_bytes([
+        bytes[cursor], bytes[cursor + 1], bytes[cursor + 2], bytes[cursor + 3],
+    ]) as usize;
+    cursor += 4;
+
+    need(cursor, 2, total)?;
+    let dat_path_len = u16::from_le_bytes([bytes[cursor], bytes[cursor + 1]]) as usize;
+    cursor += 2;
+    need(cursor, dat_path_len, total)?;
+    let dat_path = std::str::from_utf8(&bytes[cursor..cursor + dat_path_len])
+        .map_err(|e| format!("Invalid dat_path utf-8: {}", e))?
+        .to_string();
+    cursor += dat_path_len;
+
+    need(cursor, 2, total)?;
+    let spr_path_len = u16::from_le_bytes([bytes[cursor], bytes[cursor + 1]]) as usize;
+    cursor += 2;
+    need(cursor, spr_path_len, total)?;
+    let spr_path = std::str::from_utf8(&bytes[cursor..cursor + spr_path_len])
+        .map_err(|e| format!("Invalid spr_path utf-8: {}", e))?
+        .to_string();
+
+    let category: Option<&str> = match category_byte {
+        0 => None,
+        1 => Some("item"),
+        2 => Some("outfit"),
+        3 => Some("effect"),
+        4 => Some("missile"),
+        other => return Err(format!("Invalid category byte: {}", other)),
+    };
+
+    let (refs, candidate_ids) = {
+        let dat_mgr = dat_state.lock().map_err(|e| format!("DAT lock error: {}", e))?;
+        let refs = dat_mgr.resolve_reference_things(&dat_path, &ref_pairs)?;
+        let mut set = dat_mgr.collect_candidate_sprite_ids(&dat_path, category)?;
+        for r in &refs {
+            for &sid in &r.sprite_ids { set.insert(sid); }
+        }
+        (refs, set.into_iter().collect::<Vec<u32>>())
+    };
+
+    if refs.is_empty() {
+        let mut empty = Vec::with_capacity(4);
+        empty.extend_from_slice(&0u32.to_le_bytes());
+        return Ok(Response::new(empty));
+    }
+
+    let sprite_data = {
+        let mut spr_mgr = spr_state.lock().map_err(|e| format!("SPR lock error: {}", e))?;
+        spr_mgr.read_sprites_list(&spr_path, candidate_ids)?
+    };
+
+    use rayon::prelude::*;
+    let signed: Vec<(u32, SpriteSignature)> = sprite_data
+        .into_par_iter()
+        .map(|s| {
+            if s.is_empty { (s.id, SpriteSignature::empty()) }
+            else { (s.id, signature_compressed(&s.compressed_pixels, transparent)) }
+        })
+        .collect();
+
+    let mut sig_map: HashMap<u32, SpriteSignature> = HashMap::with_capacity(signed.len());
+    for (id, sig) in signed { sig_map.insert(id, sig); }
+
+    let buffer = {
+        let dat_mgr = dat_state.lock().map_err(|e| format!("DAT lock error: {}", e))?;
+        dat_mgr.find_similar_binary(
+            &dat_path,
+            category,
+            &refs,
+            &sig_map,
+            threshold_pct,
+            max_results,
+        )?
+    };
+
+    {
+        let mut logger = log_state.lock().unwrap();
+        logger.log(
+            EventCode::SprBatch,
+            serde_json::json!({
+                "op": "find_similar",
+                "ms": start.elapsed().as_millis(),
+                "refs": refs.len(),
+                "hashed": sig_map.len(),
+                "bytes": buffer.len()
+            })
+        );
+    }
+
+    Ok(Response::new(buffer))
 }
 
 #[tauri::command]
@@ -1923,6 +2062,7 @@ tauri::Builder::default()
             copy_spr_file_with_mods,
             parse_dat_file_bin,
             search_things_bin,
+            find_similar_bin,
             clear_dat_data,
             write_sprite_png,
             read_sprite_png,

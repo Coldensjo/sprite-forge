@@ -30,6 +30,7 @@ import {
 	Upload,
 	Grid3x3,
 	Package,
+	Sparkles,
 	SkipBack,
 	Download,
 	Clipboard,
@@ -379,6 +380,57 @@ export const ItemList = () => {
 			}
 		}
 	};
+
+	const handleFindSimilar = useCallback(
+		async (seeds: Array<{ id: number; category: ThingCategory }>) => {
+			if (seeds.length === 0) return;
+			const refs = seeds.filter(({ id, category }) => {
+				const thing = getThing(id, category);
+				return !!thing && (thing.spriteIndex || []).some((sid) => isValidSpriteId(sid));
+			});
+
+			if (refs.length === 0) {
+				toast({ description: 'No valid sprites to compare against' });
+				return;
+			}
+
+			try {
+				const { WebviewWindow } = await import('@tauri-apps/api/webviewWindow');
+				const { emit } = await import('@tauri-apps/api/event');
+				localStorage.setItem('sprite-forge-pending-find-similar', JSON.stringify({ refs, ts: Date.now() }));
+				const existing = await WebviewWindow.getByLabel('find');
+				if (existing) {
+					await existing.show();
+					await existing.setFocus();
+				} else {
+					const win = new WebviewWindow('find', {
+						width: 900,
+						height: 600,
+						center: true,
+						minWidth: 700,
+						shadow: false,
+						minHeight: 500,
+						resizable: true,
+						url: 'find.html',
+						transparent: true,
+						decorations: false,
+						title: 'Find - Sprite Forge',
+						backgroundColor: [0, 0, 0, 0]
+					});
+					await new Promise<void>((resolve) => {
+						win.once('tauri://created', () => resolve());
+						win.once('tauri://error', () => resolve());
+					});
+					await new Promise((r) => setTimeout(r, 300));
+				}
+				await emit('find_similar', { refs });
+			} catch (err) {
+				console.error('Failed to open find window:', err);
+				toast({ title: 'Error', variant: 'destructive', description: 'Failed to open Find window' });
+			}
+		},
+		[getThing, toast]
+	);
 
 	const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
 		if (e.key === 'Enter') {
@@ -823,6 +875,13 @@ export const ItemList = () => {
 										>
 											<Copy className="mr-2 h-4 w-4" />
 											<span>Duplicate</span>
+										</ContextMenuItem>
+										<ContextMenuItem
+											disabled={!item.spriteIndex?.some((sid) => isValidSpriteId(sid))}
+											onClick={() => handleFindSimilar([{ id, category: selectedCategory }])}
+										>
+											<Sparkles className="mr-2 h-4 w-4" />
+											<span>Find Similar</span>
 										</ContextMenuItem>
 										<ContextMenuItem
 											onClick={() => {

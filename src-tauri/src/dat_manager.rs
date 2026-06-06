@@ -1,10 +1,66 @@
-/// DAT Manager - Centralized storage for loaded DAT data
-/// Matches Object Builder's ThingTypeStorage pattern
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 
-// Re-use ThingType struct from dat_writer
 use crate::dat_writer::ThingType;
+use crate::similarity::{
+    COLOR_GOOD, PROPS_PENALTY_MAX, SHAPE_GOOD, SpriteSignature, combine_visual, property_penalty, visual_components,
+};
+
+pub struct ReferenceThing {
+    pub sprite_ids: Vec<u32>,
+    pub properties: u64,
+}
+
+pub fn pack_property_bits(thing: &ThingType) -> u64 {
+    let mut b: u64 = 0;
+    let flags: [(u64, bool); 41] = [
+        (1 << 0, thing.is_ground),
+        (1 << 1, thing.is_ground_border),
+        (1 << 2, thing.is_on_bottom),
+        (1 << 3, thing.is_on_top),
+        (1 << 4, thing.has_light),
+        (1 << 5, thing.mini_map),
+        (1 << 6, thing.has_offset),
+        (1 << 7, thing.has_elevation),
+        (1 << 8, thing.cloth),
+        (1 << 9, thing.is_market_item),
+        (1 << 10, thing.writable),
+        (1 << 11, thing.writable_once),
+        (1 << 12, thing.has_default_action),
+        (1 << 13, thing.is_container),
+        (1 << 14, thing.stackable),
+        (1 << 15, thing.force_use),
+        (1 << 16, thing.multi_use),
+        (1 << 17, thing.is_fluid_container),
+        (1 << 18, thing.is_fluid),
+        (1 << 19, thing.is_unpassable),
+        (1 << 20, thing.is_unmoveable),
+        (1 << 21, thing.block_missile),
+        (1 << 22, thing.block_pathfind),
+        (1 << 23, thing.no_move_animation),
+        (1 << 24, thing.pickupable),
+        (1 << 25, thing.hangable),
+        (1 << 26, thing.is_horizontal),
+        (1 << 27, thing.is_vertical),
+        (1 << 28, thing.rotatable),
+        (1 << 29, thing.dont_hide),
+        (1 << 30, thing.is_translucent),
+        (1 << 31, thing.is_lying_object),
+        (1 << 32, thing.animate_always),
+        (1 << 33, thing.is_full_ground),
+        (1 << 34, thing.ignore_look),
+        (1 << 35, thing.wrappable),
+        (1 << 36, thing.unwrappable),
+        (1 << 37, thing.top_effect),
+        (1 << 38, thing.usable),
+        (1 << 39, thing.has_charges),
+        (1 << 40, thing.floor_change),
+    ];
+    for (mask, on) in flags {
+        if on { b |= mask; }
+    }
+    b
+}
 
 /// Stored DAT data for a loaded file
 pub struct DatData {
@@ -277,6 +333,216 @@ impl DatManager {
         buffer[2] = count_bytes[2];
         buffer[3] = count_bytes[3];
 
+        Ok(buffer)
+    }
+
+    pub fn collect_candidate_sprite_ids(
+        &self,
+        path: &str,
+        category: Option<&str>,
+    ) -> Result<HashSet<u32>, String> {
+        let dat_data = self.get_data(path)
+            .ok_or_else(|| format!("No DAT data loaded for path: {}", path))?;
+
+        let mut ids: HashSet<u32> = HashSet::new();
+        let mut push_from = |collection: &HashMap<u32, ThingType>| {
+            for thing in collection.values() {
+                for &sid in &thing.sprite_index {
+                    if sid != 0 {
+                        ids.insert(sid);
+                    }
+                }
+            }
+        };
+
+        match category {
+            Some("item") => push_from(&dat_data.items),
+            Some("outfit") => push_from(&dat_data.outfits),
+            Some("effect") => push_from(&dat_data.effects),
+            Some("missile") => push_from(&dat_data.missiles),
+            None => {
+                push_from(&dat_data.items);
+                push_from(&dat_data.outfits);
+                push_from(&dat_data.effects);
+                push_from(&dat_data.missiles);
+            }
+            Some(cat) => return Err(format!("Invalid category: {}", cat)),
+        }
+
+        Ok(ids)
+    }
+
+    pub fn resolve_reference_things(
+        &self,
+        path: &str,
+        refs: &[(u32, u8)],
+    ) -> Result<Vec<ReferenceThing>, String> {
+        let dat_data = self.get_data(path)
+            .ok_or_else(|| format!("No DAT data loaded for path: {}", path))?;
+        let mut out = Vec::with_capacity(refs.len());
+        for &(id, cat) in refs {
+            let map = match cat {
+                1 => &dat_data.items,
+                2 => &dat_data.outfits,
+                3 => &dat_data.effects,
+                4 => &dat_data.missiles,
+                _ => continue,
+            };
+            if let Some(thing) = map.get(&id) {
+                let mut sprite_ids: Vec<u32> = thing.sprite_index.iter().copied().filter(|&s| s != 0).collect();
+                sprite_ids.sort_unstable();
+                sprite_ids.dedup();
+                if sprite_ids.is_empty() { continue; }
+                out.push(ReferenceThing {
+                    sprite_ids,
+                    properties: pack_property_bits(thing),
+                });
+            }
+        }
+        Ok(out)
+    }
+
+    pub fn find_similar_binary(
+        &self,
+        path: &str,
+        category: Option<&str>,
+        refs: &[ReferenceThing],
+        signatures: &HashMap<u32, SpriteSignature>,
+        threshold_pct: u8,
+        max_results: usize,
+    ) -> Result<Vec<u8>, String> {
+        let dat_data = self.get_data(path)
+            .ok_or_else(|| format!("No DAT data loaded for path: {}", path))?;
+
+        if refs.is_empty() {
+            let mut empty = Vec::with_capacity(4);
+            empty.extend_from_slice(&0u32.to_le_bytes());
+            return Ok(empty);
+        }
+
+        // Returns (rank, visual) for the best-matching reference, or None if no reference
+        // is visually similar enough. Shape and property agreement lead; a shared
+        // silhouette (a corpse and its skeleton) or a shared kind (two containers) both
+        // outrank a mere palette match. Tiers, best first:
+        //   tier 5: shape matches AND properties match    (same form, same kind)
+        //   tier 4: shape matches                         (same form, different kind)
+        //   tier 3: properties match AND color matches    (same kind, same palette)
+        //   tier 2: properties match                      (same kind, weaker resemblance)
+        //   tier 1: color matches                         (looks alike, different kind)
+        //   tier 0: rest                                  (above the visual threshold only)
+        // Within a tier, the closest property match ranks first, then visual similarity.
+        let score_thing = |thing: &ThingType| -> Option<(u32, u8)> {
+            let thing_props = pack_property_bits(thing);
+            let mut best_rank: u32 = 0;
+            let mut best_visual: u8 = 0;
+            let mut matched = false;
+
+            for r in refs {
+                let mut shape: u8 = 0;
+                let mut color: u8 = 0;
+                let mut visual: u8 = 0;
+                for &cand_sid in &thing.sprite_index {
+                    if cand_sid == 0 { continue; }
+                    let Some(cand_sig) = signatures.get(&cand_sid) else { continue };
+                    if cand_sig.is_empty() { continue; }
+                    for &ref_sid in &r.sprite_ids {
+                        let Some(ref_sig) = signatures.get(&ref_sid) else { continue };
+                        if ref_sig.is_empty() { continue; }
+                        let (s, c) = visual_components(ref_sig, cand_sig);
+                        let v = combine_visual(s, c);
+                        if v > visual { visual = v; shape = s; color = c; }
+                    }
+                }
+
+                if visual < threshold_pct {
+                    continue;
+                }
+                matched = true;
+
+                let penalty = property_penalty(r.properties, thing_props);
+                let props_match = penalty <= PROPS_PENALTY_MAX;
+                let shape_match = shape >= SHAPE_GOOD;
+                let color_match = color >= COLOR_GOOD;
+
+                let tier: u32 = if shape_match && props_match {
+                    5
+                } else if shape_match {
+                    4
+                } else if props_match && color_match {
+                    3
+                } else if props_match {
+                    2
+                } else if color_match {
+                    1
+                } else {
+                    0
+                };
+
+                let prop_closeness = PROPS_PENALTY_MAX.saturating_sub(penalty);
+                let rank = tier * 100_000 + prop_closeness * 1_000 + visual as u32;
+
+                if rank > best_rank {
+                    best_rank = rank;
+                    best_visual = visual;
+                }
+            }
+
+            if matched { Some((best_rank, best_visual)) } else { None }
+        };
+
+        let mut candidates: Vec<(u8, &ThingType)> = Vec::new();
+
+        let collections: &[(&HashMap<u32, ThingType>, u8)] = match category {
+            Some("item") => &[(&dat_data.items, 1)],
+            Some("outfit") => &[(&dat_data.outfits, 2)],
+            Some("effect") => &[(&dat_data.effects, 3)],
+            Some("missile") => &[(&dat_data.missiles, 4)],
+            None => &[
+                (&dat_data.items, 1),
+                (&dat_data.outfits, 2),
+                (&dat_data.effects, 3),
+                (&dat_data.missiles, 4),
+            ],
+            Some(cat) => return Err(format!("Invalid category: {}", cat)),
+        };
+
+        for &(collection, category_val) in collections {
+            for thing in collection.values() {
+                candidates.push((category_val, thing));
+            }
+        }
+
+        use rayon::prelude::*;
+        let mut scored: Vec<(u8, &ThingType, u32, u8)> = candidates
+            .par_iter()
+            .filter_map(|&(category_val, thing)| {
+                score_thing(thing).map(|(rank, score)| (category_val, thing, rank, score))
+            })
+            .collect();
+
+        scored.sort_by(|a, b| b.2.cmp(&a.2).then(a.1.id.cmp(&b.1.id)));
+        if max_results > 0 && scored.len() > max_results {
+            scored.truncate(max_results);
+        }
+
+        let mut buffer: Vec<u8> = Vec::with_capacity(4 + scored.len() * 32);
+        buffer.extend_from_slice(&(scored.len() as u32).to_le_bytes());
+        for (category_val, thing, _rank, score) in scored {
+            buffer.extend_from_slice(&thing.id.to_le_bytes());
+            buffer.push(category_val);
+            buffer.push(thing.width);
+            buffer.push(thing.height);
+            buffer.push(thing.layers);
+            buffer.push(thing.pattern_x);
+            buffer.push(thing.pattern_y);
+            buffer.push(thing.pattern_z);
+            buffer.push(thing.frames);
+            buffer.extend_from_slice(&(thing.sprite_index.len() as u16).to_le_bytes());
+            for &sid in &thing.sprite_index {
+                buffer.extend_from_slice(&sid.to_le_bytes());
+            }
+            buffer.push(score);
+        }
         Ok(buffer)
     }
 }

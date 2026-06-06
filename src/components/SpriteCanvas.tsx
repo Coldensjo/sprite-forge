@@ -131,20 +131,24 @@ export const SpriteCanvas = memo(
 				// For others, default to first pattern (patternX = 0)
 				const defaultPatternX = thing.category === 'outfit' && thing.patternX > 2 ? 2 : 0;
 
-				for (let h = 0; h < thing.height; h++) {
-					for (let w = 0; w < thing.width; w++) {
-						const index = getSpriteIndex(thing, w, h, 0, defaultPatternX, 0, 0, 0);
-						if (index < thing.spriteIndex.length) {
-							// Reverse position (Tibia format)
-							const posX = (thing.width - w - 1) * SPRITE_SIZE;
-							const posY = (thing.height - h - 1) * SPRITE_SIZE;
-							layout.push({
-								x: posX,
-								y: posY,
-								layer: 0,
-								patternY: 0,
-								spriteId: thing.spriteIndex[index]
-							});
+				const layerCount = thing.category === 'outfit' ? 1 : thing.layers;
+
+				for (let l = 0; l < layerCount; l++) {
+					for (let h = 0; h < thing.height; h++) {
+						for (let w = 0; w < thing.width; w++) {
+							const index = getSpriteIndex(thing, w, h, l, defaultPatternX, 0, 0, 0);
+							if (index < thing.spriteIndex.length) {
+								// Reverse position (Tibia format)
+								const posX = (thing.width - w - 1) * SPRITE_SIZE;
+								const posY = (thing.height - h - 1) * SPRITE_SIZE;
+								layout.push({
+									x: posX,
+									y: posY,
+									layer: l,
+									patternY: 0,
+									spriteId: thing.spriteIndex[index]
+								});
+							}
 						}
 					}
 				}

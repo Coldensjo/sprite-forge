@@ -6,17 +6,68 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useTibiaData } from '@/contexts/TibiaDataContext';
 import { ThingType, ThingCategory } from '@/lib/tibia/types';
 import { useRef, useMemo, useState, useEffect, useCallback } from 'react';
-import { X, List, Minus, Square, Trash2, Columns, LayoutGrid } from 'lucide-react';
+import { X, List, Minus, Square, Trash2, Columns, Sparkles, LayoutGrid } from 'lucide-react';
 
 import { Input } from './ui/input';
 import { Switch } from './ui/switch';
 import { Button } from './ui/button';
+import { Slider } from './ui/slider';
 import { SpriteCanvas } from './SpriteCanvas';
 import { CheckerBoard } from './CheckerBoard';
 import { ScrollArea } from './ui/scroll-area';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from './ui/tabs';
 import { Select, SelectItem, SelectValue, SelectContent, SelectTrigger } from './ui/select';
 import { DropdownMenu, DropdownMenuItem, DropdownMenuContent, DropdownMenuTrigger } from './ui/dropdown-menu';
+
+type SimilarityRef = { id: number; category: ThingCategory };
+
+const CATEGORY_BYTE: Record<'all' | ThingCategory, number> = {
+	all: 0,
+	[ThingCategory.ITEM]: 1,
+	[ThingCategory.OUTFIT]: 2,
+	[ThingCategory.EFFECT]: 3,
+	[ThingCategory.MISSILE]: 4
+};
+
+function encodeFindSimilarPayload(
+	refs: SimilarityRef[],
+	category: 'all' | ThingCategory,
+	transparent: boolean,
+	thresholdPct: number,
+	maxResults: number,
+	datPath: string,
+	sprPath: string
+): Uint8Array {
+	const encoder = new TextEncoder();
+	const datBytes = encoder.encode(datPath);
+	const sprBytes = encoder.encode(sprPath);
+	const total = 2 + refs.length * 5 + 4 + 4 + 2 + datBytes.length + 2 + sprBytes.length;
+	const buf = new ArrayBuffer(total);
+	const view = new DataView(buf);
+	const u8 = new Uint8Array(buf);
+	let p = 0;
+	view.setUint16(p, refs.length, true);
+	p += 2;
+	for (const r of refs) {
+		view.setUint32(p, r.id, true);
+		p += 4;
+		u8[p++] = CATEGORY_BYTE[r.category];
+	}
+	u8[p++] = CATEGORY_BYTE[category];
+	u8[p++] = transparent ? 1 : 0;
+	u8[p++] = Math.max(0, Math.min(100, Math.round(thresholdPct)));
+	u8[p++] = 0;
+	view.setUint32(p, maxResults, true);
+	p += 4;
+	view.setUint16(p, datBytes.length, true);
+	p += 2;
+	u8.set(datBytes, p);
+	p += datBytes.length;
+	view.setUint16(p, sprBytes.length, true);
+	p += 2;
+	u8.set(sprBytes, p);
+	return u8;
+}
 
 type ViewMode = 'list' | 'grid' | 'large' | 'compact';
 
@@ -83,6 +134,8 @@ export const FindWindow = () => {
 	const [selectedResultId, setSelectedResultId] = useState<null | number>(null);
 	const [selectedResultCategory, setSelectedResultCategory] = useState<null | ThingCategory>(null);
 	const [viewMode, setViewModeState] = useState<ViewMode>('list');
+	const [similarityRefs, setSimilarityRefs] = useState<SimilarityRef[]>([]);
+	const [similarityThreshold, setSimilarityThreshold] = useState<number>(70);
 
 	useEffect(() => {
 		invoke<null | string>('get_find_list_view_mode')
@@ -152,43 +205,71 @@ export const FindWindow = () => {
 			return;
 		}
 
-		const activeProperties: Record<string, boolean> = {};
-		const relevantProps = ['hasLight', 'hasOffset', 'animateAlways'];
-
-		for (const [propName, value] of Object.entries(properties)) {
-			if (value === true) {
-				if (selectedCategory !== 'all' && selectedCategory !== 'item') {
-					if (!relevantProps.includes(propName)) {
-						continue;
-					}
-				}
-				activeProperties[propName] = true;
-			}
-		}
-
-		const parsedSpriteId = parseInt(spriteIdInput.trim(), 10);
-		const spriteId = !isNaN(parsedSpriteId) && parsedSpriteId > 0 ? parsedSpriteId : null;
-
+		const isSimilarity = similarityRefs.length > 0;
 		setIsSearching(true);
 		try {
-			const response: any = await invoke('search_things_bin', {
-				limit: 0,
-				spriteId,
-				path: datPath,
-				name: name.trim() || null,
-				properties: activeProperties,
-				category: selectedCategory === 'all' ? null : selectedCategory
-			});
-
 			let bytes: Uint8Array;
-			if (response instanceof Uint8Array) {
-				bytes = response;
-			} else if (Array.isArray(response)) {
-				bytes = new Uint8Array(response);
-			} else if (response && response.buffer instanceof ArrayBuffer) {
-				bytes = new Uint8Array(response.buffer, response.byteOffset ?? 0, response.byteLength ?? response.buffer.byteLength);
+
+			if (isSimilarity) {
+				const sprPath = localStorage.getItem('sprite-forge-spr-path');
+				if (!sprPath) {
+					setSearchResults([]);
+					return;
+				}
+				const transparency = localStorage.getItem('sprite-forge-transparency') === 'true';
+				const payload = encodeFindSimilarPayload(
+					similarityRefs,
+					selectedCategory,
+					transparency,
+					similarityThreshold,
+					0,
+					datPath,
+					sprPath
+				);
+				const response: any = await invoke('find_similar_bin', payload);
+				bytes =
+					response instanceof Uint8Array
+						? response
+						: Array.isArray(response)
+							? new Uint8Array(response)
+							: response && response.buffer instanceof ArrayBuffer
+								? new Uint8Array(response.buffer, response.byteOffset ?? 0, response.byteLength ?? response.buffer.byteLength)
+								: new Uint8Array(response);
 			} else {
-				bytes = new Uint8Array(response);
+				const activeProperties: Record<string, boolean> = {};
+				const relevantProps = ['hasLight', 'hasOffset', 'animateAlways'];
+
+				for (const [propName, value] of Object.entries(properties)) {
+					if (value === true) {
+						if (selectedCategory !== 'all' && selectedCategory !== 'item') {
+							if (!relevantProps.includes(propName)) {
+								continue;
+							}
+						}
+						activeProperties[propName] = true;
+					}
+				}
+
+				const parsedSpriteId = parseInt(spriteIdInput.trim(), 10);
+				const spriteId = !isNaN(parsedSpriteId) && parsedSpriteId > 0 ? parsedSpriteId : null;
+
+				const response: any = await invoke('search_things_bin', {
+					limit: 0,
+					spriteId,
+					path: datPath,
+					name: name.trim() || null,
+					properties: activeProperties,
+					category: selectedCategory === 'all' ? null : selectedCategory
+				});
+
+				bytes =
+					response instanceof Uint8Array
+						? response
+						: Array.isArray(response)
+							? new Uint8Array(response)
+							: response && response.buffer instanceof ArrayBuffer
+								? new Uint8Array(response.buffer, response.byteOffset ?? 0, response.byteLength ?? response.buffer.byteLength)
+								: new Uint8Array(response);
 			}
 
 			const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
@@ -327,6 +408,10 @@ export const FindWindow = () => {
 					marketRestrictProfession: 0
 				};
 
+				if (isSimilarity) {
+					offset += 1;
+				}
+
 				newResults.push({ id, category });
 				newThings.set(`${category}-${id}`, thing);
 			}
@@ -339,7 +424,7 @@ export const FindWindow = () => {
 		} finally {
 			setIsSearching(false);
 		}
-	}, [name, properties, selectedCategory, spriteIdInput]);
+	}, [name, properties, selectedCategory, spriteIdInput, similarityRefs, similarityThreshold]);
 
 	const selectResult = useCallback(
 		async (id: number, category: ThingCategory) => {
@@ -435,6 +520,7 @@ export const FindWindow = () => {
 		setSpriteIdInput('');
 		setSearchResults([]);
 		setResultThings(new Map());
+		setSimilarityRefs([]);
 		setSelectedResultId(null);
 		setSelectedResultCategory(null);
 	}, []);
@@ -506,6 +592,55 @@ export const FindWindow = () => {
 			handleFind();
 		}
 	}, [spriteIdInput, handleFind]);
+
+	const pendingSimilarityRef = useRef<boolean>(false);
+
+	const applySimilarityRefs = useCallback((refs: SimilarityRef[]) => {
+		const cleaned = refs.filter((r) => typeof r.id === 'number' && r.category);
+		if (cleaned.length === 0) return;
+		setProperties(PROPERTIES.reduce((acc, prop) => ({ ...acc, [prop.property]: false }), {}));
+		setName('');
+		setSpriteIdInput('');
+		const categories = new Set(cleaned.map((r) => r.category));
+		setSelectedCategory(categories.size === 1 ? [...categories][0] : 'all');
+		setSimilarityRefs(cleaned);
+		pendingSimilarityRef.current = true;
+	}, []);
+
+	useEffect(() => {
+		const raw = localStorage.getItem('sprite-forge-pending-find-similar');
+		if (!raw) return;
+		try {
+			const parsed = JSON.parse(raw) as { ts: number; refs: SimilarityRef[] };
+			if (Date.now() - parsed.ts < 30_000 && Array.isArray(parsed.refs)) {
+				applySimilarityRefs(parsed.refs);
+			}
+		} catch {
+			/* noop */
+		}
+		localStorage.removeItem('sprite-forge-pending-find-similar');
+	}, [applySimilarityRefs]);
+
+	useEffect(() => {
+		let unlisten: undefined | (() => void);
+		const setupListener = async () => {
+			const { listen } = await import('@tauri-apps/api/event');
+			unlisten = await listen<{ refs: SimilarityRef[] }>('find_similar', (event) => {
+				applySimilarityRefs(event.payload?.refs || []);
+			});
+		};
+		setupListener();
+		return () => {
+			if (unlisten) unlisten();
+		};
+	}, [applySimilarityRefs]);
+
+	useEffect(() => {
+		if (pendingSimilarityRef.current && similarityRefs.length > 0) {
+			pendingSimilarityRef.current = false;
+			handleFind();
+		}
+	}, [similarityRefs, handleFind]);
 
 	const isMac = navigator.userAgent.includes('Mac');
 
@@ -594,8 +729,56 @@ export const FindWindow = () => {
 				<TabsContent value="objects" className="flex-1 flex overflow-hidden mt-0 p-2 gap-2">
 					<div className="w-72 bg-card rounded-lg shadow-island flex flex-col overflow-hidden flex-shrink-0">
 						<div className="h-8 px-3 flex items-center border-b border-border/50 bg-secondary/80 flex-shrink-0">
-							<h2 className="text-xs font-semibold text-foreground uppercase tracking-wide">Filters</h2>
+							<h2 className="text-xs font-semibold text-foreground uppercase tracking-wide">
+								{similarityRefs.length > 0 ? 'Similarity' : 'Filters'}
+							</h2>
 						</div>
+
+						{similarityRefs.length > 0 && (
+							<>
+								<div className="p-3 flex-shrink-0 border-b border-border/50">
+									<label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 flex items-center gap-1">
+										<Sparkles className="h-3 w-3" />
+										<span>Similar to</span>
+									</label>
+									<div className="flex flex-wrap gap-1">
+										{similarityRefs.map((r) => (
+											<div
+												key={`${r.category}-${r.id}`}
+												className="flex items-center gap-1 bg-secondary/80 rounded px-1.5 py-0.5 text-[10px] font-mono"
+											>
+												<span className="text-foreground">
+													{r.category.charAt(0).toUpperCase()}#{r.id}
+												</span>
+												<button
+													className="text-muted-foreground hover:text-destructive"
+													onClick={() =>
+														setSimilarityRefs((prev) => prev.filter((x) => !(x.id === r.id && x.category === r.category)))
+													}
+												>
+													<X className="h-2.5 w-2.5" />
+												</button>
+											</div>
+										))}
+									</div>
+								</div>
+
+								<div className="p-3 flex-shrink-0 border-b border-border/50">
+									<label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 flex items-center justify-between">
+										<span>Min similarity</span>
+										<span className="font-mono text-foreground">{similarityThreshold}%</span>
+									</label>
+									<Slider
+										min={0}
+										step={1}
+										max={100}
+										value={[similarityThreshold]}
+										onValueChange={(v) => setSimilarityThreshold(v[0] ?? 70)}
+									/>
+								</div>
+							</>
+						)}
+
 						<div className="p-3 flex-shrink-0">
 							<label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">
 								Category
@@ -614,46 +797,52 @@ export const FindWindow = () => {
 							</Select>
 						</div>
 
-						<div className="px-3 pb-1 flex-shrink-0">
-							<label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block">Properties</label>
-						</div>
-						<ScrollArea className="flex-1 px-3">
-							<div className="space-y-2 pb-2">
-								{PROPERTIES.filter((prop) => {
-									if (selectedCategory === 'all' || selectedCategory === 'item') return true;
-									const relevantProps = ['hasLight', 'hasOffset', 'animateAlways'];
-									return relevantProps.includes(prop.property);
-								}).map((prop) => (
-									<div key={prop.property} className="flex items-center justify-between">
-										<span className="text-xs">{prop.display}</span>
-										<Switch
-											checked={properties[prop.property] || false}
-											onCheckedChange={() => handlePropertyToggle(prop.property)}
-										/>
+						{similarityRefs.length === 0 && (
+							<>
+								<div className="px-3 pb-1 flex-shrink-0">
+									<label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block">
+										Properties
+									</label>
+								</div>
+								<ScrollArea className="flex-1 px-3">
+									<div className="space-y-2 pb-2">
+										{PROPERTIES.filter((prop) => {
+											if (selectedCategory === 'all' || selectedCategory === 'item') return true;
+											const relevantProps = ['hasLight', 'hasOffset', 'animateAlways'];
+											return relevantProps.includes(prop.property);
+										}).map((prop) => (
+											<div key={prop.property} className="flex items-center justify-between">
+												<span className="text-xs">{prop.display}</span>
+												<Switch
+													checked={properties[prop.property] || false}
+													onCheckedChange={() => handlePropertyToggle(prop.property)}
+												/>
+											</div>
+										))}
 									</div>
-								))}
-							</div>
-						</ScrollArea>
+								</ScrollArea>
 
-						<div className="p-3 border-t border-border/50 flex-shrink-0">
-							<label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">
-								Name
-							</label>
-							<Input value={name} placeholder="" className="h-8 text-xs" onChange={(e) => setName(e.target.value)} />
-						</div>
+								<div className="p-3 border-t border-border/50 flex-shrink-0">
+									<label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">
+										Name
+									</label>
+									<Input value={name} placeholder="" className="h-8 text-xs" onChange={(e) => setName(e.target.value)} />
+								</div>
 
-						<div className="px-3 pb-3 flex-shrink-0">
-							<label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">
-								Sprite ID
-							</label>
-							<Input
-								placeholder=""
-								inputMode="numeric"
-								value={spriteIdInput}
-								className="h-8 text-xs font-mono"
-								onChange={(e) => setSpriteIdInput(e.target.value.replace(/\D/g, ''))}
-							/>
-						</div>
+								<div className="px-3 pb-3 flex-shrink-0">
+									<label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">
+										Sprite ID
+									</label>
+									<Input
+										placeholder=""
+										inputMode="numeric"
+										value={spriteIdInput}
+										className="h-8 text-xs font-mono"
+										onChange={(e) => setSpriteIdInput(e.target.value.replace(/\D/g, ''))}
+									/>
+								</div>
+							</>
+						)}
 					</div>
 
 					<div className="flex-1 bg-card rounded-lg shadow-island flex flex-col overflow-hidden">
@@ -698,9 +887,11 @@ export const FindWindow = () => {
 								<div className="text-xs text-muted-foreground p-4 text-center">Searching...</div>
 							) : searchResults.length === 0 ? (
 								<div className="text-xs text-muted-foreground p-4 text-center">
-									{name.trim() === '' && spriteIdInput.trim() === '' && Object.values(properties).every((v) => !v)
-										? 'Enter a name, sprite ID or select properties to search'
-										: 'No results'}
+									{similarityRefs.length > 0
+										? 'No matches above the similarity threshold'
+										: name.trim() === '' && spriteIdInput.trim() === '' && Object.values(properties).every((v) => !v)
+											? 'Enter a name, sprite ID or select properties to search'
+											: 'No results'}
 								</div>
 							) : (
 								<div ref={parentRef} className="h-full overflow-auto">
@@ -740,7 +931,6 @@ export const FindWindow = () => {
 													{rowItems.map((result) => {
 														const key = `${result.category}-${result.id}`;
 														const thing = resultThings.get(key);
-														const spriteId = thing?.spriteIndex?.[0];
 
 														return (
 															<div
@@ -765,7 +955,7 @@ export const FindWindow = () => {
 																	viewMode === 'large' && 'p-1 flex items-center gap-1.5 h-[140px]'
 																)}
 															>
-																{spriteId && (
+																{thing && (
 																	<CheckerBoard
 																		className={cn(
 																			'flex-shrink-0 border border-border/50 rounded overflow-hidden flex items-center justify-center',
@@ -775,24 +965,20 @@ export const FindWindow = () => {
 																			viewMode === 'large' && 'w-32 h-32'
 																		)}
 																	>
-																		{thing ? (
-																			<SpriteCanvas
-																				showEmpty
-																				thing={thing}
-																				renderMode="list"
-																				width={thing.width}
-																				height={thing.height}
-																				scale={
-																					viewMode === 'list'
-																						? 32 / (Math.max(thing.width, thing.height) * 32)
-																						: viewMode === 'grid' || viewMode === 'compact'
-																							? 48 / (Math.max(thing.width, thing.height) * 32)
-																							: 128 / (Math.max(thing.width, thing.height) * 32)
-																				}
-																			/>
-																		) : (
-																			<span className="text-[8px] text-muted-foreground">{spriteId}</span>
-																		)}
+																		<SpriteCanvas
+																			showEmpty
+																			thing={thing}
+																			renderMode="list"
+																			width={thing.width}
+																			height={thing.height}
+																			scale={
+																				viewMode === 'list'
+																					? 32 / (Math.max(thing.width, thing.height) * 32)
+																					: viewMode === 'grid' || viewMode === 'compact'
+																						? 48 / (Math.max(thing.width, thing.height) * 32)
+																						: 128 / (Math.max(thing.width, thing.height) * 32)
+																			}
+																		/>
 																	</CheckerBoard>
 																)}
 																<div
@@ -843,6 +1029,7 @@ export const FindWindow = () => {
 							name.trim() === '' &&
 							spriteIdInput.trim() === '' &&
 							Object.values(properties).every((v) => !v) &&
+							similarityRefs.length === 0 &&
 							searchResults.length === 0
 						}
 					>
@@ -859,10 +1046,14 @@ export const FindWindow = () => {
 								handleFind();
 							}}
 							disabled={
-								isSearching || (name.trim() === '' && spriteIdInput.trim() === '' && Object.values(properties).every((v) => !v))
+								isSearching ||
+								(similarityRefs.length === 0 &&
+									name.trim() === '' &&
+									spriteIdInput.trim() === '' &&
+									Object.values(properties).every((v) => !v))
 							}
 						>
-							{isSearching ? 'Searching...' : 'Find'}
+							{isSearching ? 'Searching...' : similarityRefs.length > 0 ? 'Find similar' : 'Find'}
 						</Button>
 						<Button
 							size="sm"
