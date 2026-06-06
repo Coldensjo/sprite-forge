@@ -1,0 +1,21 @@
+import { ThingCategory } from '@/lib/tibia';
+
+export const ZOOM_LEVELS = [1, 2, 4, 8];
+
+export const categoryNoun = (category: ThingCategory): string =>
+	category === ThingCategory.ITEM
+		? 'item'
+		: category === ThingCategory.OUTFIT
+			? 'outfit'
+			: category === ThingCategory.EFFECT
+				? 'effect'
+				: 'missile';
+
+export const categoryTitle = (category: ThingCategory): string =>
+	category === ThingCategory.ITEM
+		? 'Object'
+		: category === ThingCategory.OUTFIT
+			? 'Outfit'
+			: category === ThingCategory.EFFECT
+				? 'Effect'
+				: 'Missile';
