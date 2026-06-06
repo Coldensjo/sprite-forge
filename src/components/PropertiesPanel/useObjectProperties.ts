@@ -1,10 +1,10 @@
 import type { SceneTile, OutfitData, Visibility, ItemPropertiesState } from './types';
 
 import { ThingCategory } from '@/lib/tibia';
-import { useToast } from '@/hooks/use-toast';
 import { invoke } from '@tauri-apps/api/core';
-import { useTibiaData } from '@/contexts/TibiaDataContext';
+import { useToast } from '@/usecase/hooks/use-toast';
 import { useRef, useState, useEffect, useCallback } from 'react';
+import { useTibiaData } from '@/usecase/context/TibiaDataContext';
 
 import { ZOOM_LEVELS } from './constants';
 import { loadItemState, saveItemState, getItemStateKey } from './itemState';

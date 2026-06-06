@@ -1,7 +1,7 @@
 import { Play, Pause, FileQuestion } from 'lucide-react';
 import { ThingCategory, loadSpriteIds } from '@/lib/tibia';
-import { useTibiaData } from '@/contexts/TibiaDataContext';
 import { useRef, useMemo, useState, useEffect } from 'react';
+import { useTibiaData } from '@/usecase/context/TibiaDataContext';
 import { getPingPongFrame, AnimationDirection } from '@/lib/tibia/animation';
 
 import { Button } from './ui/button';

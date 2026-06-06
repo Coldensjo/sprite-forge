@@ -1,6 +1,6 @@
 import { memo, useRef, useEffect } from 'react';
-import { useTibiaData } from '@/contexts/TibiaDataContext';
 import { SPRITE_SIZE, isValidSpriteId } from '@/lib/tibia';
+import { useTibiaData } from '@/usecase/context/TibiaDataContext';
 
 // Collect all sprite IDs needed for scene items
 function collectSceneSpriteIds(

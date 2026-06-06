@@ -1,14 +1,14 @@
 import { Toaster } from '@/components/ui/toaster';
-import { ThemeProvider } from '@/contexts/ThemeContext';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { Toaster as Sonner } from '@/components/ui/sonner';
-import { DragDropProvider } from '@/contexts/DragDropContext';
+import { ThemeProvider } from '@/usecase/context/ThemeContext';
 import { Route, Routes, BrowserRouter } from 'react-router-dom';
-import { TibiaDataProvider } from '@/contexts/TibiaDataContext';
-import { ErrorDialogProvider } from '@/contexts/ErrorDialogContext';
-import { PanelSettingsProvider } from '@/contexts/PanelSettingsContext';
+import { DragDropProvider } from '@/usecase/context/DragDropContext';
+import { TibiaDataProvider } from '@/usecase/context/TibiaDataContext';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { GeneralSettingsProvider } from '@/contexts/GeneralSettingsContext';
+import { ErrorDialogProvider } from '@/usecase/context/ErrorDialogContext';
+import { PanelSettingsProvider } from '@/usecase/context/PanelSettingsContext';
+import { GeneralSettingsProvider } from '@/usecase/context/GeneralSettingsContext';
 
 import Index from './pages/Index';
 import NotFound from './pages/NotFound';

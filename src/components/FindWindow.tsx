@@ -3,8 +3,8 @@ import { invoke } from '@tauri-apps/api/core';
 import { isValidSpriteId } from '@/lib/tibia';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { useTibiaData } from '@/contexts/TibiaDataContext';
 import { ThingType, ThingCategory } from '@/lib/tibia/types';
+import { useTibiaData } from '@/usecase/context/TibiaDataContext';
 import { useRef, useMemo, useState, useEffect, useCallback } from 'react';
 import { X, List, Minus, Square, Trash2, Columns, Sparkles, LayoutGrid } from 'lucide-react';
 

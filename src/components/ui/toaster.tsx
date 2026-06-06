@@ -1,5 +1,5 @@
 import { Copy } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
+import { useToast } from '@/usecase/hooks/use-toast';
 import {
 	Toast,
 	ToastClose,

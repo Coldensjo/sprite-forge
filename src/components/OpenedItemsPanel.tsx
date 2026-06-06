@@ -1,7 +1,7 @@
 import { X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ThingCategory } from '@/lib/tibia';
-import { useTibiaData } from '@/contexts/TibiaDataContext';
+import { useTibiaData } from '@/usecase/context/TibiaDataContext';
 
 import { Button } from './ui/button';
 import { ScrollArea } from './ui/scroll-area';

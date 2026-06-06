@@ -1,11 +1,11 @@
 import { cn } from '@/lib/utils';
 import { type Sprite } from '@/lib/tibia';
-import { useToast } from '@/hooks/use-toast';
 import { invoke } from '@tauri-apps/api/core';
-import { useDragDrop } from '@/contexts/DragDropContext';
-import { useTibiaData } from '@/contexts/TibiaDataContext';
-import { useGeneralSettings } from '@/contexts/GeneralSettingsContext';
+import { useToast } from '@/usecase/hooks/use-toast';
+import { useDragDrop } from '@/usecase/context/DragDropContext';
+import { useTibiaData } from '@/usecase/context/TibiaDataContext';
 import { useRef, useMemo, useState, useEffect, useCallback } from 'react';
+import { useGeneralSettings } from '@/usecase/context/GeneralSettingsContext';
 import { DropdownMenu, DropdownMenuItem, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import {
 	ContextMenu,

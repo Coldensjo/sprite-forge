@@ -1,9 +1,9 @@
 import { Toaster } from '@/components/ui/toaster';
 import { FindWindow } from '@/components/FindWindow';
-import { ThemeProvider } from '@/contexts/ThemeContext';
 import { TooltipProvider } from '@/components/ui/tooltip';
-import { DragDropProvider } from '@/contexts/DragDropContext';
-import { TibiaDataProvider } from '@/contexts/TibiaDataContext';
+import { ThemeProvider } from '@/usecase/context/ThemeContext';
+import { DragDropProvider } from '@/usecase/context/DragDropContext';
+import { TibiaDataProvider } from '@/usecase/context/TibiaDataContext';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 const queryClient = new QueryClient();

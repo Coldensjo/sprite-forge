@@ -5,9 +5,9 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { CheckerBoard } from '@/components/CheckerBoard';
 import { SpriteCanvas } from '@/components/SpriteCanvas';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { useTibiaData } from '@/contexts/TibiaDataContext';
 import { useRef, useMemo, useState, useEffect } from 'react';
 import { Search, ChevronLeft, ChevronRight } from 'lucide-react';
+import { useTibiaData } from '@/usecase/context/TibiaDataContext';
 import { Dialog, DialogTitle, DialogHeader, DialogContent } from '@/components/ui/dialog';
 import { Select, SelectItem, SelectValue, SelectContent, SelectTrigger } from '@/components/ui/select';
 import {

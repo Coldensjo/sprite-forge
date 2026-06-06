@@ -1,8 +1,8 @@
 import type { Theme } from '@/lib/themes/types';
 
 import { cn } from '@/lib/utils';
-import { useToast } from '@/hooks/use-toast';
-import { useTheme } from '@/contexts/ThemeContext';
+import { useToast } from '@/usecase/hooks/use-toast';
+import { useTheme } from '@/usecase/context/ThemeContext';
 import { Sun, Moon, Check, Upload, Sparkles, Download } from 'lucide-react';
 
 import { Button } from './ui/button';

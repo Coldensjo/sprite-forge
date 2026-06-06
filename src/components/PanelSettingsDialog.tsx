@@ -1,4 +1,4 @@
-import { usePanelSettings } from '@/contexts/PanelSettingsContext';
+import { usePanelSettings } from '@/usecase/context/PanelSettingsContext';
 
 import { Label } from './ui/label';
 import { Switch } from './ui/switch';

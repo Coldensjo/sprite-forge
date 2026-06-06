@@ -1,13 +1,13 @@
 import { cn } from '@/lib/utils';
 import { join } from '@tauri-apps/api/path';
 import { useState, useEffect } from 'react';
-import { useToast } from '@/hooks/use-toast';
 import { errorToString } from '@/lib/errorMessage';
+import { useToast } from '@/usecase/hooks/use-toast';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { useTibiaData } from '@/contexts/TibiaDataContext';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
-import { useErrorDialog } from '@/contexts/ErrorDialogContext';
-import { usePanelSettings } from '@/contexts/PanelSettingsContext';
+import { useTibiaData } from '@/usecase/context/TibiaDataContext';
+import { useErrorDialog } from '@/usecase/context/ErrorDialogContext';
+import { usePanelSettings } from '@/usecase/context/PanelSettingsContext';
 import { loadTibiaData, type ThingType, optimizeSprites } from '@/lib/tibia';
 import {
 	X,

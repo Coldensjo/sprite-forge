@@ -2,8 +2,8 @@ import { cn } from '@/lib/utils';
 import { logger, EventCode } from '@/lib/debug';
 import { blendOutfit } from '@/lib/tibia/outfit';
 import { Loader2, ImagePlus } from 'lucide-react';
-import { useDragDrop } from '@/contexts/DragDropContext';
-import { useTibiaData } from '@/contexts/TibiaDataContext';
+import { useDragDrop } from '@/usecase/context/DragDropContext';
+import { useTibiaData } from '@/usecase/context/TibiaDataContext';
 import { memo, useRef, useMemo, useState, useEffect, useCallback } from 'react';
 import { SPRITE_SIZE, getSpriteIndex, type ThingType, isValidSpriteId, importObjectSheet } from '@/lib/tibia';
 

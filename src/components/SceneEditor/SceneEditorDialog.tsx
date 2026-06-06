@@ -5,8 +5,8 @@ import { invoke } from '@tauri-apps/api/core';
 import { Button } from '@/components/ui/button';
 import { SpriteCanvas } from '@/components/SpriteCanvas';
 import { CheckerBoard } from '@/components/CheckerBoard';
-import { useTibiaData } from '@/contexts/TibiaDataContext';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { useTibiaData } from '@/usecase/context/TibiaDataContext';
 import { Select, SelectItem, SelectValue, SelectContent, SelectTrigger } from '@/components/ui/select';
 import { X, Save, Star, Plus, Trash2, Search, Eraser, Pencil, Pipette, Maximize2, Minimize2 } from 'lucide-react';
 

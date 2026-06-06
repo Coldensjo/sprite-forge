@@ -1,11 +1,11 @@
 import { Toolbar } from '@/components/Toolbar';
 import { ItemList } from '@/components/ItemList';
-import { useTheme } from '@/contexts/ThemeContext';
 import { SpriteList } from '@/components/SpriteList';
+import { useTheme } from '@/usecase/context/ThemeContext';
 import { PropertiesPanel } from '@/components/PropertiesPanel';
 import { OpenedItemsPanel } from '@/components/OpenedItemsPanel';
-import { usePanelSettings } from '@/contexts/PanelSettingsContext';
 import { VisualizationPanel } from '@/components/VisualizationPanel';
+import { usePanelSettings } from '@/usecase/context/PanelSettingsContext';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 
 const ResizeHandle = () => (

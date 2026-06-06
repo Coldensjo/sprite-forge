@@ -1,11 +1,11 @@
 import { cn } from '@/lib/utils';
-import { useToast } from '@/hooks/use-toast';
 import { invoke } from '@tauri-apps/api/core';
 import { logger, EventCode } from '@/lib/debug';
-import { useTibiaData } from '@/contexts/TibiaDataContext';
+import { useToast } from '@/usecase/hooks/use-toast';
+import { useTibiaData } from '@/usecase/context/TibiaDataContext';
 import { exportObjectSheet, importObjectSheet } from '@/lib/tibia';
-import { useGeneralSettings } from '@/contexts/GeneralSettingsContext';
 import { useRef, useMemo, useState, useEffect, useCallback } from 'react';
+import { useGeneralSettings } from '@/usecase/context/GeneralSettingsContext';
 import { ContextMenu, ContextMenuItem, ContextMenuContent, ContextMenuTrigger } from '@/components/ui/context-menu';
 import { DropdownMenu, DropdownMenuItem, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import {

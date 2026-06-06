@@ -1,4 +1,4 @@
-import type { ToastProps, ToastActionElement } from '@/components/ui/toast';
+import type { ToastProps, ToastActionElement } from '@/components/ui/toast.tsx';
 
 import * as React from 'react';
 

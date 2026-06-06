@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useGeneralSettings } from '@/contexts/GeneralSettingsContext';
+import { useGeneralSettings } from '@/usecase/context/GeneralSettingsContext';
 
 import { Slider } from './ui/slider';
 import { Dialog, DialogTitle, DialogHeader, DialogContent, DialogDescription } from './ui/dialog';

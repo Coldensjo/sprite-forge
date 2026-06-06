@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useUpdater } from '@/hooks/use-updater';
+import { useUpdater } from '@/usecase/hooks/use-updater';
 import { Download, RotateCw, RefreshCw, AlertCircle, CheckCircle2 } from 'lucide-react';
 
 import { Button } from './ui/button';

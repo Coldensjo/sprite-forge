@@ -1,8 +1,8 @@
 import type { CommitLog } from '@/lib/versionControl';
 
 import { useState, useEffect } from 'react';
-import { useToast } from '@/hooks/use-toast';
 import { invoke } from '@tauri-apps/api/core';
+import { useToast } from '@/usecase/hooks/use-toast';
 import { revealItemInDir } from '@tauri-apps/plugin-opener';
 import { Clock, Trash2, Package, FolderOpen } from 'lucide-react';
 import { getCommitHistory, cleanOldVersions } from '@/lib/versionControl';
