@@ -5,6 +5,7 @@ import { X, Save, RotateCcw } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { PropertiesContext } from '@/usecase/context/PropertiesContext';
+import { useObjectProperties } from '@/usecase/hooks/useObjectProperties';
 import {
 	AlertDialog,
 	AlertDialogTitle,
@@ -21,7 +22,6 @@ import { categoryTitle } from './constants';
 import { PreviewPanel } from './PreviewPanel';
 import { BasicsColumn } from './BasicsColumn';
 import { PropertyColumns } from './PropertyColumns';
-import { useObjectProperties } from './useObjectProperties';
 
 export const PropertiesPanel = () => {
 	const c = useObjectProperties();

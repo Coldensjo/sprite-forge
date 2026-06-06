@@ -1,4 +1,4 @@
-import type { useObjectProperties } from '../useObjectProperties';
+import type { useObjectProperties } from '@/usecase/hooks/useObjectProperties';
 
 import { X, Plus } from 'lucide-react';
 import { Label } from '@/components/ui/label';

@@ -1,14 +1,13 @@
-import type { SceneTile, ItemPropertiesState } from './types';
+import type { SceneTile } from '@/usecase/util/spriteLayoutUtils';
 import type { OutfitData, Visibility } from '@/usecase/context/PropertiesContext/types';
 
 import { ThingCategory } from '@/lib/tibia';
 import { invoke } from '@tauri-apps/api/core';
 import { useToast } from '@/usecase/hooks/use-toast';
+import { ZOOM_LEVELS } from '@/usecase/util/constants';
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { useTibiaData } from '@/usecase/context/TibiaDataContext';
-
-import { ZOOM_LEVELS } from './constants';
-import { loadItemState, saveItemState, getItemStateKey } from './itemState';
+import { loadItemState, saveItemState, getItemStateKey, type ItemPropertiesState } from '@/usecase/util/itemStateUtils';
 
 export const useObjectProperties = () => {
 	const {

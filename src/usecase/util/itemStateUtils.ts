@@ -1,5 +1,20 @@
 import type { ThingCategory } from '@/lib/tibia';
-import type { ItemPropertiesState } from './types';
+import type { OutfitData } from '@/usecase/context/PropertiesContext/types';
+
+export interface ItemPropertiesState {
+	zoom: number;
+	panX: number;
+	panY: number;
+	patternX: number;
+	patternY: number;
+	patternZ: number;
+	showGrid: boolean;
+	isPlaying: boolean;
+	currentFrame: number;
+	currentLayer: number;
+	showExactSize: boolean;
+	outfitData: OutfitData;
+}
 
 export const getItemStateKey = (category: ThingCategory, id: number) => {
 	return `sprite-forge-item-state-${category}-${id}`;
