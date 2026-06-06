@@ -40,8 +40,9 @@ export function Toaster() {
 
 				return (
 					<Toast key={id} variant={variant} {...props}>
-						<div className="grid gap-1">
+						<div className="flex items-center gap-2 min-w-0">
 							{title && <ToastTitle>{title}</ToastTitle>}
+							{title && description && <span className="text-foreground/40">·</span>}
 							{description && <ToastDescription>{description}</ToastDescription>}
 						</div>
 						{action || copyAction}
