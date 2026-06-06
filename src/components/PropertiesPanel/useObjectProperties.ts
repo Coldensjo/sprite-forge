@@ -1,4 +1,5 @@
-import type { SceneTile, OutfitData, Visibility, ItemPropertiesState } from './types';
+import type { SceneTile, ItemPropertiesState } from './types';
+import type { OutfitData, Visibility } from '@/usecase/context/PropertiesContext/types';
 
 import { ThingCategory } from '@/lib/tibia';
 import { invoke } from '@tauri-apps/api/core';

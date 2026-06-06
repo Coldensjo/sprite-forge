@@ -4,6 +4,7 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { SpriteCanvas } from '@/components/SpriteCanvas';
 import { CheckerBoard } from '@/components/CheckerBoard';
+import { usePropertiesContext } from '@/usecase/context/PropertiesContext';
 import {
 	Copy,
 	Play,
@@ -33,7 +34,6 @@ import {
 } from 'lucide-react';
 
 import { ZOOM_LEVELS } from '../constants';
-import { usePropertiesContext } from '../context';
 
 interface PreviewPanelProps {
 	preview: ReturnType<typeof useObjectProperties>['preview'];

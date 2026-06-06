@@ -7,9 +7,9 @@ import { Button } from '@/components/ui/button';
 import { NumberInput } from '@/components/ui/number-input';
 import { TibiaColorPicker } from '@/components/TibiaColorPicker';
 import { EightBitColorPicker } from '@/components/EightBitColorPicker';
+import { usePropertiesContext } from '@/usecase/context/PropertiesContext';
 import { Select, SelectItem, SelectValue, SelectContent, SelectTrigger } from '@/components/ui/select';
 
-import { usePropertiesContext } from '../context';
 import { PropertyWithUndo } from '../PropertyWithUndo';
 
 interface BasicsColumnProps {

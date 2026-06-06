@@ -1,9 +1,10 @@
-import type { PropertiesContextValue } from './types';
+import type { PropertiesContextValue } from '@/usecase/context/PropertiesContext/types';
 
 import { Button } from '@/components/ui/button';
 import { X, Save, RotateCcw } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { PropertiesContext } from '@/usecase/context/PropertiesContext';
 import {
 	AlertDialog,
 	AlertDialogTitle,
@@ -17,7 +18,6 @@ import {
 
 import { EmptyState } from './EmptyState';
 import { categoryTitle } from './constants';
-import { PropertiesContext } from './context';
 import { PreviewPanel } from './PreviewPanel';
 import { BasicsColumn } from './BasicsColumn';
 import { PropertyColumns } from './PropertyColumns';
