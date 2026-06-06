@@ -5,8 +5,8 @@ import { useTibiaData } from '@/usecase/context/TibiaDataContext';
 import { getPingPongFrame, AnimationDirection } from '@/lib/tibia/animation';
 
 import { Button } from './ui/button';
-import { SpriteCanvas } from './SpriteCanvas';
 import { CheckerBoard } from './CheckerBoard';
+import { SpriteCanvas } from './commons/SpriteCanvas';
 
 export const VisualizationPanel = () => {
 	const { data, getThing, selectedCategory, highlightedItemId, notifySpritesLoaded } = useTibiaData();

@@ -1,7 +1,7 @@
 import { Toolbar } from '@/components/Toolbar';
-import { ItemList } from '@/components/ItemList';
-import { SpriteList } from '@/components/SpriteList';
+import { ItemList } from '@/components/Panels/ItemList';
 import { useTheme } from '@/usecase/context/ThemeContext';
+import { SpriteList } from '@/components/Panels/SpriteList';
 import { PropertiesPanel } from '@/components/PropertiesPanel';
 import { OpenedItemsPanel } from '@/components/OpenedItemsPanel';
 import { VisualizationPanel } from '@/components/VisualizationPanel';
