@@ -1,5 +1,5 @@
+import React from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { useState, useEffect, ReactNode, useContext, createContext } from 'react';
 
 export interface GeneralSettings {
 	listAmountObjects: number;
@@ -16,12 +16,12 @@ const DEFAULT_SETTINGS: GeneralSettings = {
 	listAmountSprites: 100
 };
 
-const GeneralSettingsContext = createContext<undefined | GeneralSettingsContextType>(undefined);
+const GeneralSettingsContext = React.createContext<undefined | GeneralSettingsContextType>(undefined);
 
-export const GeneralSettingsProvider = ({ children }: { children: ReactNode }) => {
-	const [settings, setSettingsState] = useState<GeneralSettings>(DEFAULT_SETTINGS);
+export const GeneralSettingsProvider = ({ children }: { children: React.ReactNode }) => {
+	const [settings, setSettingsState] = React.useState<GeneralSettings>(DEFAULT_SETTINGS);
 
-	useEffect(() => {
+	React.useEffect(() => {
 		invoke<{ list_amount_objects: number; list_amount_sprites: number }>('get_general_settings')
 			.then((saved) => {
 				setSettingsState({
@@ -50,7 +50,7 @@ export const GeneralSettingsProvider = ({ children }: { children: ReactNode }) =
 };
 
 export const useGeneralSettings = () => {
-	const context = useContext(GeneralSettingsContext);
+	const context = React.useContext(GeneralSettingsContext);
 	if (!context) {
 		throw new Error('useGeneralSettings must be used within GeneralSettingsProvider');
 	}

@@ -1,4 +1,4 @@
-import React, { useRef, useMemo, useState, useEffect, useContext, useCallback, createContext } from 'react';
+import React from 'react';
 
 interface DragDropContextType {
 	draggedItem: any;
@@ -8,18 +8,18 @@ interface DragDropContextType {
 	startDrag: (item: any, type: string, preview?: React.ReactNode) => void;
 }
 
-const DragDropContext = createContext<undefined | DragDropContextType>(undefined);
+const DragDropContext = React.createContext<undefined | DragDropContextType>(undefined);
 
 export const DragDropProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-	const [isDragging, setIsDragging] = useState(false);
-	const [draggedItem, setDraggedItem] = useState<any>(null);
-	const [dragType, setDragType] = useState<null | string>(null);
-	const [previewElement, setPreviewElement] = useState<null | React.ReactNode>(null);
-	const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
-	const mousePosRef = useRef({ x: 0, y: 0 });
+	const [isDragging, setIsDragging] = React.useState(false);
+	const [draggedItem, setDraggedItem] = React.useState<any>(null);
+	const [dragType, setDragType] = React.useState<null | string>(null);
+	const [previewElement, setPreviewElement] = React.useState<null | React.ReactNode>(null);
+	const [mousePos, setMousePos] = React.useState({ x: 0, y: 0 });
+	const mousePosRef = React.useRef({ x: 0, y: 0 });
 
 	// Track mouse position globally to ensure correct start position
-	useEffect(() => {
+	React.useEffect(() => {
 		const handleGlobalMouseMove = (e: MouseEvent) => {
 			mousePosRef.current = { x: e.clientX, y: e.clientY };
 		};
@@ -27,7 +27,7 @@ export const DragDropProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 		return () => window.removeEventListener('mousemove', handleGlobalMouseMove);
 	}, []);
 
-	const startDrag = useCallback((item: any, type: string, preview?: React.ReactNode) => {
+	const startDrag = React.useCallback((item: any, type: string, preview?: React.ReactNode) => {
 		setDraggedItem(item);
 		setDragType(type);
 		setPreviewElement(preview || null);
@@ -35,14 +35,14 @@ export const DragDropProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 		setIsDragging(true);
 	}, []);
 
-	const endDrag = useCallback(() => {
+	const endDrag = React.useCallback(() => {
 		setIsDragging(false);
 		setDraggedItem(null);
 		setDragType(null);
 		setPreviewElement(null);
 	}, []);
 
-	const contextValue = useMemo(
+	const contextValue = React.useMemo(
 		() => ({
 			endDrag,
 			dragType,
@@ -53,7 +53,7 @@ export const DragDropProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 		[isDragging, draggedItem, dragType, startDrag, endDrag]
 	);
 
-	useEffect(() => {
+	React.useEffect(() => {
 		const handleMouseMove = (e: MouseEvent) => {
 			if (isDragging) {
 				setMousePos({ x: e.clientX, y: e.clientY });
@@ -128,7 +128,7 @@ export const DragDropProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 };
 
 export const useDragDrop = () => {
-	const context = useContext(DragDropContext);
+	const context = React.useContext(DragDropContext);
 	if (context === undefined) {
 		throw new Error('useDragDrop must be used within a DragDropProvider');
 	}

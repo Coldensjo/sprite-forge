@@ -1,9 +1,9 @@
-import { memo } from 'react';
+import React from 'react';
 import { cn } from '@/lib/utils';
 import { Loader2, ImagePlus } from 'lucide-react';
 import { useSpriteCanvas, type SpriteCanvasProps } from '@/usecase/hooks/useSpriteCanvas';
 
-export const SpriteCanvas = memo((props: SpriteCanvasProps) => {
+export const SpriteCanvas = React.memo((props: SpriteCanvasProps) => {
 	const {
 		scale,
 		smooth,

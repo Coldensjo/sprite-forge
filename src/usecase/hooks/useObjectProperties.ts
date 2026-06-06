@@ -1,11 +1,11 @@
 import type { SceneTile } from '@/usecase/util/spriteLayoutUtils';
 import type { OutfitData, Visibility } from '@/usecase/context/PropertiesContext/types';
 
+import React from 'react';
 import { ThingCategory } from '@/lib/tibia';
 import { invoke } from '@tauri-apps/api/core';
 import { useToast } from '@/usecase/hooks/use-toast';
 import { ZOOM_LEVELS } from '@/usecase/util/constants';
-import { useRef, useState, useEffect, useCallback } from 'react';
 import { useTibiaData } from '@/usecase/context/TibiaDataContext';
 import { loadItemState, saveItemState, getItemStateKey, type ItemPropertiesState } from '@/usecase/util/itemStateUtils';
 
@@ -29,18 +29,18 @@ export const useObjectProperties = () => {
 	} = useTibiaData();
 	const item = openedItemId && openedItemCategory ? getThing(openedItemId, openedItemCategory) : null;
 
-	const [draftItem, setDraftItem] = useState<typeof item>(null);
-	const [hasChanges, setHasChanges] = useState(false);
-	const [showCloseConfirm, setShowCloseConfirm] = useState(false);
-	const [selectedFrameGroup, setSelectedFrameGroup] = useState(0);
-	const selectedFrameGroupRef = useRef(0);
-	const originalItemRef = useRef<typeof item>(null);
-	const isNewItemRef = useRef(isNewItem);
-	const hasUnsavedChangesRef = useRef(hasUnsavedChanges);
+	const [draftItem, setDraftItem] = React.useState<typeof item>(null);
+	const [hasChanges, setHasChanges] = React.useState(false);
+	const [showCloseConfirm, setShowCloseConfirm] = React.useState(false);
+	const [selectedFrameGroup, setSelectedFrameGroup] = React.useState(0);
+	const selectedFrameGroupRef = React.useRef(0);
+	const originalItemRef = React.useRef<typeof item>(null);
+	const isNewItemRef = React.useRef(isNewItem);
+	const hasUnsavedChangesRef = React.useRef(hasUnsavedChanges);
 	isNewItemRef.current = isNewItem;
 	hasUnsavedChangesRef.current = hasUnsavedChanges;
 
-	useEffect(() => {
+	React.useEffect(() => {
 		if (item && openedItemId && openedItemCategory) {
 			let initialItem = { ...item };
 			let initialGroup = 0;
@@ -126,7 +126,7 @@ export const useObjectProperties = () => {
 		}
 	}, [item, openedItemId, openedItemCategory, updateCounter]);
 
-	const handlePropertyChange = useCallback(
+	const handlePropertyChange = React.useCallback(
 		(property: string, value: any) => {
 			if (!draftItem || !openedItemId || !openedItemCategory) return;
 
@@ -298,23 +298,23 @@ export const useObjectProperties = () => {
 		showFloorChange: isItem && clientVersion >= 710 && clientVersion <= 854
 	};
 
-	const [zoom, setZoom] = useState(1);
-	const [panX, setPanX] = useState(0);
-	const [panY, setPanY] = useState(0);
-	const [showExactSize, setShowExactSize] = useState(false);
-	const [showGrid, setShowGrid] = useState(false);
-	const [isPanEnabled, setIsPanEnabled] = useState(false);
-	const [isMiddleMousePanning, setIsMiddleMousePanning] = useState(false);
-	const [showDirectionButtons, setShowDirectionButtons] = useState(true);
+	const [zoom, setZoom] = React.useState(1);
+	const [panX, setPanX] = React.useState(0);
+	const [panY, setPanY] = React.useState(0);
+	const [showExactSize, setShowExactSize] = React.useState(false);
+	const [showGrid, setShowGrid] = React.useState(false);
+	const [isPanEnabled, setIsPanEnabled] = React.useState(false);
+	const [isMiddleMousePanning, setIsMiddleMousePanning] = React.useState(false);
+	const [showDirectionButtons, setShowDirectionButtons] = React.useState(true);
 
-	const [patternX, setPatternX] = useState(0);
-	const [patternY, setPatternY] = useState(0);
-	const [patternZ, setPatternZ] = useState(0);
-	const [currentFrame, setCurrentFrame] = useState(0);
-	const [currentLayer, setCurrentLayer] = useState(0);
-	const [isPlaying, setIsPlaying] = useState(false);
+	const [patternX, setPatternX] = React.useState(0);
+	const [patternY, setPatternY] = React.useState(0);
+	const [patternZ, setPatternZ] = React.useState(0);
+	const [currentFrame, setCurrentFrame] = React.useState(0);
+	const [currentLayer, setCurrentLayer] = React.useState(0);
+	const [isPlaying, setIsPlaying] = React.useState(false);
 
-	const [outfitData, setOutfitData] = useState<OutfitData>({
+	const [outfitData, setOutfitData] = React.useState<OutfitData>({
 		head: 0,
 		body: 0,
 		legs: 0,
@@ -322,14 +322,14 @@ export const useObjectProperties = () => {
 		addons: [false, false]
 	});
 
-	const [showScene, setShowScene] = useState(false);
-	const [showSmooth, setShowSmooth] = useState(false);
-	const [defaultSceneTiles, setDefaultSceneTiles] = useState<null | SceneTile[][]>(null);
-	const [sceneSize, setSceneSize] = useState({ width: 0, height: 0 });
-	const [sceneScrollOffset, setSceneScrollOffset] = useState(0);
-	const sceneScrollRef = useRef(0);
+	const [showScene, setShowScene] = React.useState(false);
+	const [showSmooth, setShowSmooth] = React.useState(false);
+	const [defaultSceneTiles, setDefaultSceneTiles] = React.useState<null | SceneTile[][]>(null);
+	const [sceneSize, setSceneSize] = React.useState({ width: 0, height: 0 });
+	const [sceneScrollOffset, setSceneScrollOffset] = React.useState(0);
+	const sceneScrollRef = React.useRef(0);
 
-	useEffect(() => {
+	React.useEffect(() => {
 		if (showScene && !defaultSceneTiles) {
 			loadDefaultScene();
 		}
@@ -520,11 +520,11 @@ export const useObjectProperties = () => {
 		setPanY(0);
 	};
 
-	const canvasContainerRef = useRef<HTMLDivElement>(null);
+	const canvasContainerRef = React.useRef<HTMLDivElement>(null);
 	const { toast } = useToast();
-	const [copyFlash, setCopyFlash] = useState(false);
+	const [copyFlash, setCopyFlash] = React.useState(false);
 
-	const handleCopySprite = useCallback(async () => {
+	const handleCopySprite = React.useCallback(async () => {
 		const container = canvasContainerRef.current;
 		if (!container) return;
 		const canvas = container.querySelector('canvas');
@@ -560,16 +560,16 @@ export const useObjectProperties = () => {
 		handlePropertyChange('spriteIndex', [...item.spriteIndex]);
 	};
 
-	const [hoveredSpriteId, setHoveredSpriteId] = useState<null | number>(null);
+	const [hoveredSpriteId, setHoveredSpriteId] = React.useState<null | number>(null);
 
-	const handleSpriteDoubleClick = useCallback(
+	const handleSpriteDoubleClick = React.useCallback(
 		(spriteId: number) => {
 			setHighlightedSpriteId(spriteId);
 		},
 		[setHighlightedSpriteId]
 	);
 
-	const handleSpriteDrop = useCallback(
+	const handleSpriteDrop = React.useCallback(
 		(index: number, spriteId: number | number[]) => {
 			if (draftItem && draftItem.spriteIndex) {
 				const newSpriteIndex = [...draftItem.spriteIndex];
@@ -596,10 +596,10 @@ export const useObjectProperties = () => {
 		setHoveredSpriteId(spriteId);
 	};
 
-	const hasLoadedStateRef = useRef(false);
-	const isLoadingStateRef = useRef(false);
-	const previousItemRef = useRef<null | { id: number; category: ThingCategory }>(null);
-	const stateRefs = useRef({
+	const hasLoadedStateRef = React.useRef(false);
+	const isLoadingStateRef = React.useRef(false);
+	const previousItemRef = React.useRef<null | { id: number; category: ThingCategory }>(null);
+	const stateRefs = React.useRef({
 		zoom: 1,
 		panX: 0,
 		panY: 0,
@@ -614,7 +614,7 @@ export const useObjectProperties = () => {
 		outfitData: { head: 0, body: 0, legs: 0, feet: 0, addons: [false, false] } as OutfitData
 	});
 
-	useEffect(() => {
+	React.useEffect(() => {
 		stateRefs.current.zoom = zoom;
 		stateRefs.current.panX = panX;
 		stateRefs.current.panY = panY;
@@ -642,14 +642,14 @@ export const useObjectProperties = () => {
 		outfitData
 	]);
 
-	const animationState = useRef({
+	const animationState = React.useRef({
 		lastTime: 0,
 		timeRemaining: 0,
 		skipFirstFrame: false,
 		durations: [] as number[]
 	});
 
-	const requestRef = useRef<number>();
+	const requestRef = React.useRef<number>();
 
 	const animate = (time: number) => {
 		if (!isPlaying || !draftItem) return;
@@ -700,7 +700,7 @@ export const useObjectProperties = () => {
 		requestRef.current = requestAnimationFrame(animate);
 	};
 
-	useEffect(() => {
+	React.useEffect(() => {
 		if (isPlaying && draftItem) {
 			const currentGroup = draftItem.frameGroupsData?.[selectedFrameGroupRef.current];
 
@@ -834,7 +834,7 @@ export const useObjectProperties = () => {
 		});
 	};
 
-	useEffect(() => {
+	React.useEffect(() => {
 		if (draftItem && openedItemId && openedItemCategory) {
 			if (
 				previousItemRef.current &&
@@ -954,7 +954,7 @@ export const useObjectProperties = () => {
 		}
 	}, [draftItem, openedItemId, openedItemCategory, isOutfit, item]);
 
-	useEffect(() => {
+	React.useEffect(() => {
 		if (isLoadingStateRef.current) {
 			return;
 		}
@@ -1000,7 +1000,7 @@ export const useObjectProperties = () => {
 		draftItem
 	]);
 
-	useEffect(() => {
+	React.useEffect(() => {
 		if (!data || !item || !draftItem || !data.sprPath || !draftItem.spriteIndex) return;
 
 		const spriteIds = Array.from(new Set(draftItem.spriteIndex.filter((id) => id > 0)));

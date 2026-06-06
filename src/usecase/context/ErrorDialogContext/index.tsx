@@ -1,17 +1,17 @@
+import React from 'react';
 import { errorToString } from '@/lib/errorMessage';
 import { ErrorDialog, type ErrorInfo } from '@/components/ErrorDialog';
-import { useState, useContext, useCallback, createContext, type ReactNode } from 'react';
 
 interface ErrorDialogContextValue {
 	showError: (title: string, error: unknown) => void;
 }
 
-const ErrorDialogContext = createContext<null | ErrorDialogContextValue>(null);
+const ErrorDialogContext = React.createContext<null | ErrorDialogContextValue>(null);
 
-export const ErrorDialogProvider = ({ children }: { children: ReactNode }) => {
-	const [info, setInfo] = useState<null | ErrorInfo>(null);
+export const ErrorDialogProvider = ({ children }: { children: React.ReactNode }) => {
+	const [info, setInfo] = React.useState<null | ErrorInfo>(null);
 
-	const showError = useCallback((title: string, error: unknown) => {
+	const showError = React.useCallback((title: string, error: unknown) => {
 		setInfo({ title, message: errorToString(error) });
 	}, []);
 
@@ -24,7 +24,7 @@ export const ErrorDialogProvider = ({ children }: { children: ReactNode }) => {
 };
 
 export const useErrorDialog = (): ErrorDialogContextValue => {
-	const ctx = useContext(ErrorDialogContext);
+	const ctx = React.useContext(ErrorDialogContext);
 	if (!ctx) throw new Error('useErrorDialog must be used within an ErrorDialogProvider');
 	return ctx;
 };

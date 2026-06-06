@@ -1,8 +1,8 @@
 import type { Sprite, TibiaData, ThingType } from '@/lib/tibia';
 
+import React from 'react';
 import { logger, EventCode } from '@/lib/debug';
 import { SpriteReader, ThingCategory } from '@/lib/tibia';
-import React, { useState, useEffect, useContext, useCallback, createContext } from 'react';
 
 interface TibiaDataContextType {
 	isLoading: boolean;
@@ -55,18 +55,18 @@ interface TibiaDataContextType {
 	setLoading: (loading: boolean, progress?: { stage: string; total: number; current: number }) => void;
 }
 
-const TibiaDataContext = createContext<undefined | TibiaDataContextType>(undefined);
+const TibiaDataContext = React.createContext<undefined | TibiaDataContextType>(undefined);
 
 export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-	const [data, setDataState] = useState<null | TibiaData>(null);
-	const [spriteReader, setSpriteReader] = useState<null | SpriteReader>(null);
-	const [isLoading, setIsLoading] = useState(false);
-	const [loadingProgress, setLoadingProgress] = useState<null | { stage: string; total: number; current: number }>(null);
-	const [error, setError] = useState<null | string>(null);
+	const [data, setDataState] = React.useState<null | TibiaData>(null);
+	const [spriteReader, setSpriteReader] = React.useState<null | SpriteReader>(null);
+	const [isLoading, setIsLoading] = React.useState(false);
+	const [loadingProgress, setLoadingProgress] = React.useState<null | { stage: string; total: number; current: number }>(null);
+	const [error, setError] = React.useState<null | string>(null);
 	// Counter to force re-renders when data is mutated in place
-	const [updateCounter, setUpdateCounter] = useState(0);
+	const [updateCounter, setUpdateCounter] = React.useState(0);
 	// Counter to notify SpriteList about new sprite imports (go to last page)
-	const [spriteImportVersion, setSpriteImportVersion] = useState(0);
+	const [spriteImportVersion, setSpriteImportVersion] = React.useState(0);
 	// Load initial state from localStorage
 	const loadOpenedItemsState = (): {
 		openedId: null | number;
@@ -87,27 +87,27 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 	};
 
 	const initialState = loadOpenedItemsState();
-	const [openedItemId, setOpenedItemIdState] = useState<null | number>(initialState.openedId);
-	const [openedItemCategory, setOpenedItemCategoryState] = useState<null | ThingCategory>(initialState.openedCategory);
-	const [openedItems, setOpenedItems] = useState<ThingType[]>([]);
-	const [highlightedItemId, setHighlightedItemId] = useState<null | number>(null);
-	const [selectedCategory, setSelectedCategoryState] = useState<ThingCategory>(ThingCategory.ITEM);
+	const [openedItemId, setOpenedItemIdState] = React.useState<null | number>(initialState.openedId);
+	const [openedItemCategory, setOpenedItemCategoryState] = React.useState<null | ThingCategory>(initialState.openedCategory);
+	const [openedItems, setOpenedItems] = React.useState<ThingType[]>([]);
+	const [highlightedItemId, setHighlightedItemId] = React.useState<null | number>(null);
+	const [selectedCategory, setSelectedCategoryState] = React.useState<ThingCategory>(ThingCategory.ITEM);
 	const settingItemRef = React.useRef(false);
 	const hasRestoredRef = React.useRef(false);
 	const hasPreloadedRef = React.useRef(false);
-	const [openedSpriteId, setOpenedSpriteId] = useState<null | number>(null);
-	const [highlightedSpriteId, setHighlightedSpriteId] = useState<null | number>(null);
-	const [spriteLoadVersion, setSpriteLoadVersion] = useState(0);
-	const [unsavedChanges, setUnsavedChanges] = useState<Set<string>>(new Set());
-	const [newItemKeys, setNewItemKeys] = useState<Set<string>>(new Set());
+	const [openedSpriteId, setOpenedSpriteId] = React.useState<null | number>(null);
+	const [highlightedSpriteId, setHighlightedSpriteId] = React.useState<null | number>(null);
+	const [spriteLoadVersion, setSpriteLoadVersion] = React.useState(0);
+	const [unsavedChanges, setUnsavedChanges] = React.useState<Set<string>>(new Set());
+	const [newItemKeys, setNewItemKeys] = React.useState<Set<string>>(new Set());
 	// Compile tracking
-	const [modifiedSinceCompile, setModifiedSinceCompile] = useState<
+	const [modifiedSinceCompile, setModifiedSinceCompile] = React.useState<
 		Map<string, { id: number; data: ThingType; category: ThingCategory }>
 	>(new Map());
-	const [modifiedSprites, setModifiedSprites] = useState<Map<number, Sprite>>(new Map());
+	const [modifiedSprites, setModifiedSprites] = React.useState<Map<number, Sprite>>(new Map());
 
 	// Save opened items state to localStorage whenever it changes
-	const saveOpenedItemsState = useCallback(
+	const saveOpenedItemsState = React.useCallback(
 		(items: ThingType[], openedId: null | number, openedCategory: null | ThingCategory) => {
 			try {
 				if (typeof window !== 'undefined') {
@@ -128,7 +128,7 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 		[]
 	);
 
-	const removeOpenedItem = useCallback(
+	const removeOpenedItem = React.useCallback(
 		(id: number, category: ThingCategory) => {
 			setOpenedItems((prev) => {
 				const newItems = prev.filter((item) => !(item.id === id && item.category === category));
@@ -151,7 +151,7 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 		[openedItemId, openedItemCategory]
 	);
 
-	const setData = useCallback(
+	const setData = React.useCallback(
 		async (newData: TibiaData, reader: SpriteReader, skipBackendSync = false) => {
 			if (data?.sprPath && data.sprPath !== newData.sprPath) {
 				try {
@@ -230,12 +230,12 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 		[data]
 	);
 
-	const setLoading = useCallback((loading: boolean, progress?: { stage: string; total: number; current: number }) => {
+	const setLoading = React.useCallback((loading: boolean, progress?: { stage: string; total: number; current: number }) => {
 		setIsLoading(loading);
 		setLoadingProgress(progress || null);
 	}, []);
 
-	const clearData = useCallback(async () => {
+	const clearData = React.useCallback(async () => {
 		const currentDatPath = data?.datPath;
 
 		setDataState(null);
@@ -284,7 +284,7 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 		}
 	}, [data]);
 
-	const getItem = useCallback(
+	const getItem = React.useCallback(
 		(id: number): null | ThingType => {
 			return data?.items.get(id) || null;
 		},
@@ -292,7 +292,7 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 		[data, updateCounter]
 	);
 
-	const getOutfit = useCallback(
+	const getOutfit = React.useCallback(
 		(id: number): null | ThingType => {
 			return data?.outfits.get(id) || null;
 		},
@@ -300,7 +300,7 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 		[data, updateCounter]
 	);
 
-	const getEffect = useCallback(
+	const getEffect = React.useCallback(
 		(id: number): null | ThingType => {
 			return data?.effects.get(id) || null;
 		},
@@ -308,7 +308,7 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 		[data, updateCounter]
 	);
 
-	const getMissile = useCallback(
+	const getMissile = React.useCallback(
 		(id: number): null | ThingType => {
 			return data?.missiles.get(id) || null;
 		},
@@ -316,7 +316,7 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 		[data, updateCounter]
 	);
 
-	const getThing = useCallback(
+	const getThing = React.useCallback(
 		(id: number, category: ThingCategory): null | ThingType => {
 			switch (category) {
 				case 'item':
@@ -334,7 +334,7 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 		[getItem, getOutfit, getEffect, getMissile]
 	);
 
-	const setOpenedItemId = useCallback(
+	const setOpenedItemId = React.useCallback(
 		(id: null | number, category?: ThingCategory) => {
 			settingItemRef.current = true;
 			setOpenedItemIdState(id);
@@ -354,7 +354,7 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 			} else {
 				setOpenedItemCategoryState(null);
 			}
-			// Reset flag after a short delay to allow useEffect to check it
+			// Reset flag after a short delay to allow React.useEffect to check it
 			setTimeout(() => {
 				settingItemRef.current = false;
 			}, 0);
@@ -362,11 +362,11 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 		[data, selectedCategory, getThing, saveOpenedItemsState]
 	);
 
-	const setSelectedCategory = useCallback((category: ThingCategory) => {
+	const setSelectedCategory = React.useCallback((category: ThingCategory) => {
 		setSelectedCategoryState(category);
 	}, []);
 
-	const setSelectedCategoryAndItem = useCallback(
+	const setSelectedCategoryAndItem = React.useCallback(
 		(category: ThingCategory, itemId: number) => {
 			// Don't change the listing category - just open the item
 			setOpenedItemId(itemId, category);
@@ -377,12 +377,12 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 	// Don't clear openedItemId when category changes - keep them independent
 
 	// Save opened items state to localStorage whenever it changes
-	useEffect(() => {
+	React.useEffect(() => {
 		saveOpenedItemsState(openedItems, openedItemId, openedItemCategory);
 	}, [openedItems, openedItemId, openedItemCategory, saveOpenedItemsState]);
 
 	// Restore opened items when data is loaded (only once, and only if localStorage wasn't just cleared)
-	useEffect(() => {
+	React.useEffect(() => {
 		// Only restore if we have data, haven't restored yet
 		// Check localStorage directly (not initialState) to see if items exist
 		if (data && !hasRestoredRef.current) {
@@ -425,7 +425,7 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 		}
 	}, [data, getThing]);
 
-	const updateThing = useCallback(
+	const updateThing = React.useCallback(
 		(id: number, category: ThingCategory, updates: Partial<ThingType>) => {
 			if (!data) return;
 
@@ -474,7 +474,7 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 		[data]
 	);
 
-	const hasUnsavedChanges = useCallback(
+	const hasUnsavedChanges = React.useCallback(
 		(id: number, category: ThingCategory): boolean => {
 			const key = `${category}-${id}`;
 			return unsavedChanges.has(key);
@@ -482,7 +482,7 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 		[unsavedChanges]
 	);
 
-	const markUnsavedChanges = useCallback((id: number, category: ThingCategory, hasChanges: boolean) => {
+	const markUnsavedChanges = React.useCallback((id: number, category: ThingCategory, hasChanges: boolean) => {
 		const key = `${category}-${id}`;
 		setUnsavedChanges((prev) => {
 			const next = new Set(prev);
@@ -495,14 +495,14 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 		});
 	}, []);
 
-	const isNewItem = useCallback(
+	const isNewItem = React.useCallback(
 		(id: number, category: ThingCategory): boolean => {
 			return newItemKeys.has(`${category}-${id}`);
 		},
 		[newItemKeys]
 	);
 
-	const markAsNewItem = useCallback((id: number, category: ThingCategory) => {
+	const markAsNewItem = React.useCallback((id: number, category: ThingCategory) => {
 		setNewItemKeys((prev) => {
 			const next = new Set(prev);
 			next.add(`${category}-${id}`);
@@ -510,7 +510,7 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 		});
 	}, []);
 
-	const clearNewItem = useCallback((id: number, category: ThingCategory) => {
+	const clearNewItem = React.useCallback((id: number, category: ThingCategory) => {
 		setNewItemKeys((prev) => {
 			if (!prev.has(`${category}-${id}`)) return prev;
 			const next = new Set(prev);
@@ -519,7 +519,7 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 		});
 	}, []);
 
-	const notifySpritesLoaded = useCallback(() => {
+	const notifySpritesLoaded = React.useCallback(() => {
 		setSpriteLoadVersion((v) => {
 			try {
 				logger.log(EventCode.CTX_LOAD_END, { v: v + 1 });
@@ -530,11 +530,11 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 		});
 	}, []);
 
-	const notifySpriteImport = useCallback(() => {
+	const notifySpriteImport = React.useCallback(() => {
 		setSpriteImportVersion((v) => v + 1);
 	}, []);
 
-	const notifyDataChanged = useCallback(
+	const notifyDataChanged = React.useCallback(
 		(spriteIds?: number[]) => {
 			setUpdateCounter((c) => c + 1);
 
@@ -577,7 +577,7 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 		[data]
 	);
 
-	const getSprite = useCallback(
+	const getSprite = React.useCallback(
 		(id: number): null | Sprite => {
 			if (!data || !data.sprPath) return null;
 
@@ -609,17 +609,17 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 	);
 
 	// Compile tracking methods
-	const hasModifiedItems = useCallback(() => {
+	const hasModifiedItems = React.useCallback(() => {
 		return modifiedSinceCompile.size > 0;
 	}, [modifiedSinceCompile]);
 
-	const clearModifiedTracking = useCallback(() => {
+	const clearModifiedTracking = React.useCallback(() => {
 		setModifiedSinceCompile(new Map());
 		setModifiedSprites(new Map());
 		setNewItemKeys(new Set());
 	}, []);
 
-	const compileFiles = useCallback(async () => {
+	const compileFiles = React.useCallback(async () => {
 		if (!data || !data.datPath || !data.sprPath) {
 			throw new Error('No data or file paths available for compilation');
 		}
@@ -708,7 +708,7 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 };
 
 export const useTibiaData = () => {
-	const context = useContext(TibiaDataContext);
+	const context = React.useContext(TibiaDataContext);
 	if (context === undefined) {
 		throw new Error('useTibiaData must be used within a TibiaDataProvider');
 	}

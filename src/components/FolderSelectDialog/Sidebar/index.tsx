@@ -1,6 +1,6 @@
 import type { SidebarProps } from './types';
 
-import React, { useRef, useState } from 'react';
+import React from 'react';
 import { X, Folder, Computer, HardDrive } from 'lucide-react';
 import { pathString, pathsEqual, pathSegments } from '@/usecase/util/fileBrowserUtils';
 
@@ -19,10 +19,10 @@ export const Sidebar = ({
 	onReorderFavorites
 }: SidebarProps) => {
 	const currentString = pathString(currentPath);
-	const dragIdxRef = useRef<null | number>(null);
-	const [dragIdx, setDragIdx] = useState<null | number>(null);
-	const [dropIdx, setDropIdx] = useState<null | number>(null);
-	const [dropAfter, setDropAfter] = useState(false);
+	const dragIdxRef = React.useRef<null | number>(null);
+	const [dragIdx, setDragIdx] = React.useState<null | number>(null);
+	const [dropIdx, setDropIdx] = React.useState<null | number>(null);
+	const [dropAfter, setDropAfter] = React.useState(false);
 
 	const onDragStart = (e: React.DragEvent, idx: number) => {
 		dragIdxRef.current = idx;

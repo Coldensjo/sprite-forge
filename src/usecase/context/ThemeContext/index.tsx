@@ -1,10 +1,10 @@
 import type { Theme } from '@/lib/themes/types';
 
+import React from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import themesData from '@/lib/themes/themes.json';
 import { defaultTheme } from '@/lib/themes/default';
 import { applyTheme, exportTheme, importTheme, validateTheme } from '@/lib/themes/utils';
-import { useMemo, useState, useEffect, ReactNode, useContext, createContext } from 'react';
 
 interface ThemeContextType {
 	themes: Theme[];
@@ -20,7 +20,7 @@ interface ThemeContextType {
 	importThemeFromJson: (json: string) => void;
 }
 
-const ThemeContext = createContext<undefined | ThemeContextType>(undefined);
+const ThemeContext = React.createContext<undefined | ThemeContextType>(undefined);
 
 const THEME_STORAGE_KEY = 'sprite-forge-theme';
 const DARK_MODE_STORAGE_KEY = 'sprite-forge-dark-mode';
@@ -43,9 +43,9 @@ const hslStringToRgb = (hsl: string): [number, number, number] => {
 	return [f(0), f(8), f(4)];
 };
 
-export const ThemeProvider = ({ children }: { children: ReactNode }) => {
-	const [currentTheme, setCurrentTheme] = useState<Theme>(defaultTheme);
-	const [customThemes, setCustomThemes] = useState<Theme[]>(() => {
+export const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
+	const [currentTheme, setCurrentTheme] = React.useState<Theme>(defaultTheme);
+	const [customThemes, setCustomThemes] = React.useState<Theme[]>(() => {
 		try {
 			const saved = localStorage.getItem(CUSTOM_THEMES_STORAGE_KEY);
 			return saved ? JSON.parse(saved) : [];
@@ -53,18 +53,18 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
 			return [];
 		}
 	});
-	const [isDark, setIsDark] = useState<boolean>(() => {
+	const [isDark, setIsDark] = React.useState<boolean>(() => {
 		const saved = localStorage.getItem(DARK_MODE_STORAGE_KEY);
 		return saved ? JSON.parse(saved) : true;
 	});
-	const [acrylic, setAcrylicState] = useState<boolean>(() => {
+	const [acrylic, setAcrylicState] = React.useState<boolean>(() => {
 		const saved = localStorage.getItem(ACRYLIC_STORAGE_KEY);
 		return saved ? JSON.parse(saved) : false;
 	});
 
-	const themes = useMemo(() => [...(themesData as Theme[]), ...customThemes], [customThemes]);
+	const themes = React.useMemo(() => [...(themesData as Theme[]), ...customThemes], [customThemes]);
 
-	useEffect(() => {
+	React.useEffect(() => {
 		const loadTheme = () => {
 			try {
 				const savedThemeName = localStorage.getItem(THEME_STORAGE_KEY);
@@ -82,7 +82,7 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
 		loadTheme();
 	}, [themes]);
 
-	useEffect(() => {
+	React.useEffect(() => {
 		applyTheme(currentTheme, isDark);
 		localStorage.setItem(THEME_STORAGE_KEY, currentTheme.name);
 		localStorage.setItem(DARK_MODE_STORAGE_KEY, JSON.stringify(isDark));
@@ -110,7 +110,7 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
 		setIsDark((prev) => !prev);
 	};
 
-	useEffect(() => {
+	React.useEffect(() => {
 		document.documentElement.classList.toggle('acrylic', acrylic && isWindows);
 		if (!isWindows) return;
 		const palette = currentTheme.colors[isDark ? 'dark' : 'light'];
@@ -175,7 +175,7 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
 };
 
 export const useTheme = () => {
-	const context = useContext(ThemeContext);
+	const context = React.useContext(ThemeContext);
 	if (!context) {
 		throw new Error('useTheme must be used within ThemeProvider');
 	}

@@ -1,5 +1,5 @@
+import React from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { useState, useEffect, ReactNode, useContext, createContext } from 'react';
 
 interface PanelSettings {
 	showOpenedItems: boolean;
@@ -12,15 +12,15 @@ interface PanelSettingsContextType {
 	togglePanel: (panel: keyof PanelSettings) => void;
 }
 
-const PanelSettingsContext = createContext<undefined | PanelSettingsContextType>(undefined);
+const PanelSettingsContext = React.createContext<undefined | PanelSettingsContextType>(undefined);
 
-export const PanelSettingsProvider = ({ children }: { children: ReactNode }) => {
-	const [settings, setSettings] = useState<PanelSettings>({
+export const PanelSettingsProvider = ({ children }: { children: React.ReactNode }) => {
+	const [settings, setSettings] = React.useState<PanelSettings>({
 		showOpenedItems: false,
 		showVisualization: false
 	});
 
-	useEffect(() => {
+	React.useEffect(() => {
 		const loadSettings = async () => {
 			try {
 				const savedSettings = await invoke<{ show_opened_items: boolean; show_visualization: boolean }>('get_panel_settings');
@@ -66,7 +66,7 @@ export const PanelSettingsProvider = ({ children }: { children: ReactNode }) => 
 };
 
 export const usePanelSettings = () => {
-	const context = useContext(PanelSettingsContext);
+	const context = React.useContext(PanelSettingsContext);
 	if (!context) {
 		throw new Error('usePanelSettings must be used within PanelSettingsProvider');
 	}

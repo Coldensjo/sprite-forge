@@ -1,12 +1,12 @@
 import type { ThingType } from '@/lib/tibia';
 import type { SceneTile } from '@/usecase/util/spriteLayoutUtils';
 
+import React from 'react';
 import { logger, EventCode } from '@/lib/debug';
 import { blendOutfit } from '@/lib/tibia/outfit';
 import { useDragDrop } from '@/usecase/context/DragDropContext';
 import { useTibiaData } from '@/usecase/context/TibiaDataContext';
 import { computeSpriteLayout } from '@/usecase/util/spriteLayoutUtils';
-import { useRef, useMemo, useState, useEffect, useCallback } from 'react';
 import { SPRITE_SIZE, getSpriteIndex, isValidSpriteId, importObjectSheet } from '@/lib/tibia';
 
 interface Slot {
@@ -90,22 +90,22 @@ export const useSpriteCanvas = (props: SpriteCanvasProps) => {
 		onMiddleMousePanChange
 	} = props;
 
-	const canvasRef = useRef<HTMLCanvasElement>(null);
-	const containerRef = useRef<HTMLDivElement>(null);
+	const canvasRef = React.useRef<HTMLCanvasElement>(null);
+	const containerRef = React.useRef<HTMLDivElement>(null);
 	const { data, getSprite, isNewItem, spriteLoadVersion, notifyDataChanged, notifySpriteImport, notifySpritesLoaded } =
 		useTibiaData();
 	const { dragType, isDragging, draggedItem } = useDragDrop();
-	const [isLoading, setIsLoading] = useState(false);
-	const [isPanning, setIsPanning] = useState(false);
-	const [panStart, setPanStart] = useState({ x: 0, y: 0 });
+	const [isLoading, setIsLoading] = React.useState(false);
+	const [isPanning, setIsPanning] = React.useState(false);
+	const [panStart, setPanStart] = React.useState({ x: 0, y: 0 });
 
-	const [highlightedSlot, setHighlightedSlot] = useState<null | Slot>(null);
-	const [hoveredSlot, setHoveredSlot] = useState<null | Slot>(null);
-	const [isFileDragging, setIsFileDragging] = useState(false);
-	const [isFileDragOver, setIsFileDragOver] = useState(false);
-	const currentHighlightRef = useRef<null | Slot>(null);
+	const [highlightedSlot, setHighlightedSlot] = React.useState<null | Slot>(null);
+	const [hoveredSlot, setHoveredSlot] = React.useState<null | Slot>(null);
+	const [isFileDragging, setIsFileDragging] = React.useState(false);
+	const [isFileDragOver, setIsFileDragOver] = React.useState(false);
+	const currentHighlightRef = React.useRef<null | Slot>(null);
 
-	const { canvasWidth, canvasHeight, spriteLayout } = useMemo(
+	const { canvasWidth, canvasHeight, spriteLayout } = React.useMemo(
 		() =>
 			computeSpriteLayout({
 				thing,
@@ -143,16 +143,16 @@ export const useSpriteCanvas = (props: SpriteCanvasProps) => {
 		]
 	);
 
-	const offscreenCanvasRef = useRef<null | HTMLCanvasElement>(null);
+	const offscreenCanvasRef = React.useRef<null | HTMLCanvasElement>(null);
 
-	const sceneCacheRef = useRef<{
+	const sceneCacheRef = React.useRef<{
 		width: number;
 		height: number;
 		tiles: null | SceneTile[][];
 		canvas: null | HTMLCanvasElement;
 	}>({ width: 0, height: 0, tiles: null, canvas: null });
 
-	useEffect(() => {
+	React.useEffect(() => {
 		if (!sceneTiles || !data || !data.sprPath || sceneWidth === 0 || sceneHeight === 0) return;
 
 		const loadSceneSprites = async () => {
@@ -189,7 +189,7 @@ export const useSpriteCanvas = (props: SpriteCanvasProps) => {
 		loadSceneSprites();
 	}, [sceneTiles, sceneWidth, sceneHeight, data, notifySpritesLoaded]);
 
-	useEffect(() => {
+	React.useEffect(() => {
 		const canvas = canvasRef.current;
 		if (!canvas) return;
 
@@ -523,7 +523,7 @@ export const useSpriteCanvas = (props: SpriteCanvasProps) => {
 		smooth
 	]);
 
-	const exactSizeCenter = useMemo(() => {
+	const exactSizeCenter = React.useMemo(() => {
 		if (!thing) return null;
 
 		const exactSize = thing.exactSize || SPRITE_SIZE;
@@ -545,7 +545,7 @@ export const useSpriteCanvas = (props: SpriteCanvasProps) => {
 		return { x: exactSizeCenterX, y: exactSizeCenterY };
 	}, [thing, sceneTiles, sceneWidth, sceneHeight]);
 
-	const handleMouseDown = useCallback(
+	const handleMouseDown = React.useCallback(
 		(e: React.MouseEvent) => {
 			if (!onPanChange) return;
 
@@ -574,7 +574,7 @@ export const useSpriteCanvas = (props: SpriteCanvasProps) => {
 		[onPanChange, isPanEnabled, panX, panY, onMiddleMousePanChange]
 	);
 
-	useEffect(() => {
+	React.useEffect(() => {
 		if (!isPanning || !onPanChange) return;
 
 		const handleMouseMove = (e: MouseEvent) => {
@@ -601,7 +601,7 @@ export const useSpriteCanvas = (props: SpriteCanvasProps) => {
 		};
 	}, [isPanning, panStart, onPanChange, panX, panY, onMiddleMousePanChange]);
 
-	useEffect(() => {
+	React.useEffect(() => {
 		if (!isDragging || (dragType !== 'sprite' && dragType !== 'sprites') || !thing || !canvasRef.current || !onSpriteDrop) return;
 
 		const handleGlobalMouseMove = (e: MouseEvent) => {
@@ -688,9 +688,9 @@ export const useSpriteCanvas = (props: SpriteCanvasProps) => {
 		};
 	}, [isDragging, dragType, draggedItem, thing, canvasWidth, canvasHeight, onSpriteDrop, frame, layer]);
 
-	const isDraggingImageRef = useRef(false);
+	const isDraggingImageRef = React.useRef(false);
 
-	useEffect(() => {
+	React.useEffect(() => {
 		const containerElement = containerRef.current;
 		if (!containerElement || !allowFileDrop) return;
 
@@ -782,7 +782,7 @@ export const useSpriteCanvas = (props: SpriteCanvasProps) => {
 		};
 	}, [thing, data, allowFileDrop, isNewItem, notifySpritesLoaded, notifyDataChanged, notifySpriteImport]);
 
-	const transformStyle = useMemo(() => {
+	const transformStyle = React.useMemo(() => {
 		const baseStyle = {
 			maxWidth: '100%',
 			maxHeight: '100%',
@@ -885,7 +885,7 @@ export const useSpriteCanvas = (props: SpriteCanvasProps) => {
 		setHighlightedSlot(null);
 	};
 
-	const handleMouseDoubleClick = useCallback(
+	const handleMouseDoubleClick = React.useCallback(
 		(e: React.MouseEvent) => {
 			if (!onSpriteDoubleClick || !thing) return;
 
@@ -907,7 +907,7 @@ export const useSpriteCanvas = (props: SpriteCanvasProps) => {
 		[onSpriteDoubleClick, thing, spriteLayout, canvasWidth, canvasHeight]
 	);
 
-	const handleMouseMove = useCallback(
+	const handleMouseMove = React.useCallback(
 		(e: React.MouseEvent) => {
 			if (isDragging) return;
 			if (!onSpriteHover || !thing) return;
@@ -939,7 +939,7 @@ export const useSpriteCanvas = (props: SpriteCanvasProps) => {
 		[onSpriteHover, thing, spriteLayout, canvasWidth, canvasHeight]
 	);
 
-	const handleMouseLeave = useCallback(() => {
+	const handleMouseLeave = React.useCallback(() => {
 		if (onSpriteHover) {
 			onSpriteHover(null);
 		}
@@ -1000,9 +1000,9 @@ export const useSpriteCanvas = (props: SpriteCanvasProps) => {
 		}
 	};
 
-	const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
+	const overlayCanvasRef = React.useRef<HTMLCanvasElement>(null);
 
-	useEffect(() => {
+	React.useEffect(() => {
 		const canvas = overlayCanvasRef.current;
 		if (!canvas) return;
 

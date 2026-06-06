@@ -1,5 +1,5 @@
+import React from 'react';
 import { join } from '@tauri-apps/api/path';
-import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import {
 	readOtfiFile,
@@ -52,39 +52,39 @@ export const useFolderSelectDialog = ({ open, onLoad, onSelect, onOpenChange, on
 	const assetMode = !!onLoad;
 	const pathOnlyMode = !assetMode && !!onFolderSelected && !onSelect;
 
-	const [mounted, setMounted] = useState(open);
-	const [drives, setDrives] = useState<DriveInfo[]>([]);
-	const [systemDirs, setSystemDirs] = useState<SystemDirectory[]>([]);
-	const [favorites, setFavorites] = useState<FavoriteFolder[]>([]);
-	const [history, setHistory] = useState<string[][]>([[]]);
-	const [historyIndex, setHistoryIndex] = useState(0);
-	const [entries, setEntries] = useState<DirEntry[]>([]);
-	const [loading, setLoading] = useState(false);
-	const [error, setError] = useState<null | string>(null);
-	const [selected, setSelected] = useState<null | string>(null);
-	const [nameInput, setNameInput] = useState('');
-	const [refreshTick, setRefreshTick] = useState(0);
-	const [computerExpanded, setComputerExpanded] = useState(true);
+	const [mounted, setMounted] = React.useState(open);
+	const [drives, setDrives] = React.useState<DriveInfo[]>([]);
+	const [systemDirs, setSystemDirs] = React.useState<SystemDirectory[]>([]);
+	const [favorites, setFavorites] = React.useState<FavoriteFolder[]>([]);
+	const [history, setHistory] = React.useState<string[][]>([[]]);
+	const [historyIndex, setHistoryIndex] = React.useState(0);
+	const [entries, setEntries] = React.useState<DirEntry[]>([]);
+	const [loading, setLoading] = React.useState(false);
+	const [error, setError] = React.useState<null | string>(null);
+	const [selected, setSelected] = React.useState<null | string>(null);
+	const [nameInput, setNameInput] = React.useState('');
+	const [refreshTick, setRefreshTick] = React.useState(0);
+	const [computerExpanded, setComputerExpanded] = React.useState(true);
 
-	const [hasTibiaFiles, setHasTibiaFiles] = useState(false);
-	const [assetLoading, setAssetLoading] = useState(false);
-	const [assetInfo, setAssetInfo] = useState<AssetInfo>({
+	const [hasTibiaFiles, setHasTibiaFiles] = React.useState(false);
+	const [assetLoading, setAssetLoading] = React.useState(false);
+	const [assetInfo, setAssetInfo] = React.useState<AssetInfo>({
 		otfi: null,
 		error: null,
 		version: null,
 		datHeader: null,
 		sprHeader: null
 	});
-	const [extended, setExtended] = useState(false);
-	const [transparency, setTransparency] = useState(false);
-	const [improvedAnimations, setImprovedAnimations] = useState(false);
-	const [frameGroups, setFrameGroups] = useState(false);
+	const [extended, setExtended] = React.useState(false);
+	const [transparency, setTransparency] = React.useState(false);
+	const [improvedAnimations, setImprovedAnimations] = React.useState(false);
+	const [frameGroups, setFrameGroups] = React.useState(false);
 
 	const path = history[historyIndex];
 	const currentPathString = pathString(path);
 	const isCurrentFavorited = favorites.some((f) => pathsEqual(f.path, currentPathString));
 
-	useEffect(() => {
+	React.useEffect(() => {
 		if (open) {
 			setMounted(true);
 			return;
@@ -94,7 +94,7 @@ export const useFolderSelectDialog = ({ open, onLoad, onSelect, onOpenChange, on
 		return () => window.clearTimeout(t);
 	}, [open, mounted]);
 
-	useEffect(() => {
+	React.useEffect(() => {
 		if (!mounted) return;
 		let cancelled = false;
 
@@ -143,7 +143,7 @@ export const useFolderSelectDialog = ({ open, onLoad, onSelect, onOpenChange, on
 		};
 	}, [mounted]);
 
-	useEffect(() => {
+	React.useEffect(() => {
 		if (!open) return;
 		const onKey = (e: KeyboardEvent) => {
 			if (e.key === 'Escape') onOpenChange(false);
@@ -152,7 +152,7 @@ export const useFolderSelectDialog = ({ open, onLoad, onSelect, onOpenChange, on
 		return () => document.removeEventListener('keydown', onKey);
 	}, [open, onOpenChange]);
 
-	useEffect(() => {
+	React.useEffect(() => {
 		if (path.length === 0) {
 			setEntries(
 				drives.map((d) => ({
@@ -201,7 +201,7 @@ export const useFolderSelectDialog = ({ open, onLoad, onSelect, onOpenChange, on
 		};
 	}, [path, drives, refreshTick]);
 
-	useEffect(() => {
+	React.useEffect(() => {
 		if (!assetMode || !hasTibiaFiles || !currentPathString) {
 			setAssetInfo({ otfi: null, error: null, version: null, datHeader: null, sprHeader: null });
 			setAssetLoading(false);
