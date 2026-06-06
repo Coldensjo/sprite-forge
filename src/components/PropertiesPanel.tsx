@@ -2,11 +2,13 @@ import type React from 'react';
 import { cn } from '@/lib/utils';
 import { ThingCategory } from '@/lib/tibia';
 import { MarketCategory } from '@/lib/tibia';
+import { useToast } from '@/hooks/use-toast';
 import { invoke } from '@tauri-apps/api/core';
 import { useTibiaData } from '@/contexts/TibiaDataContext';
 import { useRef, useState, useEffect, useCallback } from 'react';
 import {
 	X,
+	Copy,
 	Play,
 	Move,
 	Save,
@@ -690,6 +692,31 @@ export const PropertiesPanel = () => {
 		setPanY(0);
 	};
 
+	const canvasContainerRef = useRef<HTMLDivElement>(null);
+	const { toast } = useToast();
+	const [copyFlash, setCopyFlash] = useState(false);
+
+	const handleCopySprite = useCallback(async () => {
+		const container = canvasContainerRef.current;
+		if (!container) return;
+		const canvas = container.querySelector('canvas');
+		if (!canvas) {
+			toast({ title: 'Copy failed', variant: 'destructive', description: 'No sprite to copy' });
+			return;
+		}
+		setCopyFlash(true);
+		setTimeout(() => setCopyFlash(false), 250);
+		try {
+			const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
+			if (!blob) throw new Error('Failed to encode sprite');
+			await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+			toast({ title: 'Copied', description: 'Sprite copied to clipboard' });
+		} catch (err) {
+			console.error('Clipboard write failed:', err);
+			toast({ title: 'Copy failed', variant: 'destructive', description: 'Could not write image to clipboard' });
+		}
+	}, [toast]);
+
 	const handleResetSprites = () => {
 		if (!item || !draftItem) return;
 
@@ -1354,7 +1381,7 @@ export const PropertiesPanel = () => {
 					>
 						<div className="w-full max-w-[361px] mx-auto min-[820px]:w-[361px] min-[820px]:max-w-none flex flex-col h-full">
 							<div className="flex flex-col items-center justify-between space-y-4 flex-1">
-								<div className="relative w-full flex-1">
+								<div ref={canvasContainerRef} className="relative w-full flex-1">
 									{/* Size badge - Top Left */}
 									<div className="absolute top-2 left-2 z-10 bg-secondary/90 backdrop-blur-sm px-2 py-0.5 rounded text-[10px] text-muted-foreground font-mono border border-border/50 shadow-lg">
 										{draftItem.width * draftItem.exactSize}x{draftItem.height * draftItem.exactSize}
@@ -1619,6 +1646,21 @@ export const PropertiesPanel = () => {
 												className={cn('h-6 w-6 p-0', showSmooth ? 'bg-primary/20 hover:bg-primary/30' : 'hover:bg-secondary/50')}
 											>
 												<Blend className="h-3 w-3 text-muted-foreground" />
+											</Button>
+										</div>
+										<div className="flex flex-col gap-1 bg-secondary/90 backdrop-blur-sm rounded-md px-1 py-0.5 border border-border/50 shadow-lg">
+											<Button
+												size="icon"
+												variant="ghost"
+												disabled={isPlaying}
+												onClick={handleCopySprite}
+												title={isPlaying ? 'Pause animation to copy' : 'Copy sprite to clipboard'}
+												className={cn(
+													'h-6 w-6 p-0 transition-all duration-150 active:scale-90',
+													copyFlash ? 'bg-primary/30 scale-95' : 'hover:bg-secondary/50'
+												)}
+											>
+												<Copy className="h-3 w-3 text-muted-foreground" />
 											</Button>
 										</div>
 									</div>
