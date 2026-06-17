@@ -1,13 +1,13 @@
-import type { ThingType } from '@/lib/tibia';
+import type { ThingType } from '@/lib/formats/tibia';
 import type { SceneTile } from '@/usecase/util/spriteLayoutUtils';
 
 import React from 'react';
 import { logger, EventCode } from '@/lib/debug';
-import { blendOutfit } from '@/lib/tibia/outfit';
+import { blendOutfit } from '@/lib/formats/tibia/outfit';
 import { useDragDrop } from '@/usecase/context/DragDropContext';
-import { useTibiaData } from '@/usecase/context/TibiaDataContext';
+import { useAssetData } from '@/usecase/context/AssetDataContext';
 import { computeSpriteLayout } from '@/usecase/util/spriteLayoutUtils';
-import { SPRITE_SIZE, getSpriteIndex, isValidSpriteId, importObjectSheet } from '@/lib/tibia';
+import { SPRITE_SIZE, getSpriteIndex, isValidSpriteId, importObjectSheet } from '@/lib/formats/tibia';
 
 interface Slot {
 	x: number;
@@ -93,7 +93,7 @@ export const useSpriteCanvas = (props: SpriteCanvasProps) => {
 	const canvasRef = React.useRef<HTMLCanvasElement>(null);
 	const containerRef = React.useRef<HTMLDivElement>(null);
 	const { data, getSprite, isNewItem, spriteLoadVersion, notifyDataChanged, notifySpriteImport, notifySpritesLoaded } =
-		useTibiaData();
+		useAssetData();
 	const { dragType, isDragging, draggedItem } = useDragDrop();
 	const [isLoading, setIsLoading] = React.useState(false);
 	const [isPanning, setIsPanning] = React.useState(false);
@@ -181,7 +181,7 @@ export const useSpriteCanvas = (props: SpriteCanvasProps) => {
 			const missingIds = Array.from(sceneSpriteIds).filter((id) => !data.sprites.has(id));
 			if (missingIds.length === 0) return;
 
-			const { loadSpriteIds } = await import('@/lib/tibia');
+			const { loadSpriteIds } = await import('@/lib/formats/tibia');
 			await loadSpriteIds(data.sprPath, missingIds, data.transparency, data.sprites);
 			notifySpritesLoaded();
 		};

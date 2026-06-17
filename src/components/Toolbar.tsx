@@ -5,10 +5,10 @@ import { errorToString } from '@/lib/errorMessage';
 import { useToast } from '@/usecase/hooks/use-toast';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
-import { useTibiaData } from '@/usecase/context/TibiaDataContext';
+import { useAssetData } from '@/usecase/context/AssetDataContext';
 import { useErrorDialog } from '@/usecase/context/ErrorDialogContext';
 import { usePanelSettings } from '@/usecase/context/PanelSettingsContext';
-import { loadTibiaData, type ThingType, optimizeSprites } from '@/lib/tibia';
+import { loadTibiaData, type ThingType, optimizeSprites } from '@/lib/formats/tibia';
 import {
 	X,
 	Eye,
@@ -44,7 +44,7 @@ import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from './ui/t
 
 export const Toolbar = () => {
 	const { data, setData, setError, isLoading, setLoading, compileFiles, loadingProgress, hasModifiedItems, notifyDataChanged } =
-		useTibiaData();
+		useAssetData();
 	const { settings, togglePanel } = usePanelSettings();
 	const { showError } = useErrorDialog();
 	const { toast } = useToast();

@@ -1,67 +1,60 @@
-/**
- * Version Control System for Sprite Forge
- * Tracks changes to items and sprites with git-like commits
- */
-
 import { invoke } from '@tauri-apps/api/core';
 
 import { Sprite, ThingType, ThingCategory } from './tibia/types';
 
-/**
- * Represents a single commit with all changes
- */
+export const SCHEMA_VERSION = 2;
+
+export interface CommitItemEntry {
+	id: number;
+	category: ThingCategory;
+	before: ThingType | null;
+	after: ThingType | null;
+}
+
+export interface CommitSpriteEntry {
+	id: number;
+	before: { transparent: boolean; compressedPixels: string } | null;
+	after: { transparent: boolean; compressedPixels: string } | null;
+}
+
 export interface Commit {
+	schema: typeof SCHEMA_VERSION;
 	hash: string;
 	message: string;
 	timestamp: number;
-	changedItems: Array<{
-		id: number;
-		data: ThingType;
-		category: ThingCategory;
-	}>;
-	changedSprites: Array<{
-		id: number;
-		transparent: boolean;
-		compressedPixels: string; // base64-encoded
-	}>;
+	items: CommitItemEntry[];
+	sprites: CommitSpriteEntry[];
 }
 
-/**
- * Commit log metadata
- */
+export interface CommitLogEntry {
+	hash: string;
+	message: string;
+	timestamp: number;
+	itemCount: number;
+	spriteCount: number;
+}
+
 export interface CommitLog {
-	commits: Array<{
-		hash: string;
-		message: string;
-		timestamp: number;
-		itemCount: number;
-		spriteCount: number;
-	}>;
+	schema: typeof SCHEMA_VERSION;
+	commits: CommitLogEntry[];
 }
 
-/**
- * Generate a hash for a commit
- */
 function generateCommitHash(): string {
 	const timestamp = Date.now();
 	const random = Math.random().toString(36).substring(2);
 	return `${timestamp}-${random}`;
 }
 
-/**
- * Encode Uint8Array to base64 string
- */
 function encodeBase64(data: Uint8Array): string {
 	let binary = '';
-	for (let i = 0; i < data.length; i++) {
-		binary += String.fromCharCode(data[i]);
+	const chunk = 0x8000;
+	for (let i = 0; i < data.length; i += chunk) {
+		const slice = data.subarray(i, Math.min(i + chunk, data.length));
+		binary += String.fromCharCode.apply(null, slice as unknown as number[]);
 	}
 	return btoa(binary);
 }
 
-/**
- * Decode base64 string to Uint8Array
- */
 function decodeBase64(base64: string): Uint8Array {
 	const binary = atob(base64);
 	const bytes = new Uint8Array(binary.length);
@@ -71,157 +64,261 @@ function decodeBase64(base64: string): Uint8Array {
 	return bytes;
 }
 
-/**
- * Get the versions directory path
- */
 async function getVersionsDir(): Promise<string> {
 	const configDir = await invoke<string>('get_config_dir_path');
 	return `${configDir}/versions`;
 }
 
-/**
- * Get the commits log path
- */
 async function getCommitsLogPath(): Promise<string> {
 	const versionsDir = await getVersionsDir();
 	return `${versionsDir}/commits.json`;
 }
 
-/**
- * Get the commit file path for a specific commit hash
- */
+async function getSchemaMarkerPath(): Promise<string> {
+	const versionsDir = await getVersionsDir();
+	return `${versionsDir}/.schema`;
+}
+
 async function getCommitPath(hash: string): Promise<string> {
 	const versionsDir = await getVersionsDir();
 	return `${versionsDir}/${hash}.json`;
 }
 
-/**
- * Create a new commit with changed items and sprites
- */
-export async function createCommit(
-	message: string,
-	changedItems: Map<string, { id: number; data: ThingType; category: ThingCategory }>,
-	changedSprites: Map<number, Sprite>
-): Promise<Commit> {
+let schemaCheckPromise: Promise<void> | null = null;
+
+async function ensureSchema(): Promise<void> {
+	if (!schemaCheckPromise) {
+		schemaCheckPromise = (async () => {
+			await invoke('ensure_versions_dir');
+			const markerPath = await getSchemaMarkerPath();
+			let current = '';
+			try {
+				current = await invoke<string>('read_file_text', { path: markerPath });
+			} catch {
+				current = '';
+			}
+			if (current.trim() !== String(SCHEMA_VERSION)) {
+				await invoke('clear_versions_dir');
+				await invoke('ensure_versions_dir');
+				await invoke('write_json_file', { path: markerPath, content: String(SCHEMA_VERSION) });
+			}
+		})().catch((err) => {
+			schemaCheckPromise = null;
+			throw err;
+		});
+	}
+	return schemaCheckPromise;
+}
+
+interface ReadOnDiskSprite {
+	id: number;
+	isEmpty: boolean;
+	compressedPixels: Uint8Array;
+}
+
+export async function readOnDiskSprites(sprPath: string, ids: number[], extended: boolean): Promise<Map<number, ReadOnDiskSprite>> {
+	const out = new Map<number, ReadOnDiskSprite>();
+	if (ids.length === 0) return out;
+
+	const resp = await invoke<ArrayBuffer>('read_sprites_compressed_raw', {
+		path: sprPath,
+		ids,
+		extended
+	});
+	const view = new DataView(resp);
+	let offset = 0;
+	const count = view.getUint32(offset, true);
+	offset += 4;
+	for (let i = 0; i < count; i++) {
+		const id = view.getUint32(offset, true);
+		offset += 4;
+		const isEmpty = view.getUint8(offset) === 1;
+		offset += 1;
+		const len = view.getUint32(offset, true);
+		offset += 4;
+		const pixels = new Uint8Array(resp, offset, len);
+		offset += len;
+		out.set(id, {
+			id,
+			isEmpty,
+			compressedPixels: pixels.slice()
+		});
+	}
+	return out;
+}
+
+function encodeSpriteEntry(transparent: boolean, compressedPixels: Uint8Array | null | undefined): { transparent: boolean; compressedPixels: string } {
+	return {
+		transparent,
+		compressedPixels: encodeBase64(compressedPixels ?? new Uint8Array(0))
+	};
+}
+
+export interface CreateCommitInput {
+	message: string;
+	items: Map<string, { id: number; category: ThingCategory; before: ThingType | null; after: ThingType | null }>;
+	sprites: Map<number, { before: { transparent: boolean; compressedPixels: Uint8Array } | null; after: { transparent: boolean; compressedPixels: Uint8Array } | null }>;
+}
+
+export async function createCommit(input: CreateCommitInput): Promise<Commit> {
+	await ensureSchema();
+
 	const hash = generateCommitHash();
 	const timestamp = Date.now();
 
-	// Convert changed items map to array
-	const itemsArray = Array.from(changedItems.values()).map((item) => ({
-		id: item.id,
-		category: item.category,
-		data: JSON.parse(JSON.stringify(item.data)) // Deep clone
+	const items: CommitItemEntry[] = Array.from(input.items.values()).map((entry) => ({
+		id: entry.id,
+		category: entry.category,
+		before: entry.before ? (JSON.parse(JSON.stringify(entry.before)) as ThingType) : null,
+		after: entry.after ? (JSON.parse(JSON.stringify(entry.after)) as ThingType) : null
 	}));
 
-	// Convert changed sprites map to array with base64-encoded pixels
-	const spritesArray = Array.from(changedSprites.values()).map((sprite) => ({
-		id: sprite.id,
-		transparent: sprite.transparent,
-		compressedPixels: encodeBase64(sprite.compressedPixels)
+	const sprites: CommitSpriteEntry[] = Array.from(input.sprites.entries()).map(([id, entry]) => ({
+		id,
+		before: entry.before ? encodeSpriteEntry(entry.before.transparent, entry.before.compressedPixels) : null,
+		after: entry.after ? encodeSpriteEntry(entry.after.transparent, entry.after.compressedPixels) : null
 	}));
 
 	const commit: Commit = {
+		schema: SCHEMA_VERSION,
 		hash,
-		message,
+		message: input.message,
 		timestamp,
-		changedItems: itemsArray,
-		changedSprites: spritesArray
+		items,
+		sprites
 	};
 
-	// Ensure versions directory exists
-	await invoke('ensure_versions_dir');
-
-	// Save commit to file
 	const commitPath = await getCommitPath(hash);
 	await invoke('write_json_file', {
 		path: commitPath,
-		content: JSON.stringify(commit, null, 2)
+		content: JSON.stringify(commit)
 	});
 
-	// Update commits log
-	await updateCommitLog(hash, timestamp, message, itemsArray.length, spritesArray.length);
+	await appendToCommitLog({
+		hash,
+		message: input.message,
+		timestamp,
+		itemCount: items.length,
+		spriteCount: sprites.length
+	});
 
 	return commit;
 }
 
-/**
- * Update the commits log with a new commit
- */
-async function updateCommitLog(
-	hash: string,
-	timestamp: number,
-	message: string,
-	itemCount: number,
-	spriteCount: number
-): Promise<void> {
+async function appendToCommitLog(entry: CommitLogEntry): Promise<void> {
 	const logPath = await getCommitsLogPath();
-
 	let log: CommitLog;
 	try {
 		const content = await invoke<string>('read_file_text', { path: logPath });
-		log = JSON.parse(content);
-	} catch (e) {
-		// If log doesn't exist, create a new one
-		log = { commits: [] };
+		const parsed = JSON.parse(content) as CommitLog;
+		log = parsed.schema === SCHEMA_VERSION && Array.isArray(parsed.commits) ? parsed : { schema: SCHEMA_VERSION, commits: [] };
+	} catch {
+		log = { schema: SCHEMA_VERSION, commits: [] };
 	}
 
-	// Add new commit to the beginning (newest first)
-	log.commits.unshift({
-		hash,
-		message,
-		timestamp,
-		itemCount,
-		spriteCount
-	});
+	log.commits.unshift(entry);
 
-	// Save updated log
 	await invoke('write_json_file', {
 		path: logPath,
 		content: JSON.stringify(log, null, 2)
 	});
 }
 
-/**
- * Get the commit history
- */
 export async function getCommitHistory(): Promise<CommitLog> {
+	await ensureSchema();
 	const logPath = await getCommitsLogPath();
 
+	let log: CommitLog;
 	try {
 		const content = await invoke<string>('read_file_text', { path: logPath });
-		return JSON.parse(content);
-	} catch (e) {
-		// If log doesn't exist, return empty log
-		return { commits: [] };
+		const parsed = JSON.parse(content) as CommitLog;
+		log =
+			parsed && parsed.schema === SCHEMA_VERSION && Array.isArray(parsed.commits)
+				? parsed
+				: { schema: SCHEMA_VERSION, commits: [] };
+	} catch {
+		log = { schema: SCHEMA_VERSION, commits: [] };
 	}
-}
 
-/**
- * Get a specific commit's full state
- */
-export async function getCommitState(hash: string): Promise<null | Commit> {
-	const commitPath = await getCommitPath(hash);
+	let onDiskHashes: string[];
+	try {
+		onDiskHashes = await invoke<string[]>('list_versions_dir');
+	} catch (e) {
+		console.error('Failed to list versions dir for reconcile:', e);
+		return log;
+	}
+
+	const diskSet = new Set(onDiskHashes);
+	const logSet = new Set(log.commits.map((c) => c.hash));
+
+	const survivors = log.commits.filter((c) => diskSet.has(c.hash));
+	const ghosts = log.commits.length - survivors.length;
+	const orphanHashes = onDiskHashes.filter((h) => !logSet.has(h));
+
+	const recoveredOrphans: CommitLogEntry[] = [];
+	for (const hash of orphanHashes) {
+		try {
+			const path = await getCommitPath(hash);
+			const content = await invoke<string>('read_file_text', { path });
+			const parsed = JSON.parse(content) as Commit;
+			if (parsed.schema !== SCHEMA_VERSION) continue;
+			recoveredOrphans.push({
+				hash: parsed.hash,
+				message: parsed.message,
+				timestamp: parsed.timestamp,
+				itemCount: Array.isArray(parsed.items) ? parsed.items.length : 0,
+				spriteCount: Array.isArray(parsed.sprites) ? parsed.sprites.length : 0
+			});
+		} catch (e) {
+			console.error(`Failed to read orphan commit ${hash}:`, e);
+		}
+	}
+
+	if (ghosts === 0 && recoveredOrphans.length === 0) {
+		return log;
+	}
+
+	const merged = [...survivors, ...recoveredOrphans].sort((a, b) => b.timestamp - a.timestamp);
+	const reconciled: CommitLog = { schema: SCHEMA_VERSION, commits: merged };
 
 	try {
-		const content = await invoke<string>('read_file_text', { path: commitPath });
-		const commit: Commit = JSON.parse(content);
+		await invoke('write_json_file', {
+			path: logPath,
+			content: JSON.stringify(reconciled, null, 2)
+		});
+		if (ghosts > 0 || recoveredOrphans.length > 0) {
+			console.log(`Version log reconciled: dropped ${ghosts} ghost entries, recovered ${recoveredOrphans.length} orphan files.`);
+		}
+	} catch (e) {
+		console.error('Failed to persist reconciled log:', e);
+	}
 
-		// Decode base64 sprite data back to Uint8Array (for use in-memory)
-		// Note: This is kept as base64 in the JSON for serialization
-		return commit;
+	return reconciled;
+}
+
+export async function getCommitState(hash: string): Promise<Commit | null> {
+	await ensureSchema();
+	const commitPath = await getCommitPath(hash);
+	try {
+		const content = await invoke<string>('read_file_text', { path: commitPath });
+		const parsed = JSON.parse(content) as Commit;
+		if (parsed.schema !== SCHEMA_VERSION) return null;
+		return parsed;
 	} catch (e) {
 		console.error(`Failed to load commit ${hash}:`, e);
 		return null;
 	}
 }
 
-/**
- * Clean old versions
- * @param options - Cleanup options
- * @param options.keepLast - Number of recent commits to keep
- * @param options.olderThanDays - Delete commits older than this many days
- */
+export function decodeCommitSpritePayload(entry: { transparent: boolean; compressedPixels: string }): { transparent: boolean; compressedPixels: Uint8Array } {
+	return {
+		transparent: entry.transparent,
+		compressedPixels: decodeBase64(entry.compressedPixels)
+	};
+}
+
 export async function cleanOldVersions(options: { keepLast?: number; olderThanDays?: number }): Promise<number> {
+	await ensureSchema();
 	const log = await getCommitHistory();
 	const commitsToDelete: string[] = [];
 
@@ -232,12 +329,10 @@ export async function cleanOldVersions(options: { keepLast?: number; olderThanDa
 		const commit = log.commits[i];
 		let shouldDelete = false;
 
-		// Check if we should keep based on position (keep last N)
 		if (options.keepLast !== undefined && i >= options.keepLast) {
 			shouldDelete = true;
 		}
 
-		// Check if we should delete based on age
 		if (options.olderThanDays !== undefined) {
 			const age = (now - commit.timestamp) / msPerDay;
 			if (age > options.olderThanDays) {
@@ -250,7 +345,6 @@ export async function cleanOldVersions(options: { keepLast?: number; olderThanDa
 		}
 	}
 
-	// Delete commit files
 	for (const hash of commitsToDelete) {
 		const commitPath = await getCommitPath(hash);
 		try {
@@ -260,9 +354,9 @@ export async function cleanOldVersions(options: { keepLast?: number; olderThanDa
 		}
 	}
 
-	// Update log to remove deleted commits
 	if (commitsToDelete.length > 0) {
 		const updatedLog: CommitLog = {
+			schema: SCHEMA_VERSION,
 			commits: log.commits.filter((c) => !commitsToDelete.includes(c.hash))
 		};
 
@@ -274,11 +368,4 @@ export async function cleanOldVersions(options: { keepLast?: number; olderThanDa
 	}
 
 	return commitsToDelete.length;
-}
-
-/**
- * Decode sprite data from a commit for use
- */
-export function decodeCommitSpriteData(encodedPixels: string): Uint8Array {
-	return decodeBase64(encodedPixels);
 }

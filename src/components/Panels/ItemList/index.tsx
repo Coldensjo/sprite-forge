@@ -1,5 +1,5 @@
 import { cn } from '@/lib/utils';
-import { ThingCategory } from '@/lib/tibia';
+import { ThingCategory } from '@/lib/formats/tibia';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { CheckerBoard } from '@/components/CheckerBoard';

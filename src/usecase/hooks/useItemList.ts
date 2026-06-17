@@ -1,8 +1,8 @@
 import React from 'react';
 import { logger, EventCode } from '@/lib/debug';
 import { useListViewMode } from '@/usecase/hooks/useListViewMode';
-import { useTibiaData } from '@/usecase/context/TibiaDataContext';
-import { exportObjectSheet, importObjectSheet } from '@/lib/tibia';
+import { useAssetData } from '@/usecase/context/AssetDataContext';
+import { exportObjectSheet, importObjectSheet } from '@/lib/formats/tibia';
 import { getThumbnailSpriteIds } from '@/usecase/util/thumbnailUtils';
 import { useGeneralSettings } from '@/usecase/context/GeneralSettingsContext';
 import {
@@ -14,7 +14,7 @@ import {
 	type ThingType,
 	isValidSpriteId,
 	createThingType
-} from '@/lib/tibia';
+} from '@/lib/formats/tibia';
 
 import { useToast } from './use-toast';
 
@@ -36,7 +36,7 @@ export const useItemList = () => {
 		setSelectedCategory,
 		notifySpritesLoaded,
 		setHighlightedItemId
-	} = useTibiaData();
+	} = useAssetData();
 	const { toast } = useToast();
 	const { viewMode, setViewMode } = useListViewMode('get_item_list_view_mode', 'set_item_list_view_mode');
 	const [currentPage, setCurrentPage] = React.useState<number>(1);
@@ -201,7 +201,7 @@ export const useItemList = () => {
 		const loadSpritesProgressively = async () => {
 			logger.log(EventCode.ITEM_PAGE, { pg: currentPage, cat: selectedCategory, n: paginatedItemIds.length });
 
-			const { loadSpriteIds, loadSpriteIdsLz4 } = await import('@/lib/tibia');
+			const { loadSpriteIds, loadSpriteIdsLz4 } = await import('@/lib/formats/tibia');
 			if (cancelled) return;
 
 			const thumbIds: number[] = [];

@@ -62,7 +62,6 @@ pub fn pack_property_bits(thing: &ThingType) -> u64 {
     b
 }
 
-/// Stored DAT data for a loaded file
 pub struct DatData {
     pub items: HashMap<u32, ThingType>,
     pub outfits: HashMap<u32, ThingType>,
@@ -81,10 +80,7 @@ impl DatData {
     }
 }
 
-/// Manager for DAT file data
-/// Stores loaded DAT data indexed by path
 pub struct DatManager {
-    /// Map of path -> loaded DAT data
     files: HashMap<String, DatData>,
 }
 
@@ -95,8 +91,6 @@ impl DatManager {
         }
     }
 
-    /// Store DAT data for a file path
-    /// Replaces any existing data for that path
     pub fn store_data(
         &mut self,
         path: String,
@@ -107,7 +101,6 @@ impl DatManager {
     ) -> Result<(), String> {
         let mut dat_data = DatData::new();
 
-        // Convert vectors to HashMaps for O(1) lookup
         for item in items {
             dat_data.items.insert(item.id, item);
         }
@@ -125,12 +118,10 @@ impl DatManager {
         Ok(())
     }
 
-    /// Get stored DAT data by path
     pub fn get_data(&self, path: &str) -> Option<&DatData> {
         self.files.get(path)
     }
 
-    /// Remove DAT data for a path
     pub fn remove_data(&mut self, path: &str) {
         self.files.remove(path);
     }
@@ -175,8 +166,6 @@ impl DatManager {
         true
     }
 
-    /// Get boolean property value from ThingType by name
-    /// Maps property names from TypeScript to Rust struct fields
     fn get_property_value(thing: &ThingType, prop_name: &str) -> bool {
         match prop_name {
             "isGround" => thing.is_ground,
@@ -228,9 +217,7 @@ impl DatManager {
             }
         }
     }
-    /// Search for ThingTypes matching criteria and return binary buffer
-    /// Format: [TotalCount: u32] + [Item...]
-    /// Item: [ID: u32][Category: u8][Width: u8][Height: u8][Layers: u8][PatternX: u8][PatternY: u8][PatternZ: u8][Frames: u8][SpriteCount: u16][SpriteIDs: u32...]
+
     pub fn search_binary(
         &self,
         path: &str,
@@ -244,34 +231,28 @@ impl DatManager {
             .ok_or_else(|| format!("No DAT data loaded for path: {}", path))?;
 
         let mut buffer = Vec::new();
-        // Reserve space for count (u32)
         buffer.extend_from_slice(&[0, 0, 0, 0]);
         let mut count: u32 = 0;
 
-        // Helper to write u32 le
         let write_u32 = |buf: &mut Vec<u8>, val: u32| {
             buf.extend_from_slice(&val.to_le_bytes());
         };
-        // Helper to write u16 le
         let write_u16 = |buf: &mut Vec<u8>, val: u16| {
             buf.extend_from_slice(&val.to_le_bytes());
         };
 
-        // Helper to search a collection
         let mut search_collection = |collection: &HashMap<u32, ThingType>, category_val: u8| {
             let mut found_items: Vec<&ThingType> = Vec::new();
-            
+
             for thing in collection.values() {
                 if Self::matches_criteria(thing, name, properties, sprite_id) {
                     found_items.push(thing);
                 }
             }
-            
-            // Sort by ID
+
             found_items.sort_by_key(|t| t.id);
-            
+
             for thing in found_items {
-                // Write Item Data
                 write_u32(&mut buffer, thing.id);
                 buffer.push(category_val);
                 buffer.push(thing.width);
@@ -281,23 +262,22 @@ impl DatManager {
                 buffer.push(thing.pattern_y);
                 buffer.push(thing.pattern_z);
                 buffer.push(thing.frames);
-                
+
                 let sprite_count = thing.sprite_index.len() as u16;
                 write_u16(&mut buffer, sprite_count);
-                
+
                 for &sprite_id in &thing.sprite_index {
                     write_u32(&mut buffer, sprite_id);
                 }
 
                 count += 1;
                 if limit > 0 && count as usize >= limit {
-                    return true; // Stop searching
+                    return true;
                 }
             }
-            false // Continue searching
+            false
         };
 
-        // Search based on category filter
         match category {
             Some("item") => {
                 search_collection(&dat_data.items, 1);
@@ -312,7 +292,6 @@ impl DatManager {
                 search_collection(&dat_data.missiles, 4);
             }
             None => {
-                // Search all categories
                 if !search_collection(&dat_data.items, 1) {
                     if !search_collection(&dat_data.outfits, 2) {
                         if !search_collection(&dat_data.effects, 3) {
@@ -326,7 +305,6 @@ impl DatManager {
             }
         }
 
-        // Write final count at the beginning
         let count_bytes = count.to_le_bytes();
         buffer[0] = count_bytes[0];
         buffer[1] = count_bytes[1];
@@ -420,17 +398,6 @@ impl DatManager {
             return Ok(empty);
         }
 
-        // Returns (rank, visual) for the best-matching reference, or None if no reference
-        // is visually similar enough. Shape and property agreement lead; a shared
-        // silhouette (a corpse and its skeleton) or a shared kind (two containers) both
-        // outrank a mere palette match. Tiers, best first:
-        //   tier 5: shape matches AND properties match    (same form, same kind)
-        //   tier 4: shape matches                         (same form, different kind)
-        //   tier 3: properties match AND color matches    (same kind, same palette)
-        //   tier 2: properties match                      (same kind, weaker resemblance)
-        //   tier 1: color matches                         (looks alike, different kind)
-        //   tier 0: rest                                  (above the visual threshold only)
-        // Within a tier, the closest property match ranks first, then visual similarity.
         let score_thing = |thing: &ThingType| -> Option<(u32, u8)> {
             let thing_props = pack_property_bits(thing);
             let mut best_rank: u32 = 0;

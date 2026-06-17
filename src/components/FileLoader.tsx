@@ -1,8 +1,8 @@
-import type { TibiaData } from '@/lib/tibia';
+import type { AssetData } from '@/lib/formats/tibia';
 
 import { useState } from 'react';
 import { Loader2 } from 'lucide-react';
-import { selectDatFile, selectSprFile, loadTibiaData } from '@/lib/tibia';
+import { selectDatFile, selectSprFile, loadTibiaData } from '@/lib/formats/tibia';
 
 import { Label } from './ui/label';
 import { Button } from './ui/button';
@@ -15,7 +15,7 @@ export const FileLoader = () => {
 	const [loadingStage, setLoadingStage] = useState('');
 	const [progress, setProgress] = useState(0);
 	const [error, setError] = useState<null | string>(null);
-	const [data, setData] = useState<null | TibiaData>(null);
+	const [data, setData] = useState<null | AssetData>(null);
 	const [transparency, setTransparency] = useState(false);
 
 	const handleLoadFiles = async () => {

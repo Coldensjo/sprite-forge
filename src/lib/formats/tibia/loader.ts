@@ -1,8 +1,3 @@
-/**
- * Tibia File Loader
- * Utilities for loading .dat and .spr files via Tauri
- */
-
 import * as lz4 from 'lz4js';
 import { join } from '@tauri-apps/api/path';
 import { invoke } from '@tauri-apps/api/core';
@@ -14,7 +9,7 @@ import { SpriteReader } from './spriteReader';
 import { decodeDatResponse } from './datDecoder';
 import {
 	Sprite,
-	TibiaData,
+	AssetData,
 	ThingType,
 	ThingCategory,
 	ClientVersion,
@@ -61,9 +56,6 @@ export function getVersionBySignatures(datSig: number, sprSig: number): null | C
 	return CLIENT_VERSIONS.find((v) => v.datSignature === datSig && v.sprSignature === sprSig) || null;
 }
 
-/**
- * DAT file header information (for preview before loading)
- */
 export interface DatHeader {
 	signature: number;
 	itemsCount: number;
@@ -73,39 +65,28 @@ export interface DatHeader {
 	version: null | ClientVersion;
 }
 
-/**
- * SPR file header information (for preview before loading)
- */
 export interface SprHeader {
 	signature: number;
 	extended: boolean;
 	spriteCount: number;
 }
 
-/**
- * OTFI (Open Tibia File Information) data
- * Contains metadata about DAT/SPR files from .otfi configuration files
- */
 export interface OtfiData {
 	extended: boolean;
 	spriteSize?: number;
-	frameGroups: boolean; // "frame-groups" in file
+	frameGroups: boolean;
 	spritesFile?: string;
 	transparency: boolean;
 	metadataFile?: string;
-	frameDurations: boolean; // "frame-durations" in file
+	frameDurations: boolean;
 	spriteDataSize?: number;
 }
 
-/**
- * Parse OTML format (simple YAML-like text format used by Object Builder)
- */
 function parseOtml(content: string): Record<string, string> {
 	const result: Record<string, string> = {};
 	const lines = content.split('\n');
 
 	for (const line of lines) {
-		// Skip empty lines and root tags (e.g., "DatSpr")
 		const trimmed = line.trim();
 		if (!trimmed || !trimmed.includes(':')) continue;
 
@@ -121,13 +102,7 @@ function parseOtml(content: string): Record<string, string> {
 	return result;
 }
 
-/**
- * Read OTFI file (Open Tibia File Information) from a folder
- * Tries multiple file patterns: Tibia.otfi, Tibia.dat.otfi
- * Returns null if file doesn't exist or can't be parsed
- */
 export async function readOtfiFile(folderPath: string): Promise<null | OtfiData> {
-	// Try different OTFI file naming patterns (Object Builder uses both)
 	const patterns = [await join(folderPath, 'Tibia.otfi'), await join(folderPath, 'Tibia.dat.otfi')];
 
 	for (const path of patterns) {
@@ -147,7 +122,6 @@ export async function readOtfiFile(folderPath: string): Promise<null | OtfiData>
 				spriteDataSize: data['sprite-data-size'] ? parseInt(data['sprite-data-size'], 10) : undefined
 			};
 		} catch {
-			// File doesn't exist or can't be read - try next pattern
 			continue;
 		}
 	}
@@ -155,15 +129,9 @@ export async function readOtfiFile(folderPath: string): Promise<null | OtfiData>
 	return null;
 }
 
-/**
- * Read DAT file header (first 12 bytes) for preview
- * This is fast and doesn't load the full file
- */
 export async function readDatHeader(path: string): Promise<DatHeader> {
-	// Only read first 12 bytes instead of entire file (SPR files can be 100MB+)
 	const response = await invoke<Uint8Array | ArrayBuffer>('read_file_header', { path, bytes: 12 });
 
-	// Normalize to Uint8Array (invoke can return either ArrayBuffer or Uint8Array)
 	const buffer = response instanceof Uint8Array ? response : new Uint8Array(response);
 
 	const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);
@@ -186,23 +154,15 @@ export async function readDatHeader(path: string): Promise<DatHeader> {
 	};
 }
 
-/**
- * Read SPR file header for preview
- * This is fast and doesn't load the full file
- */
 export async function readSprHeader(path: string): Promise<SprHeader> {
-	// Only read first 8 bytes instead of entire file (SPR files can be 100MB+)
 	const response = await invoke<Uint8Array | ArrayBuffer>('read_file_header', { path, bytes: 8 });
 
-	// Normalize to Uint8Array (invoke can return either ArrayBuffer or Uint8Array)
 	const buffer = response instanceof Uint8Array ? response : new Uint8Array(response);
 
 	const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);
 
 	const signature = view.getUint32(0, true);
 
-	// Detect if extended format based on signature
-	// Extended format uses 4-byte sprite count, non-extended uses 2-byte
 	const version = detectVersionFromSignature(signature);
 	const extended = version?.supportsExtended ?? false;
 
@@ -220,9 +180,6 @@ export async function readSprHeader(path: string): Promise<SprHeader> {
 	};
 }
 
-/**
- * Load Tibia .dat file
- */
 export async function loadTibiaDat(
 	path: string,
 	version: ClientVersion,
@@ -245,31 +202,23 @@ export async function loadTibiaDat(
 	return await loadDatFile(buffer, extended, frameDurations, onProgress, version);
 }
 
-/**
- * SPR Header returned from Rust
- */
 interface RustSprHeader {
 	signature: number;
 	extended: boolean;
 	sprite_count: number;
 }
 
-/**
- * Load Tibia .spr file (streaming mode - opens file in Rust backend)
- */
 export async function loadTibiaSpr(
 	path: string,
 	version: ClientVersion,
 	enableTransparency?: boolean
 ): Promise<{ path: string; header: RustSprHeader; transparency: boolean }> {
 	const extended = version.supportsExtended;
-	// Use enableTransparency if provided, otherwise fallback to version's default
 	const transparency = enableTransparency ?? version.supportsAlphaChannel;
 	console.log(
 		`[loadTibiaSpr] Loading ${path} with version ${version.label}. Transparency: ${transparency} (Requested: ${enableTransparency}, Default: ${version.supportsAlphaChannel})`
 	);
 
-	// Open SPR file in Rust backend (keeps file handle open)
 	const header = await invoke<RustSprHeader>('open_spr_file', {
 		path,
 		extended
@@ -282,9 +231,6 @@ export async function loadTibiaSpr(
 	};
 }
 
-/**
- * Open file dialog and select .dat file
- */
 export async function selectDatFile(): Promise<null | string> {
 	const selected = await open({
 		multiple: false,
@@ -300,9 +246,6 @@ export async function selectDatFile(): Promise<null | string> {
 	return selected as null | string;
 }
 
-/**
- * Open file dialog and select .spr file
- */
 export async function selectSprFile(): Promise<null | string> {
 	const selected = await open({
 		multiple: false,
@@ -318,9 +261,6 @@ export async function selectSprFile(): Promise<null | string> {
 	return selected as null | string;
 }
 
-/**
- * Select folder containing Tibia.dat and Tibia.spr
- */
 export async function selectTibiaFolder(): Promise<null | { datPath: string; sprPath: string }> {
 	const selected = await open({
 		directory: true,
@@ -332,7 +272,6 @@ export async function selectTibiaFolder(): Promise<null | { datPath: string; spr
 		return null;
 	}
 
-	// Construct paths for Tibia.dat and Tibia.spr
 	const datPath = await join(selected, 'Tibia.dat');
 	const sprPath = await join(selected, 'Tibia.spr');
 
@@ -347,7 +286,7 @@ export async function loadTibiaData(
 	version?: ClientVersion,
 	transparency?: boolean,
 	onProgress?: (stage: string, current: number, total: number) => void
-): Promise<TibiaData> {
+): Promise<AssetData> {
 	const startTime = performance.now();
 	const myEpoch = ++loadEpoch;
 
@@ -443,41 +382,12 @@ export async function loadTibiaData(
 	};
 }
 
-/**
- * Calculate window-aligned sprite start (Object Builder style)
- * For sprite ID 5432 with windowSize=100, returns start=5400
- * For sprite ID 5432 with windowSize=500, returns start=5000
- */
 export function getSpriteWindowStart(spriteId: number, windowSize: number = 100): number {
 	return Math.floor(spriteId / windowSize) * windowSize;
 }
 
-/**
- * Load a 100-sprite window around the given sprite ID
- * Object Builder style: aligned to 100-sprite boundaries
- *
- * CACHE BEHAVIOR (Object Builder Pattern):
- * - Unlimited cache size - sprites are NEVER evicted during session
- * - All loaded sprites stay in memory until file is unloaded
- * - Modern systems can easily handle 50,000+ sprites (~200 MB)
- * - This matches Object Builder and OTClient behavior
- *
- * THREAD SAFETY:
- * - This function checks if window is already cached before loading
- * - Multiple concurrent calls for same window will skip redundant loads
- * - Safe to call in parallel for different windows
- */
-/** Size of RGBA pixel data per sprite (32x32x4 = 4096 bytes) */
 const SPRITE_DATA_SIZE = 4096;
 
-/**
- * Parse binary RGBA sprite response from Rust
- * Format: [Count: u32] -> ([ID: u32][IsEmpty: u8][CompressedLen: u32][CompressedData...][RGBA pixels: 4096 bytes])*
- *
- * This is the new optimized format where Rust handles decompression and
- * returns RGBA pixels ready for direct use with Canvas ImageData.
- * We also receive compressed pixels for saving back to SPR files.
- */
 export function parseRgbaSprites(response: Uint8Array | ArrayBuffer, transparency: boolean): Sprite[] {
 	let view: DataView;
 	let buffer: Uint8Array;
@@ -496,14 +406,12 @@ export function parseRgbaSprites(response: Uint8Array | ArrayBuffer, transparenc
 	const sprites: Sprite[] = [];
 	let offset = 0;
 
-	// Safety check
 	if (view.byteLength < 4) return [];
 
 	const count = view.getUint32(offset, true);
 	offset += 4;
 
 	for (let i = 0; i < count; i++) {
-		// Minimum size: ID(4) + IsEmpty(1) + CompressedLen(4) + RGBA(4096) = 4105 bytes
 		if (offset + 9 > view.byteLength) break;
 
 		const id = view.getUint32(offset, true);
@@ -512,11 +420,9 @@ export function parseRgbaSprites(response: Uint8Array | ArrayBuffer, transparenc
 		const isEmpty = view.getUint8(offset) === 1;
 		offset += 1;
 
-		// Read compressed pixels length
 		const compressedLen = view.getUint32(offset, true);
 		offset += 4;
 
-		// Extract compressed pixels (for saving)
 		let compressedPixels: Uint8Array;
 		if (compressedLen > 0) {
 			if (offset + compressedLen > view.byteLength) {
@@ -529,13 +435,11 @@ export function parseRgbaSprites(response: Uint8Array | ArrayBuffer, transparenc
 			compressedPixels = new Uint8Array(0);
 		}
 
-		// Check we have room for RGBA pixels
 		if (offset + SPRITE_DATA_SIZE > view.byteLength) {
 			console.error(`Parse error: sprite ${id} RGBA data exceeds buffer`);
 			break;
 		}
 
-		// Extract RGBA pixels (for rendering)
 		const rgbaPixels = buffer.slice(offset, offset + SPRITE_DATA_SIZE);
 		offset += SPRITE_DATA_SIZE;
 
@@ -550,54 +454,28 @@ export function parseRgbaSprites(response: Uint8Array | ArrayBuffer, transparenc
 	return sprites;
 }
 
-/**
- * Parse binary response from import_object_sheet_binary command
- * Format: [JSON len: u32][ThingType JSON bytes][sprites in RGBA format (LZ4 compressed)]
- *
- * The sprites portion is LZ4 compressed and follows the parseRgbaSprites format.
- */
 export function parseImportResponse(buffer: Uint8Array, transparency: boolean): { sprites: Sprite[]; updatedThing: ThingType } {
 	const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);
 	let offset = 0;
 
-	// Read ThingType JSON length
 	const jsonLen = view.getUint32(offset, true);
 	offset += 4;
 
-	// Read and parse ThingType JSON
 	const jsonBytes = buffer.slice(offset, offset + jsonLen);
 	offset += jsonLen;
 	const updatedThing = JSON.parse(new TextDecoder().decode(jsonBytes)) as ThingType;
 
-	// The remaining bytes are LZ4-compressed sprite data (frame format)
 	const compressedSprites = buffer.slice(offset);
 
-	// Decompress LZ4 frame format
 	const decompressedSprites = lz4.decompress(compressedSprites);
 
-	// Parse sprites using existing parser
 	const sprites = parseRgbaSprites(decompressedSprites, transparency);
 
 	return { sprites, updatedThing };
 }
 
-/**
- * Legacy parser for compressed sprite format
- * Format: [Count: u32] -> ([ID: u32][IsEmpty: u8][Len: u32][Data...])*
- * @deprecated Use parseRgbaSprites with read_sprites_rgba command instead
- */
-/** Default window size for sprite loading */
 const DEFAULT_WINDOW_SIZE = 100;
 
-/**
- * Load a sprite window around the given sprite ID
- * Object Builder style: aligned to window boundaries
- *
- * Uses the new RGBA protocol where Rust handles decompression,
- * returning RGBA pixels ready for direct Canvas rendering.
- *
- * @param windowSize - Size of the window to load (default 100, use 500 for preloading)
- */
 export async function loadSpriteWindow(
 	sprPath: string,
 	spriteId: number,
@@ -608,13 +486,11 @@ export async function loadSpriteWindow(
 ): Promise<void> {
 	const WINDOW_SIZE = windowSize;
 
-	// Calculate window boundaries (aligned to window size)
 	const windowStart = getSpriteWindowStart(spriteId, WINDOW_SIZE);
 	const startId = Math.max(1, windowStart);
 	const endId = Math.min(startId + WINDOW_SIZE - 1, totalSprites);
 	const count = endId - startId + 1;
 
-	// Check if we already have this window cached
 	let allCached = true;
 	for (let id = startId; id <= endId; id++) {
 		if (!spriteCache.has(id)) {
@@ -627,14 +503,12 @@ export async function loadSpriteWindow(
 
 	if (allCached) {
 		logger.log(EventCode.LOADER_CACHED, { e: endId, s: startId });
-		return; // Window already loaded
+		return;
 	}
 
 	try {
 		logger.log(EventCode.LOADER_READ, { e: endId, n: count, s: startId });
 
-		// Batch load window from Rust using new RGBA protocol
-		// Rust handles decompression - returns ready-to-use RGBA pixels
 		const response = await invoke<Uint8Array>('read_sprites_batch_rgba', {
 			count,
 			startId,
@@ -644,28 +518,16 @@ export async function loadSpriteWindow(
 
 		const batchedSprites = parseRgbaSprites(response, transparency);
 
-		// Add to cache
 		for (const sprite of batchedSprites) {
 			spriteCache.set(sprite.id, sprite);
 		}
 
 		logger.log(EventCode.LOADER_ADDED, { rgba: true, sz: spriteCache.size, n: batchedSprites.length });
-
-		// NO CACHE EVICTION - Object Builder pattern
-		// Sprites are kept in memory for the entire session
-		// This prevents race conditions where sprites are evicted before rendering
-		// Modern systems can easily handle 50,000+ sprites (~200 MB)
 	} catch (err) {
 		logError(`Failed to load sprite window ${startId}-${endId}`, err);
 	}
 }
 
-/**
- * Bulk preload sprites in the background
- * Loads multiple large windows to warm up the cache faster
- *
- * @param count - Number of sprites to preload (default 2000)
- */
 export async function preloadSprites(
 	sprPath: string,
 	totalSprites: number,
@@ -675,7 +537,7 @@ export async function preloadSprites(
 	onProgress?: (loaded: number, total: number) => void,
 	shouldContinue?: () => boolean
 ): Promise<void> {
-	const BATCH_SIZE = 500; // Load 500 sprites per batch
+	const BATCH_SIZE = 500;
 	const batches = Math.ceil(Math.min(count, totalSprites) / BATCH_SIZE);
 
 	logger.log(EventCode.LOADER_READ, { count, batches, preload: true });
@@ -712,42 +574,25 @@ export async function preloadSprites(
 			logError(`Failed to preload batch ${i + 1}/${batches}`, err);
 		}
 
-		// Awaiting IPC alone only flushes microtasks; a macrotask boundary lets
-		// the browser actually repaint between batches.
 		await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 	}
 
 	logger.log(EventCode.LOADER_ADDED, { preload: true, sz: spriteCache.size });
 }
 
-/**
- * Load specific sprite IDs (handles non-consecutive IDs efficiently)
- * Groups consecutive IDs into ranges and uses batch loading
- *
- * IMPORTANT: This is the CORRECT way to load sprites for items/outfits
- * - Loads ONLY the sprites actually used by the item
- * - Handles non-consecutive sprite IDs (e.g., different animation frames)
- * - Groups consecutive IDs into ranges for efficient batch loading
- * - Skips already cached sprites
- *
- * Uses the new RGBA protocol where Rust handles decompression,
- * returning RGBA pixels ready for direct Canvas rendering.
- */
 export async function loadSpriteIds(
 	sprPath: string,
 	spriteIds: number[],
 	transparency: boolean,
 	spriteCache: Map<number, Sprite>
 ): Promise<void> {
-	// Filter out IDs that are already cached or invalid
 	const uncachedIds = spriteIds.filter((id) => id > 0 && !spriteCache.has(id));
 
 	if (uncachedIds.length === 0) {
 		logger.log(EventCode.LOADER_CACHED, { n: spriteIds.length });
-		return; // All sprites already cached
+		return;
 	}
 
-	// Remove duplicates
 	const uniqueIds = [...new Set(uncachedIds)];
 
 	logger.log(EventCode.LOADER_READ, {
@@ -757,8 +602,6 @@ export async function loadSpriteIds(
 	});
 
 	try {
-		// Load all unique IDs in one go using new RGBA protocol
-		// Rust handles decompression - returns ready-to-use RGBA pixels
 		const response = await invoke<Uint8Array>('read_sprites_rgba', {
 			path: sprPath,
 			ids: uniqueIds,
@@ -767,7 +610,6 @@ export async function loadSpriteIds(
 
 		const batchedSprites = parseRgbaSprites(response, transparency);
 
-		// Add to cache
 		for (const sprite of batchedSprites) {
 			spriteCache.set(sprite.id, sprite);
 		}
@@ -782,28 +624,19 @@ export async function loadSpriteIds(
 	}
 }
 
-/**
- * Load specific sprite IDs using LZ4 compression for faster IPC transfer
- * This reduces transfer size by ~5x (7-8MB -> 1.5MB for outfit pages)
- *
- * Use this for loading large numbers of sprites (>100) for better performance.
- * For small batches (<100), use loadSpriteIds which has less overhead.
- */
 export async function loadSpriteIdsLz4(
 	sprPath: string,
 	spriteIds: number[],
 	transparency: boolean,
 	spriteCache: Map<number, Sprite>
 ): Promise<void> {
-	// Filter out IDs that are already cached or invalid
 	const uncachedIds = spriteIds.filter((id) => id > 0 && !spriteCache.has(id));
 
 	if (uncachedIds.length === 0) {
 		logger.log(EventCode.LOADER_CACHED, { lz4: true, n: spriteIds.length });
-		return; // All sprites already cached
+		return;
 	}
 
-	// Remove duplicates
 	const uniqueIds = [...new Set(uncachedIds)];
 
 	logger.log(EventCode.LOADER_READ, {
@@ -813,17 +646,14 @@ export async function loadSpriteIdsLz4(
 	});
 
 	try {
-		// Load with LZ4 compression for faster IPC transfer
 		const compressedResponse = await invoke<Uint8Array>('read_sprites_rgba_lz4', {
 			path: sprPath,
 			ids: uniqueIds,
 			transparent: transparency
 		});
 
-		// Handle ArrayBuffer response
 		const compressedBuffer = compressedResponse instanceof Uint8Array ? compressedResponse : new Uint8Array(compressedResponse);
 
-		// Decompress LZ4 (lz4_flex prepends uncompressed size as 4-byte little-endian)
 		const decompressed = lz4.decompress(compressedBuffer);
 
 		logger.log(EventCode.LOADER_READ, {
@@ -835,7 +665,6 @@ export async function loadSpriteIdsLz4(
 
 		const batchedSprites = parseRgbaSprites(decompressed, transparency);
 
-		// Add to cache
 		for (const sprite of batchedSprites) {
 			spriteCache.set(sprite.id, sprite);
 		}
@@ -847,25 +676,14 @@ export async function loadSpriteIdsLz4(
 		});
 	} catch (err) {
 		logError(`Failed to load sprite list (LZ4) of ${uniqueIds.length} items`, err);
-		// Fallback to uncompressed method
 		await loadSpriteIds(sprPath, spriteIds, transparency, spriteCache);
 	}
 }
 
-/**
- * Helper to get sprite from reader (with caching)
- * @deprecated Use TibiaDataContext.getSprite instead
- */
 export function getSpriteFromReader(reader: SpriteReader, spriteCache: Map<number, Sprite>, id: number): null | Sprite {
-	// Check cache first
 	if (spriteCache.has(id)) {
 		return spriteCache.get(id)!;
 	}
-
-	// This function is synchronous and relies on the old reader.
-	// We should ideally deprecate it or make it async to use IPC.
-	// But for now, we leave it as is since it's marked deprecated.
-	// The new architecture uses loadSpriteIds / loadSpriteWindow which are async.
 
 	const sprite = reader.readSprite(id);
 	if (sprite) {

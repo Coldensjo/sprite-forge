@@ -1,5 +1,5 @@
 import { Shuffle } from 'lucide-react';
-import { MarketCategory } from '@/lib/tibia';
+import { MarketCategory } from '@/lib/formats/tibia';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';

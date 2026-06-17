@@ -1,14 +1,9 @@
-/**
- * Compiler for Tibia DAT and SPR files
- * Handles writing modified data back to files with version control
- */
-
-import type { Sprite, TibiaData, ThingType, FrameDuration } from './types';
+import type { Sprite, AssetData, ThingType, FrameDuration } from './types';
 
 import { invoke } from '@tauri-apps/api/core';
 
 import { ThingCategory } from './types';
-import { createCommit } from '../versionControl';
+import { createCommit, readOnDiskSprites } from '../../versionControl';
 
 export class ByteWriter {
 	private buf: Uint8Array;
@@ -211,19 +206,12 @@ export function encodeThing(w: ByteWriter, t: ThingType): void {
 	}
 }
 
-/**
- * Collect all items of a specific category from a map
- * PERFORMANCE OPTIMIZED: Only returns non-null things with their IDs
- * Rust will fill in the gaps with LAST_FLAG (0xFF)
- */
 function collectThings(
 	map: Map<number, ThingType>,
 	category: ThingCategory
 ): { maxId: number; minId: number; things: ThingType[] } {
-	// Determine ID range based on category
 	const minId = category === 'item' ? 100 : 1;
 
-	// Find the maximum ID in this category and collect non-null things
 	let maxId = minId;
 	const things: ThingType[] = [];
 
@@ -239,18 +227,13 @@ function collectThings(
 	return { maxId, minId, things };
 }
 
-/**
- * Collect modified sprites based on changes in items
- */
 function collectModifiedSprites(
-	data: TibiaData,
+	data: AssetData,
 	modifiedItems: Map<string, { id: number; data: ThingType; category: ThingCategory }>
 ): Map<number, Sprite> {
 	const modifiedSprites = new Map<number, Sprite>();
 
-	// For each modified item, collect its sprite IDs
 	for (const item of modifiedItems.values()) {
-		// Collect from main spriteIndex (usually Idle)
 		if (item.data.spriteIndex) {
 			for (const spriteId of item.data.spriteIndex) {
 				if (!modifiedSprites.has(spriteId)) {
@@ -262,7 +245,6 @@ function collectModifiedSprites(
 			}
 		}
 
-		// Collect from frameGroupsData (Walking, etc.)
 		if (item.data.frameGroupsData) {
 			for (const group of item.data.frameGroupsData) {
 				if (group.spriteIndex) {
@@ -282,26 +264,18 @@ function collectModifiedSprites(
 	return modifiedSprites;
 }
 
-/**
- * Fix sprite index for a thing if it's missing or has wrong length
- * Fills missing sprites with 0 (empty sprite)
- * Also fixes frameGroupsData if present
- */
 function fixSpriteIndex(thing: ThingType): void {
 	const total = thing.width * thing.height * thing.patternX * thing.patternY * thing.patternZ * thing.frames * thing.layers;
 
-	// Fix frame groups first (for outfits)
 	if (thing.frameGroupsData && thing.frameGroupsData.length > 0) {
 		for (const group of thing.frameGroupsData) {
 			const groupTotal =
 				group.width * group.height * group.layers * group.patternX * group.patternY * group.patternZ * group.frames;
 
-			// Initialize spriteIndex if missing
 			if (!group.spriteIndex) {
 				group.spriteIndex = [];
 			}
 
-			// Fix sprite index length
 			if (group.spriteIndex.length !== groupTotal) {
 				console.warn(
 					`Fixing frame group sprite index for ${thing.category} ${thing.id}: expected ${groupTotal} sprites but has ${group.spriteIndex.length}. Filling with empty sprites.`
@@ -311,48 +285,34 @@ function fixSpriteIndex(thing: ThingType): void {
 		}
 	}
 
-	// Initialize spriteIndex if missing
 	if (!thing.spriteIndex) {
 		thing.spriteIndex = [];
 	}
 
-	// If spriteIndex is empty or wrong size, fix it
 	if (thing.spriteIndex.length !== total) {
 		console.warn(
 			`Fixing sprite index for ${thing.category} ${thing.id}: expected ${total} sprites but has ${thing.spriteIndex.length}. Filling with empty sprites.`
 		);
 
-		// Resize to correct length, filling with 0 (empty sprite)
 		thing.spriteIndex = new Array(total).fill(0);
-
-		// If we had some sprites, try to preserve them
-		// (This shouldn't happen in normal cases, but helps with partial data)
 	}
 }
 
-/**
- * Compile DAT file
- * CRITICAL: Always writes ALL items/outfits/effects/missiles, not just modified ones!
- */
-export async function compileDatFile(path: string, data: TibiaData): Promise<void> {
-	// Collect all items from each category
+export async function compileDatFile(path: string, data: AssetData): Promise<void> {
 	const itemsData = collectThings(data.items, ThingCategory.ITEM);
 	const outfitsData = collectThings(data.outfits, ThingCategory.OUTFIT);
 	const effectsData = collectThings(data.effects, ThingCategory.EFFECT);
 	const missilesData = collectThings(data.missiles, ThingCategory.MISSILE);
 
-	// Fix and validate items
 	for (let i = 0; i < itemsData.things.length; i++) {
 		const item = itemsData.things[i];
 		if (item) {
 			const total = item.width * item.height * item.patternX * item.patternY * item.patternZ * item.frames * item.layers;
 
-			// Fix sprite index if needed
 			if (total > 0) {
 				fixSpriteIndex(item);
 			}
 
-			// Check for corrupt data
 			if (total > 4096 || total === 0) {
 				console.error(`CORRUPT ITEM at index ${i}:`, {
 					id: item.id,
@@ -371,19 +331,16 @@ export async function compileDatFile(path: string, data: TibiaData): Promise<voi
 		}
 	}
 
-	// Fix and validate outfits
 	for (let i = 0; i < outfitsData.things.length; i++) {
 		const outfit = outfitsData.things[i];
 		if (outfit) {
 			const total =
 				outfit.width * outfit.height * outfit.patternX * outfit.patternY * outfit.patternZ * outfit.frames * outfit.layers;
 
-			// Fix sprite index if needed
 			if (total > 0) {
 				fixSpriteIndex(outfit);
 			}
 
-			// Check for corrupt data
 			if (total > 4096 || total === 0) {
 				console.error(`CORRUPT OUTFIT at index ${i}:`, {
 					id: outfit.id,
@@ -402,7 +359,6 @@ export async function compileDatFile(path: string, data: TibiaData): Promise<voi
 		}
 	}
 
-	// Fix and validate effects
 	for (let i = 0; i < effectsData.things.length; i++) {
 		const effect = effectsData.things[i];
 		if (effect) {
@@ -414,7 +370,6 @@ export async function compileDatFile(path: string, data: TibiaData): Promise<voi
 		}
 	}
 
-	// Fix and validate missiles
 	for (let i = 0; i < missilesData.things.length; i++) {
 		const missile = missilesData.things[i];
 		if (missile) {
@@ -426,9 +381,6 @@ export async function compileDatFile(path: string, data: TibiaData): Promise<voi
 		}
 	}
 
-	// CRITICAL: Header counts must be the MAX ID, not array length!
-	// This matches Object Builder's behavior where _itemsCount is the maximum item ID
-	// PERFORMANCE: Only send non-null things; Rust fills in the gaps with LAST_FLAG.
 	const w = new ByteWriter(4 << 20);
 	w.u32(data.version.datSignature);
 	w.u32(data.version.value);
@@ -452,7 +404,7 @@ export async function compileDatFile(path: string, data: TibiaData): Promise<voi
 	await invoke('write_dat_bin', w.finish());
 }
 
-export async function compileSprFile(path: string, data: TibiaData, modifiedSprites: Map<number, Sprite>): Promise<void> {
+export async function compileSprFile(path: string, data: AssetData, modifiedSprites: Map<number, Sprite>): Promise<void> {
 	const w = new ByteWriter(1 << 20);
 	w.bool(data.extended);
 	w.u32(data.version.sprSignature);
@@ -476,12 +428,10 @@ export async function compileSprFile(path: string, data: TibiaData, modifiedSpri
 
 export async function updateSpritesInSpr(
 	path: string,
-	data: TibiaData,
+	data: AssetData,
 	modifiedSprites: Map<number, Sprite>,
 	spritesCount: number
 ): Promise<void> {
-	// Convert sprites to the format for binary encoding
-	// For deleted sprites (not in data.sprites), mark as empty
 	const allSprites = Array.from(modifiedSprites.keys()).map((id) => {
 		const sprite = data.sprites.get(id);
 		if (sprite) {
@@ -491,7 +441,6 @@ export async function updateSpritesInSpr(
 				compressedPixels: sprite.compressedPixels ?? new Uint8Array(0)
 			};
 		} else {
-			// Sprite was deleted - write as empty
 			return {
 				id: id,
 				isEmpty: true,
@@ -516,7 +465,6 @@ export async function updateSpritesInSpr(
 	try {
 		await invoke('update_spr_sprites_bin', w.finish());
 	} catch (error) {
-		// If Rust returns FULL_REWRITE_REQUIRED error, fall back to full rewrite
 		if (error instanceof Error && error.message.includes('FULL_REWRITE_REQUIRED')) {
 			console.log('Sprite count changed, falling back to full SPR rewrite...');
 			await compileSprFile(path, data, modifiedSprites);
@@ -529,46 +477,75 @@ export async function updateSpritesInSpr(
 	}
 }
 
-/**
- * Main compile function that handles the complete compilation workflow
- */
-export async function compileFiles(
-	data: TibiaData,
-	datPath: string,
-	sprPath: string,
-	modifiedItems: Map<string, { id: number; data: ThingType; category: ThingCategory }>,
-	directlyModifiedSprites: Map<number, Sprite>,
-	onProgress?: (stage: string, current: number, total: number) => void
-): Promise<void> {
+export interface CompileFilesArgs {
+	data: AssetData;
+	datPath: string;
+	sprPath: string;
+	modifiedItems: Map<string, { id: number; data: ThingType; category: ThingCategory }>;
+	directlyModifiedSprites: Map<number, Sprite>;
+	originalItems: Map<string, { id: number; category: ThingCategory; data: ThingType }>;
+	onProgress?: (stage: string, current: number, total: number) => void;
+}
+
+export async function compileFiles(args: CompileFilesArgs): Promise<void> {
+	const { data, datPath, sprPath, modifiedItems, directlyModifiedSprites, originalItems, onProgress } = args;
 	const startTime = Date.now();
 
 	try {
-		// Step 1: Collect modified sprites
-		if (onProgress) onProgress('Collecting modified sprites...', 0, 4);
+		if (onProgress) onProgress('Collecting modified sprites...', 0, 5);
 		const modifiedSpritesFromItems = collectModifiedSprites(data, modifiedItems);
-
-		// Merge directly modified sprites with sprites from modified items
 		const modifiedSprites = new Map([...modifiedSpritesFromItems, ...directlyModifiedSprites]);
 
-		// Step 2: Create version control commit
-		if (onProgress) onProgress('Creating version control commit...', 1, 4);
-		const commitMessage = `Compile: ${modifiedItems.size} items, ${modifiedSprites.size} sprites modified`;
-		await createCommit(commitMessage, modifiedItems, modifiedSprites);
+		if (onProgress) onProgress('Capturing previous sprite state...', 1, 5);
+		const beforeSprites = await captureBeforeSprites(data, sprPath, modifiedSprites);
 
-		// Step 3: Compile DAT file
-		// IMPORTANT: Do NOT pass modifiedItemIds - we must write ALL items, not just modified ones!
-		if (onProgress) onProgress('Writing DAT file...', 2, 4);
+		if (onProgress) onProgress('Writing DAT file...', 2, 5);
 		await compileDatFile(datPath, data);
 
-		// Step 4: Update SPR file (only modified sprites)
-		// Uses binary IPC for fast single-call transfer
-		if (onProgress) onProgress('Updating SPR file...', 3, 4);
+		if (onProgress) onProgress('Updating SPR file...', 3, 5);
 		if (modifiedSprites.size > 0) {
 			await updateSpritesInSpr(sprPath, data, modifiedSprites, data.spritesCount);
 		}
 
-		// Complete
-		if (onProgress) onProgress('Compile complete', 4, 4);
+		if (onProgress) onProgress('Creating version control commit...', 4, 5);
+		const commitMessage = `Compile: ${modifiedItems.size} items, ${modifiedSprites.size} sprites modified`;
+		try {
+			const itemEntries = new Map<string, { id: number; category: ThingCategory; before: ThingType | null; after: ThingType | null }>();
+			for (const [key, mod] of modifiedItems.entries()) {
+				const original = originalItems.get(key);
+				itemEntries.set(key, {
+					id: mod.id,
+					category: mod.category,
+					before: original ? original.data : null,
+					after: mod.data
+				});
+			}
+
+			const spriteEntries = new Map<
+				number,
+				{ before: { transparent: boolean; compressedPixels: Uint8Array } | null; after: { transparent: boolean; compressedPixels: Uint8Array } | null }
+			>();
+			for (const [id, sprite] of modifiedSprites.entries()) {
+				const before = beforeSprites.get(id) ?? null;
+				const isAfterEmpty = !data.sprites.has(id) || sprite.isEmpty;
+				spriteEntries.set(id, {
+					before,
+					after: isAfterEmpty
+						? null
+						: { transparent: sprite.transparent, compressedPixels: sprite.compressedPixels ?? new Uint8Array(0) }
+				});
+			}
+
+			await createCommit({
+				message: commitMessage,
+				items: itemEntries,
+				sprites: spriteEntries
+			});
+		} catch (commitError) {
+			console.error('Compile succeeded but version history commit failed:', commitError);
+		}
+
+		if (onProgress) onProgress('Compile complete', 5, 5);
 
 		const duration = Date.now() - startTime;
 		console.log(`Compile complete in ${duration}ms: ${modifiedItems.size} items, ${modifiedSprites.size} sprites`);
@@ -578,12 +555,40 @@ export async function compileFiles(
 	}
 }
 
-/**
- * Full recompile (write entire files)
- * Use this when doing major changes or when incremental update is not possible
- */
+async function captureBeforeSprites(
+	data: AssetData,
+	sprPath: string,
+	modifiedSprites: Map<number, Sprite>
+): Promise<Map<number, { transparent: boolean; compressedPixels: Uint8Array } | null>> {
+	const result = new Map<number, { transparent: boolean; compressedPixels: Uint8Array } | null>();
+	if (modifiedSprites.size === 0) return result;
+
+	const ids = Array.from(modifiedSprites.keys()).filter((id) => id > 0 && id <= data.spritesCount);
+	if (ids.length === 0) {
+		for (const id of modifiedSprites.keys()) result.set(id, null);
+		return result;
+	}
+
+	try {
+		const onDisk = await readOnDiskSprites(sprPath, ids, data.extended);
+		for (const id of modifiedSprites.keys()) {
+			const disk = onDisk.get(id);
+			if (!disk || disk.isEmpty) {
+				result.set(id, null);
+			} else {
+				result.set(id, { transparent: data.transparency, compressedPixels: disk.compressedPixels });
+			}
+		}
+	} catch (e) {
+		console.error('Failed to read pre-compile sprite state, before-state will be empty:', e);
+		for (const id of modifiedSprites.keys()) result.set(id, null);
+	}
+
+	return result;
+}
+
 export async function fullRecompile(
-	data: TibiaData,
+	data: AssetData,
 	datPath: string,
 	sprPath: string,
 	onProgress?: (stage: string, current: number, total: number) => void
@@ -591,15 +596,12 @@ export async function fullRecompile(
 	const startTime = Date.now();
 
 	try {
-		// Step 1: Compile DAT file
 		if (onProgress) onProgress('Writing DAT file...', 0, 2);
 		await compileDatFile(datPath, data);
 
-		// Step 2: Compile SPR file
 		if (onProgress) onProgress('Writing SPR file...', 1, 2);
 		await compileSprFile(sprPath, data, new Map());
 
-		// Complete
 		if (onProgress) onProgress('Full recompile complete', 2, 2);
 
 		const duration = Date.now() - startTime;

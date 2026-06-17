@@ -1,4 +1,4 @@
-import type { ThingCategory } from '@/lib/tibia';
+import type { ThingCategory } from '@/lib/formats/tibia';
 import type { OutfitData } from '@/usecase/context/PropertiesContext/types';
 
 export interface ItemPropertiesState {

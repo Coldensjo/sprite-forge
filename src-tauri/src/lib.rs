@@ -30,7 +30,6 @@ mod sprite_protocol;
 mod similarity;
 use similarity::{SpriteSignature, signature_compressed};
 
-// Wrapper to use serde_bytes for efficient binary transfer
 #[derive(Serialize, Deserialize)]
 struct FileBytes(#[serde(with = "serde_bytes")] Vec<u8>);
 
@@ -83,8 +82,6 @@ fn read_file_header(path: String, bytes: usize) -> Result<FileBytes, String> {
     Ok(FileBytes(buffer))
 }
 
-// SPR Manager Commands
-
 #[tauri::command]
 fn open_spr_file(
     path: String,
@@ -117,8 +114,6 @@ fn close_spr_file(
 
 use tauri::ipc::Response;
 
-/// Read sprites and return decompressed RGBA pixels ready for canvas rendering
-/// Format: [Count: u32] -> ([ID: u32][IsEmpty: u8][RGBA pixels: 4096 bytes])*
 #[tauri::command]
 fn read_sprites_rgba(
     path: String,
@@ -139,7 +134,6 @@ fn read_sprites_rgba(
     Ok(Response::new(bytes))
 }
 
-/// Read a batch of sprites and return decompressed RGBA pixels
 #[tauri::command]
 fn read_sprites_batch_rgba(
     path: String,
@@ -161,9 +155,6 @@ fn read_sprites_batch_rgba(
     Ok(Response::new(bytes))
 }
 
-/// Read sprites and return LZ4-compressed RGBA pixels for faster IPC transfer
-/// The response is LZ4-compressed, reducing transfer size by ~5x (7-8MB -> 1.5MB)
-/// Frontend must decompress with LZ4 before parsing
 #[tauri::command]
 fn read_sprites_rgba_lz4(
     path: String,
@@ -184,7 +175,6 @@ fn read_sprites_rgba_lz4(
     Ok(Response::new(bytes))
 }
 
-/// Request body: [transparent: u8][pixels: 4096 RGBA bytes]
 #[tauri::command]
 fn compress_sprite_rgba(request: tauri::ipc::Request) -> Result<Response, String> {
     let bytes = match request.body() {
@@ -580,8 +570,6 @@ fn set_general_settings(settings: GeneralSettings) -> Result<(), String> {
     save_config(config)
 }
 
-// Version Control Commands
-
 #[tauri::command]
 fn ensure_versions_dir() -> Result<(), String> {
     let mut versions_dir = get_config_dir()?;
@@ -593,8 +581,24 @@ fn ensure_versions_dir() -> Result<(), String> {
 
 #[tauri::command]
 fn write_json_file(path: String, content: String) -> Result<(), String> {
-    fs::write(&path, content)
-        .map_err(|e| format!("Failed to write JSON file {}: {}", path, e))
+    let target = PathBuf::from(&path);
+    let parent = target.parent().ok_or_else(|| format!("Invalid path: {}", path))?;
+    let file_name = target
+        .file_name()
+        .ok_or_else(|| format!("Invalid path: {}", path))?
+        .to_string_lossy()
+        .into_owned();
+    let tmp = parent.join(format!(".{}.tmp", file_name));
+
+    fs::write(&tmp, content.as_bytes())
+        .map_err(|e| format!("Failed to write temp file for {}: {}", path, e))?;
+
+    if let Err(e) = fs::rename(&tmp, &target) {
+        let _ = fs::remove_file(&tmp);
+        return Err(format!("Failed to commit JSON file {}: {}", path, e));
+    }
+
+    Ok(())
 }
 
 #[tauri::command]
@@ -604,13 +608,151 @@ fn delete_file(path: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn list_versions_dir() -> Result<Vec<String>, String> {
+    let mut versions_dir = get_config_dir()?;
+    versions_dir.push("versions");
+
+    if !versions_dir.exists() {
+        return Ok(Vec::new());
+    }
+
+    let mut hashes = Vec::new();
+    let entries = fs::read_dir(&versions_dir)
+        .map_err(|e| format!("Failed to read versions dir: {}", e))?;
+    for entry in entries {
+        let entry = entry.map_err(|e| format!("Failed to list versions dir: {}", e))?;
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        let name = match path.file_name().and_then(|n| n.to_str()) {
+            Some(n) => n,
+            None => continue,
+        };
+        if name == "commits.json" || name == ".schema" || name.starts_with('.') {
+            continue;
+        }
+        if let Some(stem) = name.strip_suffix(".json") {
+            hashes.push(stem.to_string());
+        }
+    }
+
+    Ok(hashes)
+}
+
+#[tauri::command]
+fn clear_versions_dir() -> Result<(), String> {
+    let mut versions_dir = get_config_dir()?;
+    versions_dir.push("versions");
+
+    if !versions_dir.exists() {
+        return Ok(());
+    }
+
+    let entries = fs::read_dir(&versions_dir)
+        .map_err(|e| format!("Failed to read versions dir: {}", e))?;
+
+    for entry in entries {
+        let entry = entry.map_err(|e| format!("Failed to list versions dir: {}", e))?;
+        let path = entry.path();
+        if path.is_file() {
+            let _ = fs::remove_file(&path);
+        } else if path.is_dir() {
+            let _ = fs::remove_dir_all(&path);
+        }
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+fn read_sprites_compressed_raw(
+    path: String,
+    ids: Vec<u32>,
+    extended: bool,
+) -> Result<tauri::ipc::Response, String> {
+    use std::io::{Read, Seek, SeekFrom};
+
+    let mut file = fs::File::open(&path)
+        .map_err(|e| format!("Failed to open SPR {}: {}", path, e))?;
+
+    let header_size: u64 = if extended { 8 } else { 6 };
+
+    let mut count_buf = [0u8; 4];
+    file.seek(SeekFrom::Start(4))
+        .map_err(|e| format!("Failed to seek SPR header: {}", e))?;
+    if extended {
+        file.read_exact(&mut count_buf)
+            .map_err(|e| format!("Failed to read SPR sprite count: {}", e))?;
+    } else {
+        let mut small = [0u8; 2];
+        file.read_exact(&mut small)
+            .map_err(|e| format!("Failed to read SPR sprite count: {}", e))?;
+        count_buf[0] = small[0];
+        count_buf[1] = small[1];
+    }
+    let sprite_count = u32::from_le_bytes(count_buf);
+
+    let mut out: Vec<u8> = Vec::with_capacity(ids.len() * 32);
+    out.extend_from_slice(&(ids.len() as u32).to_le_bytes());
+
+    for id in ids {
+        out.extend_from_slice(&id.to_le_bytes());
+
+        if id == 0 || id > sprite_count {
+            out.push(1);
+            out.extend_from_slice(&0u32.to_le_bytes());
+            continue;
+        }
+
+        let addr_pos = header_size + ((id - 1) as u64) * 4;
+        file.seek(SeekFrom::Start(addr_pos))
+            .map_err(|e| format!("Failed to seek to sprite address: {}", e))?;
+
+        let mut addr_buf = [0u8; 4];
+        file.read_exact(&mut addr_buf)
+            .map_err(|e| format!("Failed to read sprite address: {}", e))?;
+        let address = u32::from_le_bytes(addr_buf);
+
+        if address == 0 {
+            out.push(1);
+            out.extend_from_slice(&0u32.to_le_bytes());
+            continue;
+        }
+
+        file.seek(SeekFrom::Start(address as u64 + 3))
+            .map_err(|e| format!("Failed to seek to sprite data: {}", e))?;
+
+        let mut len_buf = [0u8; 2];
+        file.read_exact(&mut len_buf)
+            .map_err(|e| format!("Failed to read sprite data length: {}", e))?;
+        let length = u16::from_le_bytes(len_buf) as u32;
+
+        if length == 0 {
+            out.push(1);
+            out.extend_from_slice(&0u32.to_le_bytes());
+            continue;
+        }
+
+        let mut pixels = vec![0u8; length as usize];
+        file.read_exact(&mut pixels)
+            .map_err(|e| format!("Failed to read sprite data: {}", e))?;
+
+        out.push(0);
+        out.extend_from_slice(&length.to_le_bytes());
+        out.extend_from_slice(&pixels);
+    }
+
+    Ok(tauri::ipc::Response::new(out))
+}
+
+#[tauri::command]
 fn save_scene(name: String, content: String) -> Result<String, String> {
     let mut scenes_dir = get_config_dir()?;
     scenes_dir.push("scenes");
     fs::create_dir_all(&scenes_dir)
         .map_err(|e| format!("Failed to create scenes directory: {}", e))?;
     
-    // Sanitize filename to prevent directory traversal or invalid characters
     let safe_name = name.replace(|c: char| !c.is_alphanumeric() && c != '-' && c != '_', "_");
     let file_path = scenes_dir.join(format!("{}.json", safe_name));
     
@@ -668,8 +810,6 @@ fn delete_scene(name: String) -> Result<(), String> {
     Ok(())
 }
 
-// DAT/SPR Writer Commands
-
 #[tauri::command]
 fn write_dat_bin(request: tauri::ipc::Request) -> Result<(), String> {
     match request.body() {
@@ -708,8 +848,6 @@ fn copy_spr_file_with_mods(request: tauri::ipc::Request) -> Result<(), String> {
     copy_spr_with_modifications(&source_path, &dest_path, extended, signature, target_count, modifications)
 }
 
-/// Parse binary buffer into Vec<SpriteWrite>
-/// Binary format: [Count: u32] + for each sprite: [ID: u32][IsEmpty: u8][Len: u32][Data...]
 fn parse_sprites_buffer(buffer: &[u8]) -> Result<Vec<SpriteWrite>, String> {
     if buffer.len() < 4 {
         return Err("Buffer too small to contain sprite count".to_string());
@@ -717,7 +855,6 @@ fn parse_sprites_buffer(buffer: &[u8]) -> Result<Vec<SpriteWrite>, String> {
 
     let mut offset = 0;
 
-    // Read sprite count
     let count = u32::from_le_bytes(
         buffer[offset..offset + 4]
             .try_into()
@@ -728,7 +865,6 @@ fn parse_sprites_buffer(buffer: &[u8]) -> Result<Vec<SpriteWrite>, String> {
     let mut sprites = Vec::with_capacity(count);
 
     for i in 0..count {
-        // Check we have enough bytes for header (id + is_empty + len = 9 bytes)
         if offset + 9 > buffer.len() {
             return Err(format!(
                 "Buffer truncated at sprite {}: need {} bytes, have {}",
@@ -738,7 +874,6 @@ fn parse_sprites_buffer(buffer: &[u8]) -> Result<Vec<SpriteWrite>, String> {
             ));
         }
 
-        // Read ID (u32)
         let id = u32::from_le_bytes(
             buffer[offset..offset + 4]
                 .try_into()
@@ -746,11 +881,9 @@ fn parse_sprites_buffer(buffer: &[u8]) -> Result<Vec<SpriteWrite>, String> {
         );
         offset += 4;
 
-        // Read IsEmpty (u8)
         let is_empty = buffer[offset] == 1;
         offset += 1;
 
-        // Read compressed length (u32)
         let compressed_len = u32::from_le_bytes(
             buffer[offset..offset + 4]
                 .try_into()
@@ -758,7 +891,6 @@ fn parse_sprites_buffer(buffer: &[u8]) -> Result<Vec<SpriteWrite>, String> {
         ) as usize;
         offset += 4;
 
-        // Read compressed pixels
         let compressed_pixels = if compressed_len > 0 {
             if offset + compressed_len > buffer.len() {
                 return Err(format!(
@@ -808,16 +940,6 @@ fn update_spr_sprites_bin(request: tauri::ipc::Request) -> Result<(), String> {
     update_sprites_in_spr(&path, extended, sprites, sprites_count)
 }
 
-// DAT Manager Commands
-
-/// Parse DAT file in Rust and return binary buffer for fast IPC transfer
-/// This replaces slow TypeScript parsing + JSON serialization with:
-/// 1. Native Rust parsing (fast)
-/// 2. Binary IPC response (no JSON overhead)
-/// 3. Automatic storage in DatManager for search operations
-///
-/// Binary format: [signature:u32][items_count:u32][outfits_count:u32][effects_count:u32][missiles_count:u32]
-///                followed by encoded things (see dat_reader::encode_dat_to_binary)
 #[tauri::command]
 fn parse_dat_file_bin(
     path: String,
@@ -827,9 +949,8 @@ fn parse_dat_file_bin(
 ) -> Result<Response, String> {
     let start = std::time::Instant::now();
 
-    // Parse DAT file using existing reader
     let mut reader = DatReader::open(&path)?;
-    reader.set_version(version);  // Set version from frontend
+    reader.set_version(version);
     let (signature, items, outfits, effects, missiles) = reader.read_dat()
         .map_err(|e| format!("DAT parse error (version {}): {}", version, e))?;
 
@@ -838,16 +959,13 @@ fn parse_dat_file_bin(
     let effects_count = effects.len();
     let missiles_count = missiles.len();
 
-    // Store in DatManager for search operations
     {
         let mut manager = dat_state.lock().map_err(|e| format!("Lock error: {}", e))?;
         manager.store_data(path.clone(), items.clone(), outfits.clone(), effects.clone(), missiles.clone())?;
     }
 
-    // Encode to binary buffer for fast IPC transfer
     let buffer = encode_dat_to_binary(signature, &items, &outfits, &effects, &missiles);
 
-    // Log performance metrics
     {
         let mut logger = log_state.lock().unwrap();
         logger.log(
@@ -1175,7 +1293,6 @@ fn export_object_sheet_rust(
         return Err("Invalid canvas dimensions".to_string());
     }
     
-    // 3. Load Sprites
     let mut sprite_ids = Vec::new();
     for group in &groups {
         for f in 0..group.frames {
@@ -1198,17 +1315,14 @@ fn export_object_sheet_rust(
         }
     }
     
-    // Read sprites from SPR manager (uses cached reader)
     let sprite_data_list = manager.read_sprites_list(&spr_path, sprite_ids)?;
-    
-    // Map ID -> SpriteData for quick lookup
+
     use std::collections::HashMap;
     let mut sprite_map = HashMap::new();
     for sprite in sprite_data_list {
         sprite_map.insert(sprite.id, sprite);
     }
     
-    // 4. Draw
     let mut sheet = RgbaImage::new(canvas_width, canvas_height);
     
     for (i, group) in groups.iter().enumerate() {
@@ -1222,14 +1336,10 @@ fn export_object_sheet_rust(
                 for y in 0..group.pattern_y {
                     for x in 0..group.pattern_x {
                         for l in 0..group.layers {
-                             // Calculate column: pz * (pX * layers) + px * layers + layer
-                             // This places mount variations horizontally after base outfit
                              let col = (z as u32) * (group.pattern_x as u32) * (group.layers as u32)
                                      + (x as u32) * (group.layers as u32)
                                      + (l as u32);
 
-                             // Calculate row: frame * patternY + addon
-                             // This places addons vertically, grouped by frame
                              let row = (f as u32) * (group.pattern_y as u32) + (y as u32);
 
                              let fx = col * cell_width;
@@ -1242,10 +1352,8 @@ fn export_object_sheet_rust(
                                          let sprite_id = group.sprite_index[index];
                                          if let Some(sprite) = sprite_map.get(&sprite_id) {
                                              if !sprite.is_empty {
-                                                 // Decompress
                                                  let rgba = decompress_to_rgba(&sprite.compressed_pixels, transparent);
                                                  if let Some(img_buffer) = RgbaImage::from_raw(SPRITE_SIZE, SPRITE_SIZE, rgba) {
-                                                     // Position
                                                      let px = ((group.width as u32 - w as u32 - 1) * SPRITE_SIZE);
                                                      let py = ((group.height as u32 - h as u32 - 1) * SPRITE_SIZE);
                                                      
@@ -1581,10 +1689,6 @@ fn import_preserve_geometry(
     Err(msg)
 }
 
-/// Request body: [transparent: u8][version: u32 LE][next_sprite_id: u32 LE][is_new: u8]
-///               [spr_path: u16-len UTF-8][category: u16-len UTF-8]
-///               [thing: encodeThing payload][image bytes: rest]
-/// Response:     [thing_json_len: u32][thing_json][LZ4 RGBA sprites]
 #[tauri::command]
 fn import_object_sheet_binary(
     request: tauri::ipc::Request,
@@ -1607,7 +1711,6 @@ fn import_object_sheet_binary(
 
     let mut manager = spr_state.lock().map_err(|e| format!("Lock error: {}", e))?;
 
-    // 1. Load image from bytes
     let img = image::load_from_memory(image_bytes)
         .map_err(|e| format!("Failed to load image from bytes: {}", e))?
         .to_rgba8();
@@ -1632,10 +1735,8 @@ fn import_object_sheet_binary(
         );
     }
 
-    // 2. Detect if this is an outfit (special handling)
     let is_outfit = thing.category == "outfit";
 
-    // Variables we'll calculate
     let tile_size: u32;
     let layers: u8;
     let pattern_x: u8;
@@ -1646,8 +1747,6 @@ fn import_object_sheet_binary(
     let thing_height: u8;
 
     if is_outfit {
-        // OUTFIT-SPECIFIC DETECTION
-        // Step 1: Detect tile size (32, 64, or 96) based on valid column counts
         tile_size = if img_width % 64 == 0 && img_height % 64 == 0 {
             let cols_64 = img_width / 64;
             if cols_64 == 4 || cols_64 == 8 || cols_64 == 16 { 64 }
@@ -1663,10 +1762,6 @@ fn import_object_sheet_binary(
         let cols = img_width / tile_size;
         let rows = img_height / tile_size;
 
-        // Step 2: Detect layers and mount from column count
-        // 4 cols = no mask (layers=1), no mount (patternZ=1)
-        // 8 cols = has mask (layers=2), no mount (patternZ=1)
-        // 16 cols = has mask (layers=2), has mount (patternZ=2)
         let (detected_layers, detected_pattern_z) = match cols {
             4 => (1u8, 1u8),
             8 => (2u8, 1u8),
@@ -1676,52 +1771,39 @@ fn import_object_sheet_binary(
         layers = detected_layers;
         pattern_z = detected_pattern_z;
 
-        // Step 3: Detect frames and addons from row count
-        // Formula: rows = frames × patternY
-        // Use version to determine max frames: version >= 1057 supports 9 frames, otherwise max 3
         let max_frames: u32 = if version >= 1057 { 9 } else { 3 };
 
-        // Try to detect frames/patternY from image dimensions
-        // Priority: prefer combinations that make sense for the version
         let (detected_frames, detected_pattern_y) = {
             let mut best_match: Option<(u8, u8)> = None;
 
-            // Try frame counts from max down to 1
             for try_frames in (1..=max_frames).rev() {
                 if rows % try_frames == 0 {
                     let addon_count = rows / try_frames;
-                    // patternY (addons) can be 1, 2, or 3
                     if addon_count >= 1 && addon_count <= 3 {
-                        // Valid combination found
-                        // Prefer 3 frames for standard animation if it works
                         if try_frames == 3 || best_match.is_none() {
                             best_match = Some((try_frames as u8, addon_count as u8));
                             if try_frames == 3 {
-                                break; // 3 frames is preferred for standard outfits
+                                break;
                             }
                         }
                     }
                 }
             }
 
-            // Fallback to original values if no valid combination found
             best_match.unwrap_or((thing.frames, thing.pattern_y))
         };
 
         frames = detected_frames;
         pattern_y = detected_pattern_y;
 
-        // Outfits always have 4 directions
         pattern_x = 4;
 
-        // Multi-tile size
         thing_width = (tile_size / 32) as u8;
         thing_height = (tile_size / 32) as u8;
 
         println!("Outfit import: tile_size={}, cols={}, rows={}, layers={}, pattern_x={}, pattern_y={}, pattern_z={}, frames={}, thing_size={}x{}",
                  tile_size, cols, rows, layers, pattern_x, pattern_y, pattern_z, frames, thing_width, thing_height);
     } else {
-        // NON-OUTFIT: Use original simple detection
         tile_size = 32;
         thing_width = 1;
         thing_height = 1;
@@ -1729,7 +1811,6 @@ fn import_object_sheet_binary(
         let cols = img_width / 32;
         let rows = img_height / 32;
 
-        // Detect mask colors
         let mut has_mask = false;
         'mask_check: for pixel in img.pixels() {
             if pixel[3] == 0 { continue; }
@@ -1753,7 +1834,6 @@ fn import_object_sheet_binary(
         pattern_z = 1;
     }
 
-    // 3. Collect reusable sprite IDs from existing frame groups
     let mut reusable_ids: Vec<u32> = Vec::new();
     if let Some(fgs) = &thing.frame_groups_data {
         for fg in fgs {
@@ -1767,8 +1847,6 @@ fn import_object_sheet_binary(
     reusable_ids.sort();
     reusable_ids.dedup();
 
-    // 4. Extract sprites following Tibia's index formula order
-    // index = ((((frame * patternZ + pz) * patternY + py) * patternX + px) * layers + layer) * height + h) * width + w
     let mut new_sprite_index = Vec::new();
     let mut sprites_data: Vec<SpriteData> = Vec::new();
     let mut id_alloc_idx = 0;
@@ -1781,17 +1859,13 @@ fn import_object_sheet_binary(
                     for layer in 0..layers {
                         for h in 0..thing_height {
                             for w in 0..thing_width {
-                                // Calculate image coordinates
                                 let img_row = if is_outfit {
-                                    // Outfit: row = frame * patternY + py (addon)
                                     (frame as u32) * (pattern_y as u32) + (py as u32)
                                 } else {
-                                    // Non-outfit: original formula
                                     (layer as u32) * (pattern_x as u32) + (px as u32)
                                 };
 
                                 let img_col = if is_outfit {
-                                    // Outfit: col = pz * (directions * layers) + px * layers + layer
                                     (pz as u32) * (pattern_x as u32) * (layers as u32)
                                         + (px as u32) * (layers as u32)
                                         + (layer as u32)
@@ -1799,35 +1873,26 @@ fn import_object_sheet_binary(
                                     frame as u32
                                 };
 
-                                // Pixel coordinates (for multi-tile, extract each 32x32 sub-tile)
-                                // Tibia stores multi-tile sprites in REVERSE order (bottom-right first)
-                                // So sprite index [0] = bottom-right, but in image it's at top-left
-                                // We need to reverse the extraction: w=0 extracts from right side, h=0 from bottom
                                 let reversed_w = (thing_width - 1 - w) as u32;
                                 let reversed_h = (thing_height - 1 - h) as u32;
                                 let src_x = img_col * tile_size + reversed_w * 32;
                                 let src_y = img_row * tile_size + reversed_h * 32;
 
-                                // Extract 32x32 sprite - check bounds first
                                 if src_x + 32 <= img_width && src_y + 32 <= img_height {
                                     let sub_img = img.view(src_x, src_y, 32, 32);
                                     let mut sub_img_buffer = sub_img.to_image();
 
-                                    // Normalize transparent pixels
                                     for pixel in sub_img_buffer.pixels_mut() {
                                         if pixel[3] == 0 { pixel.0 = [0, 0, 0, 0]; }
                                     }
 
                                     let raw_pixels = sub_img_buffer.as_raw();
 
-                                    // Check if sprite is completely empty (all transparent)
                                     let is_empty = raw_pixels.chunks(4).all(|p| p[3] == 0);
 
                                     if is_empty {
-                                        // Empty sprite = use sprite ID 0 (Tibia convention)
                                         new_sprite_index.push(0);
                                     } else {
-                                        // Allocate new sprite ID for non-empty sprite
                                         let sprite_id = if id_alloc_idx < reusable_ids.len() {
                                             let id = reusable_ids[id_alloc_idx];
                                             id_alloc_idx += 1;
@@ -1846,16 +1911,13 @@ fn import_object_sheet_binary(
                                             compressed_pixels,
                                         };
 
-                                        // Store in overrides
                                         manager.update_sprite(&spr_path, sprite_id, sprite_data.clone())?;
 
-                                        // Collect for response
                                         sprites_data.push(sprite_data);
 
                                         new_sprite_index.push(sprite_id);
                                     }
                                 } else {
-                                    // Out of bounds = empty sprite (use ID 0)
                                     new_sprite_index.push(0);
                                 }
                             }
@@ -1866,8 +1928,6 @@ fn import_object_sheet_binary(
         }
     }
 
-    // 5. Build frame groups (only if version >= 1057 supports them)
-    // Frame groups are only supported for outfits in version 10.57 (1057) and above
     let has_frame_groups = version >= 1057;
 
     println!("Frame groups check: version={}, has_frame_groups={}", version, has_frame_groups);
@@ -1876,13 +1936,11 @@ fn import_object_sheet_binary(
                           * (layers as usize) * (thing_height as usize) * (thing_width as usize);
 
     let frame_groups: Option<Vec<FrameGroup>> = if has_frame_groups {
-        // VERSION >= 1057: Create frame groups
         let mut groups = Vec::new();
 
         if is_outfit && frames > 1 {
-            // Outfit with multiple frames: split into Idle (frame 0) and Walking (frames 1+)
             let idle_group = FrameGroup {
-                r#type: 0, // Idle
+                r#type: 0,
                 width: thing_width,
                 height: thing_height,
                 exact_size: tile_size as u8,
@@ -1903,7 +1961,7 @@ fn import_object_sheet_binary(
             let walking_frames = frames - 1;
             if walking_frames > 0 {
                 let walking_group = FrameGroup {
-                    r#type: 1, // Walking
+                    r#type: 1,
                     width: thing_width,
                     height: thing_height,
                     exact_size: tile_size as u8,
@@ -1922,7 +1980,6 @@ fn import_object_sheet_binary(
                 groups.push(walking_group);
             }
         } else {
-            // Single frame group for non-outfits or single-frame outfits
             let group = FrameGroup {
                 r#type: 0,
                 width: thing_width,
@@ -1944,11 +2001,9 @@ fn import_object_sheet_binary(
         }
         Some(groups)
     } else {
-        // VERSION < 1057: No frame groups - all frames in single sprite_index array
         None
     };
 
-    // 6. Build updated ThingType
     let mut new_thing = thing.clone();
     new_thing.frame_groups_data = frame_groups;
     new_thing.width = thing_width;
@@ -1960,20 +2015,13 @@ fn import_object_sheet_binary(
     new_thing.pattern_z = pattern_z;
     new_thing.frames = frames;
     new_thing.is_animation = frames > 1;
-    // For legacy compatibility, use all sprites in sprite_index
     new_thing.sprite_index = new_sprite_index;
 
-    // 7. Serialize ThingType to JSON
     let thing_json = serde_json::to_vec(&new_thing)
         .map_err(|e| format!("JSON serialize error: {}", e))?;
 
-    // 8. Pack sprites to RGBA format (for immediate frontend cache population)
     let sprites_buffer = SprManager::pack_sprites_rgba_lz4(sprites_data, transparent);
 
-    // 9. Build response: [JSON len: u32][JSON bytes][sprites buffer (already LZ4)]
-    // Note: sprites_buffer is already LZ4 compressed, so we DON'T compress again
-    // But we need the frontend to decompress the sprites separately from the JSON
-    // So let's NOT LZ4 the whole thing - just prepend JSON
     let mut result = Vec::with_capacity(4 + thing_json.len() + sprites_buffer.len());
     result.extend_from_slice(&(thing_json.len() as u32).to_le_bytes());
     result.extend_from_slice(&thing_json);
@@ -1984,16 +2032,12 @@ fn import_object_sheet_binary(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // Initialize SPR manager state
     let spr_manager: SprManagerState = Arc::new(Mutex::new(SprManager::new()));
 
-    // Initialize logger state
     let logger: LoggerState = Arc::new(Mutex::new(Logger::new()));
 
-    // Initialize DAT manager state
     let dat_manager: DatManagerState = Arc::new(Mutex::new(DatManager::new()));
 
-    // Initialize log file
     {
         let mut log = logger.lock().unwrap();
         let log_path = "sprite-forge-debug.jsonl";
@@ -2053,6 +2097,9 @@ tauri::Builder::default()
             ensure_versions_dir,
             write_json_file,
             delete_file,
+            clear_versions_dir,
+            list_versions_dir,
+            read_sprites_compressed_raw,
             save_scene,
             list_scenes,
             load_scene,
@@ -2078,12 +2125,10 @@ tauri::Builder::default()
                 use tauri::{Manager, Listener};
                 use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial};
 
-                // Apply vibrancy to main window
                 if let Some(window) = app.get_webview_window("main") {
                     let _ = apply_vibrancy(&window, NSVisualEffectMaterial::HudWindow, None, Some(12.0));
                 }
 
-                // Listen for new windows and apply vibrancy to them too
                 let app_handle = app.handle().clone();
                 app.listen("tauri://webview-created", move |_event| {
                     if let Some(window) = app_handle.get_webview_window("find") {
@@ -2092,7 +2137,6 @@ tauri::Builder::default()
                 });
             }
 
-            // Enable shadows on Windows (since tauri.conf.json has shadow: false for macOS compatibility)
             #[cfg(target_os = "windows")]
             {
                 use tauri::Manager;

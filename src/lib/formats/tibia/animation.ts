@@ -1,33 +1,22 @@
-/**
- * Animation utilities for Tibia sprites
- * Based on Object Builder's animation system (ThingDataView.as lines 238-244)
- */
 
 import type { ThingType, FrameDuration, ThingCategory } from './types';
 
-// Animation modes (from Object Builder's AnimationMode.as)
 export const AnimationMode = {
-	SYNCHRONOUS: 1, // All instances play in sync
-	ASYNCHRONOUS: 0 // Each instance plays independently
+	SYNCHRONOUS: 1,
+	ASYNCHRONOUS: 0
 } as const;
 
-// Animation direction constants (for ping-pong animations)
 export const AnimationDirection = {
 	FORWARD: 0,
 	BACKWARD: 1
 } as const;
 
-// Frame control constants (from Animator.as lines 262-264)
 export const FrameControl = {
-	RANDOM: 0xfe, // Random starting frame
-	AUTOMATIC: -1, // Use start frame or random
-	ASYNCHRONOUS: 0xff // Asynchronous mode
+	RANDOM: 0xfe,
+	AUTOMATIC: -1,
+	ASYNCHRONOUS: 0xff
 } as const;
 
-/**
- * Get the duration for a single frame with randomization
- * Based on FrameDuration.as lines 42-50
- */
 export function getFrameDuration(frameDuration: FrameDuration): number {
 	if (frameDuration.minimum === frameDuration.maximum) {
 		return frameDuration.minimum;
@@ -36,14 +25,6 @@ export function getFrameDuration(frameDuration: FrameDuration): number {
 	return frameDuration.minimum + Math.round(Math.random() * (frameDuration.maximum - frameDuration.minimum));
 }
 
-/**
- * Generate default frame durations for animations without explicit timing data
- * Based on ThingDataView.as lines 238-244
- *
- * @param thing - The ThingType to generate durations for
- * @param category - The thing category (determines default duration)
- * @returns Array of FrameDuration objects
- */
 export function getDefaultDuration(category: ThingCategory): number {
 	switch (category) {
 		case 'outfit':
@@ -71,32 +52,18 @@ export function generateDefaultDurations(thing: ThingType, category: ThingCatego
 	return durations;
 }
 
-/**
- * Check if a thing should skip the first frame when idle
- * Based on ThingDataView.as line 248
- */
 export function shouldSkipFirstFrame(thing: ThingType, category: ThingCategory): boolean {
-	// Outfits skip first frame when idle (not animateAlways) and not walking
 	return category === 'outfit' && !thing.animateAlways;
 }
 
-/**
- * Get the starting frame for an animation
- * Based on Animator.as lines 162-170
- */
 export function getStartFrame(thing: ThingType): number {
 	if (thing.startFrame > -1) {
 		return thing.startFrame;
 	}
 
-	// Random starting frame
 	return Math.floor(Math.random() * thing.frames);
 }
 
-/**
- * Calculate the next frame in a looping animation
- * Based on Animator.as lines 223-243
- */
 export function getLoopFrame(currentFrame: number, frames: number, loopCount: number, currentLoop: number): number {
 	const nextFrame = currentFrame + 1;
 
@@ -104,25 +71,17 @@ export function getLoopFrame(currentFrame: number, frames: number, loopCount: nu
 		return nextFrame;
 	}
 
-	// End of animation reached
 	if (loopCount === 0) {
-		// Infinite loop (loopCount = 0 means continuous)
 		return 0;
 	}
 
-	// Check if we have more loops to go
 	if (currentLoop < loopCount - 1) {
-		return 0; // Start next loop
+		return 0;
 	}
 
-	// Animation complete
-	return currentFrame; // Stay on last frame
+	return currentFrame;
 }
 
-/**
- * Calculate the next frame in a ping-pong animation
- * Based on Animator.as lines 245-256
- */
 export function getPingPongFrame(
 	currentFrame: number,
 	frames: number,
@@ -133,10 +92,9 @@ export function getPingPongFrame(
 
 	let newDirection = direction;
 
-	// Check if we need to reverse direction
 	if (nextFrame < 0 || nextFrame >= frames) {
 		newDirection = direction === AnimationDirection.FORWARD ? AnimationDirection.BACKWARD : AnimationDirection.FORWARD;
-		nextFrame = currentFrame - count; // Reverse
+		nextFrame = currentFrame - count;
 	}
 
 	return { newDirection, frame: nextFrame };

@@ -4,8 +4,9 @@ import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useToast } from '@/usecase/hooks/use-toast';
 import { revealItemInDir } from '@tauri-apps/plugin-opener';
-import { Clock, Trash2, Package, FolderOpen } from 'lucide-react';
+import { useAssetData } from '@/usecase/context/AssetDataContext';
 import { getCommitHistory, cleanOldVersions } from '@/lib/versionControl';
+import { Clock, Trash2, Package, FolderOpen, RotateCcw } from 'lucide-react';
 
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -20,10 +21,12 @@ interface VersionHistoryDialogProps {
 
 export const VersionHistoryDialog = ({ open, onOpenChange }: VersionHistoryDialogProps) => {
 	const { toast } = useToast();
+	const { restoreCommit, data } = useAssetData();
 	const [commitLog, setCommitLog] = useState<null | CommitLog>(null);
 	const [loading, setLoading] = useState(false);
 	const [cleanupDays, setCleanupDays] = useState('30');
 	const [cleanupCount, setCleanupCount] = useState('10');
+	const [restoringHash, setRestoringHash] = useState<null | string>(null);
 
 	// Load commit history when dialog opens
 	useEffect(() => {
@@ -128,6 +131,44 @@ export const VersionHistoryDialog = ({ open, onOpenChange }: VersionHistoryDialo
 		return 'Just now';
 	};
 
+	const handleRestore = async (hash: string) => {
+		if (!data) {
+			toast({
+				variant: 'destructive',
+				title: 'No project open',
+				description: 'Open a DAT/SPR project before restoring a version'
+			});
+			return;
+		}
+
+		const confirmed = window.confirm(
+			'Restore this version?\n\nIt will revert the affected items and sprites in memory. You still need to compile to write the rollback to disk.'
+		);
+		if (!confirmed) return;
+
+		setRestoringHash(hash);
+		try {
+			const result = await restoreCommit(hash);
+			toast({
+				title: 'Version restored',
+				description: `Reverted ${result.itemsRestored} items and ${result.spritesRestored} sprites. Compile to persist.${
+					result.itemsSkipped + result.spritesSkipped > 0
+						? ` (${result.itemsSkipped + result.spritesSkipped} entries skipped: they were created in this commit and have no prior state.)`
+						: ''
+				}`
+			});
+			onOpenChange(false);
+		} catch (err) {
+			toast({
+				variant: 'destructive',
+				title: 'Restore failed',
+				description: err instanceof Error ? err.message : 'Unknown error'
+			});
+		} finally {
+			setRestoringHash(null);
+		}
+	};
+
 	const handleOpenSettingsFolder = async () => {
 		try {
 			const configDir = await invoke<string>('get_config_dir_path');
@@ -193,10 +234,20 @@ export const VersionHistoryDialog = ({ open, onOpenChange }: VersionHistoryDialo
 														</div>
 													</div>
 												</div>
-												<div className="flex-shrink-0">
+												<div className="flex flex-col items-end gap-1 flex-shrink-0">
 													<code className="text-xs bg-background px-2 py-0.5 rounded border font-mono">
 														{commit.hash.substring(0, 8)}
 													</code>
+													<Button
+														size="sm"
+														variant="outline"
+														className="h-7 text-xs"
+														disabled={restoringHash !== null}
+														onClick={() => handleRestore(commit.hash)}
+													>
+														<RotateCcw className="h-3 w-3 mr-1" />
+														{restoringHash === commit.hash ? 'Restoring...' : 'Restore'}
+													</Button>
 												</div>
 											</div>
 										</div>

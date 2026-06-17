@@ -1,6 +1,6 @@
 import { memo, useRef, useEffect } from 'react';
-import { SPRITE_SIZE, isValidSpriteId } from '@/lib/tibia';
-import { useTibiaData } from '@/usecase/context/TibiaDataContext';
+import { SPRITE_SIZE, isValidSpriteId } from '@/lib/formats/tibia';
+import { useAssetData } from '@/usecase/context/AssetDataContext';
 
 // Collect all sprite IDs needed for scene items
 function collectSceneSpriteIds(
@@ -48,7 +48,7 @@ interface SceneCanvasProps {
 
 export const SceneCanvas = memo(({ width, tiles, height, scale = 1, onTileClick }: SceneCanvasProps) => {
 	const canvasRef = useRef<HTMLCanvasElement>(null);
-	const { data, getSprite, notifySpritesLoaded } = useTibiaData();
+	const { data, getSprite, notifySpritesLoaded } = useAssetData();
 	const offscreenCanvasRef = useRef<null | HTMLCanvasElement>(null);
 
 	// Preload sprites for all items in the scene
@@ -64,7 +64,7 @@ export const SceneCanvas = memo(({ width, tiles, height, scale = 1, onTileClick 
 			if (missingIds.length === 0) return;
 
 			// Load missing sprites
-			const { loadSpriteIds } = await import('@/lib/tibia');
+			const { loadSpriteIds } = await import('@/lib/formats/tibia');
 			await loadSpriteIds(data.sprPath, missingIds, data.transparency, data.sprites);
 			notifySpritesLoaded();
 		};

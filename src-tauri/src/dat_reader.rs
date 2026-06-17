@@ -2,11 +2,6 @@ use std::fs::File;
 use std::io::{self, Read, BufReader};
 use crate::dat_writer::{ThingType, FrameDuration, FrameGroup};
 
-// Binary encoding for fast IPC transfer (no JSON serialization)
-// This module provides functions to encode parsed DAT data to binary buffers
-
-/// Encode all parsed things to a binary buffer for IPC transfer
-/// Format: 20-byte header + encoded things
 pub fn encode_dat_to_binary(
     signature: u32,
     items: &[ThingType],
@@ -14,7 +9,6 @@ pub fn encode_dat_to_binary(
     effects: &[ThingType],
     missiles: &[ThingType],
 ) -> Vec<u8> {
-    // Estimate buffer size (20 header + ~150 bytes per thing average)
     let thing_count = items.len() + outfits.len() + effects.len() + missiles.len();
     let mut buffer = Vec::with_capacity(20 + thing_count * 150);
 
@@ -24,7 +18,6 @@ pub fn encode_dat_to_binary(
     buffer.extend_from_slice(&(effects.len() as u32).to_le_bytes());
     buffer.extend_from_slice(&(missiles.len() as u32).to_le_bytes());
 
-    // Encode each category
     for thing in items { encode_thing(&mut buffer, thing); }
     for thing in outfits { encode_thing(&mut buffer, thing); }
     for thing in effects { encode_thing(&mut buffer, thing); }
@@ -33,30 +26,25 @@ pub fn encode_dat_to_binary(
     buffer
 }
 
-/// Encode a single ThingType to binary
 fn encode_thing(buffer: &mut Vec<u8>, thing: &ThingType) {
-    // Fixed header (12 bytes)
-    buffer.extend_from_slice(&thing.id.to_le_bytes());           // 4 bytes
-    buffer.push(thing.width);                                     // 1 byte
-    buffer.push(thing.height);                                    // 1 byte
-    buffer.push(thing.exact_size);                                // 1 byte
-    buffer.push(thing.layers);                                    // 1 byte
-    buffer.push(thing.pattern_x);                                 // 1 byte
-    buffer.push(thing.pattern_y);                                 // 1 byte
-    buffer.push(thing.pattern_z);                                 // 1 byte
-    buffer.push(thing.frames);                                    // 1 byte
+    buffer.extend_from_slice(&thing.id.to_le_bytes());
+    buffer.push(thing.width);
+    buffer.push(thing.height);
+    buffer.push(thing.exact_size);
+    buffer.push(thing.layers);
+    buffer.push(thing.pattern_x);
+    buffer.push(thing.pattern_y);
+    buffer.push(thing.pattern_z);
+    buffer.push(thing.frames);
 
-    // Encode boolean flags as 64-bit bitfield (8 bytes)
     let flags = encode_flags(thing);
     buffer.extend_from_slice(&flags.to_le_bytes());
 
-    // Sprite IDs (2 + 4*n bytes)
     buffer.extend_from_slice(&(thing.sprite_index.len() as u16).to_le_bytes());
     for &sprite_id in &thing.sprite_index {
         buffer.extend_from_slice(&sprite_id.to_le_bytes());
     }
 
-    // Conditional numeric fields (based on flags)
     if thing.is_ground {
         buffer.extend_from_slice(&thing.ground_speed.to_le_bytes());
     }
@@ -86,7 +74,6 @@ fn encode_thing(buffer: &mut Vec<u8>, thing: &ThingType) {
         buffer.extend_from_slice(&thing.market_show_as.to_le_bytes());
         buffer.extend_from_slice(&thing.market_restrict_profession.to_le_bytes());
         buffer.extend_from_slice(&thing.market_restrict_level.to_le_bytes());
-        // Market name as length-prefixed string
         let name_bytes = thing.market_name.as_bytes();
         buffer.extend_from_slice(&(name_bytes.len() as u16).to_le_bytes());
         buffer.extend_from_slice(name_bytes);
@@ -106,7 +93,6 @@ fn encode_thing(buffer: &mut Vec<u8>, thing: &ThingType) {
         }
     }
 
-    // Animation data (only if is_animation AND has frame durations)
     if thing.is_animation && !thing.frame_durations.is_empty() {
         buffer.push(thing.animation_mode);
         buffer.extend_from_slice(&thing.loop_count.to_le_bytes());
@@ -162,7 +148,6 @@ fn encode_thing(buffer: &mut Vec<u8>, thing: &ThingType) {
     }
 }
 
-/// Encode boolean properties as 64-bit bitfield
 fn encode_flags(thing: &ThingType) -> u64 {
     let mut flags: u64 = 0;
     if thing.is_ground          { flags |= 1 << 0; }
@@ -207,14 +192,11 @@ fn encode_flags(thing: &ThingType) -> u64 {
     if thing.wrappable          { flags |= 1 << 39; }
     if thing.unwrappable        { flags |= 1 << 40; }
     if thing.top_effect         { flags |= 1 << 41; }
-    // Only set is_animation flag if we have actual animation data (frame_durations)
-    // This ensures the TypeScript decoder knows whether to expect animation data
     if thing.is_animation && !thing.frame_durations.is_empty() { flags |= 1 << 42; }
     if thing.has_bones          { flags |= 1 << 43; }
     flags
 }
 
-// MetadataFlags1: v7.10 - 7.30 (oldest format)
 struct MetadataFlags1;
 #[allow(dead_code)]
 impl MetadataFlags1 {
@@ -239,7 +221,6 @@ impl MetadataFlags1 {
     const FULL_GROUND: u8 = 0x12;
     const HAS_ELEVATION: u8 = 0x13;
     const HAS_OFFSET: u8 = 0x14;
-    // 0x15 unknown/unused
     const MINI_MAP: u8 = 0x16;
     const ROTATABLE: u8 = 0x17;
     const LYING_OBJECT: u8 = 0x18;
@@ -251,7 +232,6 @@ impl MetadataFlags1 {
     const LAST_FLAG: u8 = 0xFF;
 }
 
-// MetadataFlags2: v7.40 - 7.50
 struct MetadataFlags2;
 #[allow(dead_code)]
 impl MetadataFlags2 {
@@ -276,7 +256,6 @@ impl MetadataFlags2 {
     const FULL_GROUND: u8 = 0x12;
     const HAS_ELEVATION: u8 = 0x13;
     const HAS_OFFSET: u8 = 0x14;
-    // 0x15 unknown/unused
     const MINI_MAP: u8 = 0x16;
     const ROTATABLE: u8 = 0x17;
     const LYING_OBJECT: u8 = 0x18;
@@ -291,7 +270,6 @@ impl MetadataFlags2 {
     const LAST_FLAG: u8 = 0xFF;
 }
 
-// MetadataFlags3: v7.55 - 7.72
 struct MetadataFlags3;
 #[allow(dead_code)]
 impl MetadataFlags3 {
@@ -317,7 +295,6 @@ impl MetadataFlags3 {
     const HORIZONTAL: u8 = 0x13;
     const ROTATABLE: u8 = 0x14;
     const HAS_LIGHT: u8 = 0x15;
-    // 0x16 unknown/unused
     const FLOOR_CHANGE: u8 = 0x17;
     const HAS_OFFSET: u8 = 0x18;
     const HAS_ELEVATION: u8 = 0x19;
@@ -329,7 +306,6 @@ impl MetadataFlags3 {
     const LAST_FLAG: u8 = 0xFF;
 }
 
-// MetadataFlags4: v7.80 - 8.54
 struct MetadataFlags4;
 #[allow(dead_code)]
 impl MetadataFlags4 {
@@ -341,7 +317,7 @@ impl MetadataFlags4 {
     const STACKABLE: u8 = 0x05;
     const FORCE_USE: u8 = 0x06;
     const MULTI_USE: u8 = 0x07;
-    const HAS_CHARGES: u8 = 0x08;  // Unique to v4!
+    const HAS_CHARGES: u8 = 0x08;
     const WRITABLE: u8 = 0x09;
     const WRITABLE_ONCE: u8 = 0x0A;
     const FLUID_CONTAINER: u8 = 0x0B;
@@ -372,8 +348,6 @@ impl MetadataFlags4 {
     const LAST_FLAG: u8 = 0xFF;
 }
 
-// MetadataFlags5: v8.60 - 9.86 (NO NO_MOVE_ANIMATION flag!)
-// This is the key difference - PICKUPABLE is at 0x10 instead of NO_MOVE_ANIMATION
 struct MetadataFlags5;
 #[allow(dead_code)]
 impl MetadataFlags5 {
@@ -393,8 +367,7 @@ impl MetadataFlags5 {
     const UNMOVEABLE: u8 = 0x0D;
     const BLOCK_MISSILE: u8 = 0x0E;
     const BLOCK_PATHFIND: u8 = 0x0F;
-    // NOTE: NO NO_MOVE_ANIMATION at 0x10!
-    const PICKUPABLE: u8 = 0x10;  // Shifted compared to v6
+    const PICKUPABLE: u8 = 0x10;
     const HANGABLE: u8 = 0x11;
     const VERTICAL: u8 = 0x12;
     const HORIZONTAL: u8 = 0x13;
@@ -416,7 +389,6 @@ impl MetadataFlags5 {
     const LAST_FLAG: u8 = 0xFF;
 }
 
-// MetadataFlags6: v10.10+ (has NO_MOVE_ANIMATION at 0x10)
 struct MetadataFlags6;
 impl MetadataFlags6 {
     const GROUND: u8 = 0x00;
@@ -530,21 +502,17 @@ impl DatReader {
         let len = self.read_u16_le()?;
         let mut buf = vec![0u8; len as usize];
         self.reader.read_exact(&mut buf)?;
-        // Use lossy conversion for Latin-1/ISO-8859-1 approximation
         Ok(String::from_utf8_lossy(&buf).to_string())
     }
 
-    /// Set version and configure flags based on it
     pub fn set_version(&mut self, version: u32) {
         self.version = version;
-        // Set flags based on version (logic from Object Builder)
         self.extended = version >= 960;
         self.frame_durations = version >= 1050;
         self.frame_groups = version >= 1057;
     }
 
     pub fn read_dat(&mut self) -> Result<(u32, Vec<ThingType>, Vec<ThingType>, Vec<ThingType>, Vec<ThingType>), String> {
-        // Read signature
         let signature = self.read_u32_le().map_err(|e| format!("Failed to read signature: {}", e))?;
 
         let items_count = self.read_u16_le().map_err(|e| format!("Failed to read items count: {}", e))?;
@@ -557,29 +525,21 @@ impl DatReader {
         let mut effects = Vec::with_capacity(effects_count as usize);
         let mut missiles = Vec::with_capacity(missiles_count as usize);
 
-        // Read Items (Category 1)
-        // IDs start from 100
         for id in 100..=items_count {
             let thing = self.read_thing(id as u32, "item").map_err(|e| format!("Error reading item {}: {}", id, e))?;
             items.push(thing);
         }
 
-        // Read Outfits (Category 2)
-        // IDs start from 1
         for id in 1..=outfits_count {
             let thing = self.read_thing(id as u32, "outfit").map_err(|e| format!("Error reading outfit {}: {}", id, e))?;
             outfits.push(thing);
         }
 
-        // Read Effects (Category 3)
-        // IDs start from 1
         for id in 1..=effects_count {
             let thing = self.read_thing(id as u32, "effect").map_err(|e| format!("Error reading effect {}: {}", id, e))?;
             effects.push(thing);
         }
 
-        // Read Missiles (Category 4)
-        // IDs start from 1
         for id in 1..=missiles_count {
             let thing = self.read_thing(id as u32, "missile").map_err(|e| format!("Error reading missile {}: {}", id, e))?;
             missiles.push(thing);
@@ -591,10 +551,7 @@ impl DatReader {
     fn read_thing(&mut self, id: u32, category: &str) -> io::Result<ThingType> {
         let mut thing = self.create_empty_thing(id, category);
 
-        // Read properties
         self.read_properties(&mut thing)?;
-
-        // Read texture patterns
         self.read_texture_patterns(&mut thing)?;
 
         Ok(thing)
@@ -705,8 +662,6 @@ impl DatReader {
         }
     }
 
-    /// Read properties for v7.10 - 7.30 (MetadataFlags1)
-    /// Oldest format: No GROUND_BORDER, no HANGABLE/VERTICAL/HORIZONTAL
     fn read_properties_v1(&mut self, thing: &mut ThingType) -> io::Result<()> {
         loop {
             let flag = self.read_u8()?;
@@ -770,9 +725,7 @@ impl DatReader {
                 MetadataFlags1::WRAPPABLE => thing.wrappable = true,
                 MetadataFlags1::UNWRAPPABLE => thing.unwrappable = true,
                 MetadataFlags1::TOP_EFFECT => thing.top_effect = true,
-                0x15 => {
-                    // Unknown flag in v1, skip
-                }
+                0x15 => {}
                 _ => {
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidData,
@@ -784,8 +737,6 @@ impl DatReader {
         Ok(())
     }
 
-    /// Read properties for v7.40 - 7.50 (MetadataFlags2)
-    /// Added HANGABLE, VERTICAL, HORIZONTAL vs v1
     fn read_properties_v2(&mut self, thing: &mut ThingType) -> io::Result<()> {
         loop {
             let flag = self.read_u8()?;
@@ -852,9 +803,7 @@ impl DatReader {
                 MetadataFlags2::WRAPPABLE => thing.wrappable = true,
                 MetadataFlags2::UNWRAPPABLE => thing.unwrappable = true,
                 MetadataFlags2::TOP_EFFECT => thing.top_effect = true,
-                0x15 => {
-                    // Unknown flag in v2, skip
-                }
+                0x15 => {}
                 _ => {
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidData,
@@ -866,8 +815,6 @@ impl DatReader {
         Ok(())
     }
 
-    /// Read properties for v7.55 - 7.72 (MetadataFlags3)
-    /// Added GROUND_BORDER, different flag order
     fn read_properties_v3(&mut self, thing: &mut ThingType) -> io::Result<()> {
         loop {
             let flag = self.read_u8()?;
@@ -932,9 +879,7 @@ impl DatReader {
                     thing.lens_help = self.read_u16_le()?;
                 }
                 MetadataFlags3::FULL_GROUND => thing.is_full_ground = true,
-                0x16 => {
-                    // Unknown flag in v3, skip
-                }
+                0x16 => {}
                 _ => {
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidData,
@@ -946,8 +891,6 @@ impl DatReader {
         Ok(())
     }
 
-    /// Read properties for v7.80 - 8.54 (MetadataFlags4)
-    /// Added HAS_CHARGES at 0x08, DONT_HIDE, IGNORE_LOOK
     fn read_properties_v4(&mut self, thing: &mut ThingType) -> io::Result<()> {
         loop {
             let flag = self.read_u8()?;
@@ -1029,8 +972,6 @@ impl DatReader {
         Ok(())
     }
 
-    /// Read properties for v8.60 - 9.86 (MetadataFlags5)
-    /// Key difference: NO NO_MOVE_ANIMATION flag, simpler flag set
     fn read_properties_v5(&mut self, thing: &mut ThingType) -> io::Result<()> {
         loop {
             let flag = self.read_u8()?;
@@ -1064,7 +1005,6 @@ impl DatReader {
                 MetadataFlags5::UNMOVEABLE => thing.is_unmoveable = true,
                 MetadataFlags5::BLOCK_MISSILE => thing.block_missile = true,
                 MetadataFlags5::BLOCK_PATHFIND => thing.block_pathfind = true,
-                // NOTE: No NO_MOVE_ANIMATION in v5!
                 MetadataFlags5::PICKUPABLE => thing.pickupable = true,
                 MetadataFlags5::HANGABLE => thing.hangable = true,
                 MetadataFlags5::VERTICAL => thing.is_vertical = true,
@@ -1079,7 +1019,6 @@ impl DatReader {
                 MetadataFlags5::TRANSLUCENT => thing.is_translucent = true,
                 MetadataFlags5::HAS_OFFSET => {
                     thing.has_offset = true;
-                    // In v5, offsets are signed i16 (like Object Builder MetadataReader5)
                     thing.offset_x = self.read_u16_le()? as i16;
                     thing.offset_y = self.read_u16_le()? as i16;
                 }
@@ -1124,7 +1063,6 @@ impl DatReader {
         Ok(())
     }
 
-    /// Read properties for v10.10+ (MetadataFlags6)
     fn read_properties_v6(&mut self, thing: &mut ThingType) -> io::Result<()> {
         loop {
             let flag = self.read_u8()?;
@@ -1215,9 +1153,8 @@ impl DatReader {
                 MetadataFlags6::HAS_BONES => self.read_bones(thing)?,
                 MetadataFlags6::USABLE => thing.usable = true,
                 _ => {
-                    // Unknown flag, but we should probably continue or error
                     return Err(io::Error::new(
-                        io::ErrorKind::InvalidData, 
+                        io::ErrorKind::InvalidData,
                         format!("Unknown flag: 0x{:02X} (version: {})", flag, self.version)
                     ));
                 }
@@ -1227,8 +1164,6 @@ impl DatReader {
     }
 
     fn read_texture_patterns(&mut self, thing: &mut ThingType) -> io::Result<()> {
-        // For version >= 10.57 (1057) outfits use frame groups
-        // Frame groups allow separate IDLE (standing) and WALKING animations
         let has_frame_groups = self.frame_groups && thing.category == "outfit";
         let group_count = if has_frame_groups {
             self.read_u8()?
@@ -1240,7 +1175,6 @@ impl DatReader {
             thing.frame_groups_data = Some(Vec::new());
         }
 
-        // Read all frame groups
         for group_idx in 0..group_count {
             let group_type = if has_frame_groups {
                 self.read_u8()?;
@@ -1249,7 +1183,6 @@ impl DatReader {
                 0
             };
 
-            // Read texture data
             let width = self.read_u8()?;
             let height = self.read_u8()?;
             let exact_size = if width > 1 || height > 1 {
@@ -1263,7 +1196,6 @@ impl DatReader {
             let pattern_z = if self.version <= 750 { 1 } else { self.read_u8()? };
             let frames = self.read_u8()?;
 
-            // Read animation data if frames > 1
             let (is_animation, animation_mode, loop_count, start_frame, frame_durations) = if frames > 1 && self.frame_durations {
                 let mode = self.read_u8()?;
                 let loop_cnt = self.read_i32_le()?;
@@ -1279,7 +1211,6 @@ impl DatReader {
                 (frames > 1, None, None, None, None)
             };
 
-            // Calculate sprite count for this group
             let total_sprites = width as u32 * height as u32 * layers as u32
                 * pattern_x as u32 * pattern_y as u32 * pattern_z as u32 * frames as u32;
 
@@ -1288,7 +1219,6 @@ impl DatReader {
                     format!("Frame group has {} sprites (exceeds 4096 limit)", total_sprites)));
             }
 
-            // Read sprite indices for this group
             let mut sprite_indices = Vec::new();
             for _ in 0..total_sprites {
                 let sprite_id = if self.extended {
@@ -1299,7 +1229,6 @@ impl DatReader {
                 sprite_indices.push(sprite_id);
             }
 
-            // Populate FrameGroup struct
             if has_frame_groups {
                 let frame_group = FrameGroup {
                     r#type: group_type,
@@ -1323,8 +1252,6 @@ impl DatReader {
                 }
             }
 
-            // Backward compatibility: Populate main thing properties
-            // Use the first group (Idle) or if it's not frame groups
             if group_idx == 0 {
                 thing.width = width;
                 thing.height = height;

@@ -1,15 +1,15 @@
-import type { Sprite, TibiaData, ThingType } from '@/lib/tibia';
+import type { Sprite, AssetData, ThingType } from '@/lib/formats/tibia';
 
 import React from 'react';
 import { logger, EventCode } from '@/lib/debug';
-import { SpriteReader, ThingCategory } from '@/lib/tibia';
+import { SpriteReader, ThingCategory } from '@/lib/formats/tibia';
 
-interface TibiaDataContextType {
+interface AssetDataContextType {
 	isLoading: boolean;
 	error: null | string;
 	clearData: () => void;
 	updateCounter: number;
-	data: null | TibiaData;
+	data: null | AssetData;
 	openedItems: ThingType[];
 	spriteLoadVersion: number;
 	openedItemId: null | number;
@@ -24,6 +24,7 @@ interface TibiaDataContextType {
 	spriteReader: null | SpriteReader;
 	compileFiles: () => Promise<void>;
 	clearModifiedTracking: () => void;
+	restoreCommit: (hash: string) => Promise<{ itemsRestored: number; spritesRestored: number; itemsSkipped: number; spritesSkipped: number }>;
 	highlightedSpriteId: null | number;
 	modifiedSprites: Map<number, Sprite>;
 	setError: (error: null | string) => void;
@@ -47,7 +48,7 @@ interface TibiaDataContextType {
 	setOpenedItemId: (id: null | number, category?: ThingCategory) => void;
 	loadingProgress: null | { stage: string; total: number; current: number };
 	setSelectedCategoryAndItem: (category: ThingCategory, itemId: number) => void;
-	setData: (data: TibiaData, reader: SpriteReader, skipBackendSync?: boolean) => void;
+	setData: (data: AssetData, reader: SpriteReader, skipBackendSync?: boolean) => void;
 	markUnsavedChanges: (id: number, category: ThingCategory, hasChanges: boolean) => void;
 	updateThing: (id: number, category: ThingCategory, updates: Partial<ThingType>) => void;
 	// Compile tracking
@@ -55,10 +56,10 @@ interface TibiaDataContextType {
 	setLoading: (loading: boolean, progress?: { stage: string; total: number; current: number }) => void;
 }
 
-const TibiaDataContext = React.createContext<undefined | TibiaDataContextType>(undefined);
+const AssetDataContext = React.createContext<undefined | AssetDataContextType>(undefined);
 
-export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-	const [data, setDataState] = React.useState<null | TibiaData>(null);
+export const AssetDataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+	const [data, setDataState] = React.useState<null | AssetData>(null);
 	const [spriteReader, setSpriteReader] = React.useState<null | SpriteReader>(null);
 	const [isLoading, setIsLoading] = React.useState(false);
 	const [loadingProgress, setLoadingProgress] = React.useState<null | { stage: string; total: number; current: number }>(null);
@@ -102,6 +103,9 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 	const [newItemKeys, setNewItemKeys] = React.useState<Set<string>>(new Set());
 	// Compile tracking
 	const [modifiedSinceCompile, setModifiedSinceCompile] = React.useState<
+		Map<string, { id: number; data: ThingType; category: ThingCategory }>
+	>(new Map());
+	const [originalItemsSinceCompile, setOriginalItemsSinceCompile] = React.useState<
 		Map<string, { id: number; data: ThingType; category: ThingCategory }>
 	>(new Map());
 	const [modifiedSprites, setModifiedSprites] = React.useState<Map<number, Sprite>>(new Map());
@@ -152,7 +156,7 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 	);
 
 	const setData = React.useCallback(
-		async (newData: TibiaData, reader: SpriteReader, skipBackendSync = false) => {
+		async (newData: AssetData, reader: SpriteReader, skipBackendSync = false) => {
 			if (data?.sprPath && data.sprPath !== newData.sprPath) {
 				try {
 					const { invoke } = await import('@tauri-apps/api/core');
@@ -447,16 +451,27 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
 			if (collection && collection.has(id)) {
 				const thing = collection.get(id)!;
+				const key = `${category}-${id}`;
+
+				setOriginalItemsSinceCompile((prev) => {
+					if (prev.has(key)) return prev;
+					const next = new Map(prev);
+					next.set(key, {
+						id,
+						category,
+						data: JSON.parse(JSON.stringify(thing)) as ThingType
+					});
+					return next;
+				});
+
 				Object.assign(thing, updates);
 
-				// Track as modified since last compile
-				const key = `${category}-${id}`;
 				setModifiedSinceCompile((prev) => {
 					const next = new Map(prev);
 					next.set(key, {
 						id,
 						category,
-						data: { ...thing } // Deep clone
+						data: { ...thing }
 					});
 					return next;
 				});
@@ -561,18 +576,6 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 					return next;
 				});
 			}
-
-			// Also mark items as changed for compilation tracking (for button enabling)
-			setModifiedSinceCompile((prev) => {
-				const next = new Map(prev);
-				// Add a sentinel value to indicate sprite changes
-				next.set('sprite-changed', {
-					id: 0,
-					data: {} as ThingType,
-					category: 'item' as ThingCategory
-				});
-				return next;
-			});
 		},
 		[data]
 	);
@@ -610,11 +613,12 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
 	// Compile tracking methods
 	const hasModifiedItems = React.useCallback(() => {
-		return modifiedSinceCompile.size > 0;
-	}, [modifiedSinceCompile]);
+		return modifiedSinceCompile.size > 0 || modifiedSprites.size > 0;
+	}, [modifiedSinceCompile, modifiedSprites]);
 
 	const clearModifiedTracking = React.useCallback(() => {
 		setModifiedSinceCompile(new Map());
+		setOriginalItemsSinceCompile(new Map());
 		setModifiedSprites(new Map());
 		setNewItemKeys(new Set());
 	}, []);
@@ -624,25 +628,95 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 			throw new Error('No data or file paths available for compilation');
 		}
 
-		if (modifiedSinceCompile.size === 0) {
+		if (modifiedSinceCompile.size === 0 && modifiedSprites.size === 0) {
 			console.log('No modifications to compile');
 			return;
 		}
 
-		// Import compiler dynamically
-		const { compileFiles: doCompile } = await import('@/lib/tibia/compiler');
+		const { compileFiles: doCompile } = await import('@/lib/formats/tibia/compiler');
 
-		// Execute compile
-		await doCompile(data, data.datPath, data.sprPath, modifiedSinceCompile, modifiedSprites, (stage, current, total) => {
-			setLoading(true, { stage, total, current });
-		});
+		let compileSucceeded = false;
+		try {
+			await doCompile({
+				data,
+				datPath: data.datPath,
+				sprPath: data.sprPath,
+				modifiedItems: modifiedSinceCompile,
+				directlyModifiedSprites: modifiedSprites,
+				originalItems: originalItemsSinceCompile,
+				onProgress: (stage, current, total) => {
+					setLoading(true, { stage, total, current });
+				}
+			});
+			compileSucceeded = true;
+		} finally {
+			if (compileSucceeded) {
+				clearModifiedTracking();
+			}
+			setLoading(false);
+		}
+	}, [data, modifiedSinceCompile, modifiedSprites, originalItemsSinceCompile, clearModifiedTracking]);
 
-		// Clear modified tracking after successful compile
-		clearModifiedTracking();
+	const restoreCommit = React.useCallback(
+		async (hash: string) => {
+			if (!data) {
+				throw new Error('No project open');
+			}
 
-		// Done
-		setLoading(false);
-	}, [data, modifiedSinceCompile, clearModifiedTracking]);
+			const { getCommitState, decodeCommitSpritePayload } = await import('@/lib/versionControl');
+			const commit = await getCommitState(hash);
+			if (!commit) {
+				throw new Error('Commit not found or unreadable');
+			}
+
+			let itemsRestored = 0;
+			let itemsSkipped = 0;
+			let spritesRestored = 0;
+			let spritesSkipped = 0;
+
+			for (const entry of commit.items) {
+				if (!entry.before) {
+					itemsSkipped++;
+					continue;
+				}
+				updateThing(entry.id, entry.category, entry.before);
+				itemsRestored++;
+			}
+
+			const restoredSpriteIds: number[] = [];
+			for (const entry of commit.sprites) {
+				if (!entry.before) {
+					if (data.sprites.has(entry.id)) {
+						data.sprites.delete(entry.id);
+						restoredSpriteIds.push(entry.id);
+						spritesRestored++;
+					} else {
+						spritesSkipped++;
+					}
+					continue;
+				}
+				const payload = decodeCommitSpritePayload(entry.before);
+				data.sprites.set(entry.id, {
+					id: entry.id,
+					isEmpty: payload.compressedPixels.length === 0,
+					transparent: payload.transparent,
+					rgbaPixels: new Uint8Array(4096),
+					compressedPixels: payload.compressedPixels
+				} as Sprite);
+				restoredSpriteIds.push(entry.id);
+				spritesRestored++;
+			}
+
+			if (restoredSpriteIds.length > 0) {
+				notifyDataChanged(restoredSpriteIds);
+			} else {
+				notifyDataChanged();
+			}
+
+			return { itemsRestored, spritesRestored, itemsSkipped, spritesSkipped };
+		},
+		[data, updateThing, notifyDataChanged]
+	);
 
 	// NOTE: Global sprite preloading has been REMOVED
 	// Preloading now happens directly in loadTibiaData() in loader.ts
@@ -650,7 +724,7 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 	// Sprites are loaded on-demand as user navigates (Object Builder pattern)
 
 	return (
-		<TibiaDataContext.Provider
+		<AssetDataContext.Provider
 			value={{
 				data,
 				error,
@@ -671,6 +745,7 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 				spriteReader,
 				openedItemId,
 				compileFiles,
+				restoreCommit,
 				clearNewItem,
 				updateCounter,
 				markAsNewItem,
@@ -703,14 +778,14 @@ export const TibiaDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 			}}
 		>
 			{children}
-		</TibiaDataContext.Provider>
+		</AssetDataContext.Provider>
 	);
 };
 
-export const useTibiaData = () => {
-	const context = React.useContext(TibiaDataContext);
+export const useAssetData = () => {
+	const context = React.useContext(AssetDataContext);
 	if (context === undefined) {
-		throw new Error('useTibiaData must be used within a TibiaDataProvider');
+		throw new Error('useAssetData must be used within a AssetDataProvider');
 	}
 	return context;
 };

@@ -1,22 +1,9 @@
-/**
- * Sprite Management Functions
- * Based on Object Builder's SpriteStorage.as implementation
- *
- * Handles adding, removing, and replacing sprites in TibiaData
- */
-
-import type { Sprite, TibiaData } from './types';
+import type { Sprite, AssetData } from './types';
 
 import { invoke } from '@tauri-apps/api/core';
 
 import { isEmptyPixels } from './spriteReader';
 
-/**
- * Compress RGBA pixels using Rust backend
- * @param pixels - RGBA pixel data (4096 bytes)
- * @param transparent - Whether to include alpha channel in output
- * @returns Compressed RLE data
- */
 async function compressPixelsRust(pixels: Uint8Array, transparent: boolean): Promise<Uint8Array> {
 	const buf = new Uint8Array(4097);
 	buf[0] = transparent ? 1 : 0;
@@ -25,25 +12,13 @@ async function compressPixelsRust(pixels: Uint8Array, transparent: boolean): Pro
 	return result instanceof Uint8Array ? result : new Uint8Array(result);
 }
 
-/**
- * Result of a sprite operation
- */
 export interface SpriteOperationResult {
 	success: boolean;
 	message?: string;
 	spriteId?: number;
 }
 
-/**
- * Add a new sprite to the sprite storage
- * Reference: Object Builder SpriteStorage.as lines 158-171
- *
- * @param data - TibiaData instance to modify
- * @param pixels - RGBA pixel data (4096 bytes)
- * @returns Operation result with new sprite ID
- */
-export async function addSprite(data: TibiaData, pixels: Uint8Array): Promise<SpriteOperationResult> {
-	// Check sprite limit
+export async function addSprite(data: AssetData, pixels: Uint8Array): Promise<SpriteOperationResult> {
 	const maxSprites = data.extended ? 0xffffffff : 0xfffe;
 	if (data.spritesCount >= maxSprites) {
 		return {
@@ -52,7 +27,6 @@ export async function addSprite(data: TibiaData, pixels: Uint8Array): Promise<Sp
 		};
 	}
 
-	// Validate pixel data size
 	if (pixels.length !== 4096) {
 		return {
 			success: false,
@@ -60,14 +34,11 @@ export async function addSprite(data: TibiaData, pixels: Uint8Array): Promise<Sp
 		};
 	}
 
-	// Allocate new sprite ID
 	const newId = data.spritesCount + 1;
 
 	try {
-		// Compress pixels using Rust (accepts RGBA directly)
 		const compressed = await compressPixelsRust(pixels, data.transparency);
 
-		// Create sprite object
 		const sprite: Sprite = {
 			id: newId,
 			rgbaPixels: pixels,
@@ -76,7 +47,6 @@ export async function addSprite(data: TibiaData, pixels: Uint8Array): Promise<Sp
 			transparent: data.transparency
 		};
 
-		// Add to cache
 		data.sprites.set(newId, sprite);
 		data.spritesCount = newId;
 
@@ -94,17 +64,7 @@ export async function addSprite(data: TibiaData, pixels: Uint8Array): Promise<Sp
 	}
 }
 
-/**
- * Replace an existing sprite's pixels
- * Reference: Object Builder SpriteStorage.as lines 188-209
- *
- * @param data - TibiaData instance to modify
- * @param id - Sprite ID to replace
- * @param pixels - New RGBA pixel data (4096 bytes)
- * @returns Operation result
- */
-export async function replaceSprite(data: TibiaData, id: number, pixels: Uint8Array): Promise<SpriteOperationResult> {
-	// Validate sprite ID
+export async function replaceSprite(data: AssetData, id: number, pixels: Uint8Array): Promise<SpriteOperationResult> {
 	if (id === 0 || id > data.spritesCount) {
 		return {
 			success: false,
@@ -112,7 +72,6 @@ export async function replaceSprite(data: TibiaData, id: number, pixels: Uint8Ar
 		};
 	}
 
-	// Validate pixel data size
 	if (pixels.length !== 4096) {
 		return {
 			success: false,
@@ -121,10 +80,8 @@ export async function replaceSprite(data: TibiaData, id: number, pixels: Uint8Ar
 	}
 
 	try {
-		// Compress new pixels using Rust (accepts RGBA directly)
 		const compressed = await compressPixelsRust(pixels, data.transparency);
 
-		// Create updated sprite
 		const sprite: Sprite = {
 			id,
 			rgbaPixels: pixels,
@@ -133,7 +90,6 @@ export async function replaceSprite(data: TibiaData, id: number, pixels: Uint8Ar
 			transparent: data.transparency
 		};
 
-		// Update in cache
 		data.sprites.set(id, sprite);
 
 		console.log(`Replaced sprite ${id} (compressed: ${compressed.length} bytes, empty: ${sprite.isEmpty})`);
@@ -150,20 +106,7 @@ export async function replaceSprite(data: TibiaData, id: number, pixels: Uint8Ar
 	}
 }
 
-/**
- * Remove a sprite (replaces with blank sprite unless it's the last one)
- * Reference: Object Builder SpriteStorage.as lines 683-700
- *
- * IMPORTANT: Object Builder does NOT actually delete sprites from the middle
- * of the sprite list! It replaces them with blank sprites to avoid
- * reindexing all items. Only the last sprite can be truly removed.
- *
- * @param data - TibiaData instance to modify
- * @param id - Sprite ID to remove
- * @returns Operation result
- */
-export async function removeSprite(data: TibiaData, id: number): Promise<SpriteOperationResult> {
-	// Validate sprite ID
+export async function removeSprite(data: AssetData, id: number): Promise<SpriteOperationResult> {
 	if (id === 0 || id > data.spritesCount) {
 		return {
 			success: false,
@@ -171,7 +114,6 @@ export async function removeSprite(data: TibiaData, id: number): Promise<SpriteO
 		};
 	}
 
-	// Don't allow removing sprite ID 1 (reserved blank sprite)
 	if (id === 1) {
 		return {
 			success: false,
@@ -180,7 +122,6 @@ export async function removeSprite(data: TibiaData, id: number): Promise<SpriteO
 	}
 
 	try {
-		// If this is the last sprite, truly delete it
 		if (id === data.spritesCount) {
 			data.sprites.delete(id);
 			data.spritesCount--;
@@ -193,8 +134,7 @@ export async function removeSprite(data: TibiaData, id: number): Promise<SpriteO
 			};
 		}
 
-		// Otherwise, replace with blank sprite
-		const blankPixels = new Uint8Array(4096); // All zeros = transparent
+		const blankPixels = new Uint8Array(4096);
 		const compressed = await compressPixelsRust(blankPixels, data.transparency);
 
 		const blankSprite: Sprite = {
@@ -221,43 +161,21 @@ export async function removeSprite(data: TibiaData, id: number): Promise<SpriteO
 	}
 }
 
-/**
- * Check if sprite storage is full
- *
- * @param data - TibiaData instance
- * @returns True if no more sprites can be added
- */
-export function isSpriteStorageFull(data: TibiaData): boolean {
+export function isSpriteStorageFull(data: AssetData): boolean {
 	const maxSprites = data.extended ? 0xffffffff : 0xfffe;
 	return data.spritesCount >= maxSprites;
 }
 
-/**
- * Get remaining sprite capacity
- *
- * @param data - TibiaData instance
- * @returns Number of sprites that can still be added
- */
-export function getRemainingCapacity(data: TibiaData): number {
+export function getRemainingCapacity(data: AssetData): number {
 	const maxSprites = data.extended ? 0xffffffff : 0xfffe;
 	return Math.max(0, maxSprites - data.spritesCount);
 }
 
-/**
- * Add multiple sprites in a batch
- * More efficient than calling addSprite repeatedly
- *
- * @param data - TibiaData instance to modify
- * @param pixelsArray - Array of RGBA pixel data (4096 bytes each)
- * @returns Array of operation results with sprite IDs
- */
-export async function addSpritesBatch(data: TibiaData, pixelsArray: Uint8Array[]): Promise<SpriteOperationResult[]> {
+export async function addSpritesBatch(data: AssetData, pixelsArray: Uint8Array[]): Promise<SpriteOperationResult[]> {
 	const results: SpriteOperationResult[] = [];
 
-	// Check if we have enough capacity
 	const capacity = getRemainingCapacity(data);
 	if (pixelsArray.length > capacity) {
-		// Add partial results for overflow
 		for (let i = 0; i < pixelsArray.length; i++) {
 			if (i < capacity) {
 				const result = await addSprite(data, pixelsArray[i]);
@@ -272,12 +190,10 @@ export async function addSpritesBatch(data: TibiaData, pixelsArray: Uint8Array[]
 		return results;
 	}
 
-	// Add all sprites
 	for (const pixels of pixelsArray) {
 		const result = await addSprite(data, pixels);
 		results.push(result);
 
-		// Stop on first error
 		if (!result.success) {
 			break;
 		}
@@ -286,15 +202,7 @@ export async function addSpritesBatch(data: TibiaData, pixelsArray: Uint8Array[]
 	return results;
 }
 
-/**
- * Clone a sprite (creates a duplicate with a new ID)
- *
- * @param data - TibiaData instance
- * @param sourceId - ID of sprite to clone
- * @returns Operation result with new sprite ID
- */
-export function cloneSprite(data: TibiaData, sourceId: number): SpriteOperationResult {
-	// Get source sprite
+export function cloneSprite(data: AssetData, sourceId: number): SpriteOperationResult {
 	const source = data.sprites.get(sourceId);
 	if (!source) {
 		return {
@@ -303,7 +211,6 @@ export function cloneSprite(data: TibiaData, sourceId: number): SpriteOperationR
 		};
 	}
 
-	// Check sprite limit
 	const maxSprites = data.extended ? 0xffffffff : 0xfffe;
 	if (data.spritesCount >= maxSprites) {
 		return {
@@ -312,18 +219,15 @@ export function cloneSprite(data: TibiaData, sourceId: number): SpriteOperationR
 		};
 	}
 
-	// Allocate new ID
 	const newId = data.spritesCount + 1;
 
-	// Create cloned sprite
 	const cloned: Sprite = {
 		id: newId,
 		isEmpty: source.isEmpty,
 		transparent: source.transparent,
-		compressedPixels: new Uint8Array(source.compressedPixels) // Copy array
+		compressedPixels: new Uint8Array(source.compressedPixels)
 	};
 
-	// Add to cache
 	data.sprites.set(newId, cloned);
 	data.spritesCount = newId;
 

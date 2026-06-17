@@ -1,10 +1,10 @@
 import { cn } from '@/lib/utils';
 import { invoke } from '@tauri-apps/api/core';
-import { isValidSpriteId } from '@/lib/tibia';
+import { isValidSpriteId } from '@/lib/formats/tibia';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { ThingType, ThingCategory } from '@/lib/tibia/types';
-import { useTibiaData } from '@/usecase/context/TibiaDataContext';
+import { ThingType, ThingCategory } from '@/lib/formats/tibia/types';
+import { useAssetData } from '@/usecase/context/AssetDataContext';
 import { useRef, useMemo, useState, useEffect, useCallback } from 'react';
 import { X, List, Minus, Square, Trash2, Columns, Sparkles, LayoutGrid } from 'lucide-react';
 
@@ -121,7 +121,7 @@ const PROPERTIES: Array<{ display: string; property: string }> = [
 ];
 
 export const FindWindow = () => {
-	const { data, setData, setOpenedItemId, notifySpritesLoaded } = useTibiaData();
+	const { data, setData, setOpenedItemId, notifySpritesLoaded } = useAssetData();
 	const [selectedCategory, setSelectedCategory] = useState<'all' | ThingCategory>('all');
 	const [properties, setProperties] = useState<Record<string, boolean>>(
 		PROPERTIES.reduce((acc, prop) => ({ ...acc, [prop.property]: false }), {})
@@ -461,7 +461,7 @@ export const FindWindow = () => {
 		const loadSprites = async () => {
 			if (!data || !data.sprPath || searchResults.length === 0) return;
 
-			const { loadSpriteIds } = await import('@/lib/tibia');
+			const { loadSpriteIds } = await import('@/lib/formats/tibia');
 			const idsToLoad: number[] = [];
 
 			// Collect sprite IDs from the already populated resultThings

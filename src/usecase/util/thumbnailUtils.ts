@@ -1,4 +1,4 @@
-import { ThingCategory, type ThingType, getSpriteIndex, isValidSpriteId } from '@/lib/tibia';
+import { ThingCategory, type ThingType, getSpriteIndex, isValidSpriteId } from '@/lib/formats/tibia';
 
 export const getThumbnailSpriteIds = (thing: ThingType): number[] => {
 	const ids: number[] = [];

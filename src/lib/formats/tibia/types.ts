@@ -1,9 +1,3 @@
-/**
- * Tibia Data Structures
- * Based on Object Builder's ActionScript implementation
- */
-
-// Thing Categories
 export enum ThingCategory {
 	ITEM = 'item',
 	OUTFIT = 'outfit',
@@ -18,12 +12,10 @@ export const THING_CATEGORY_VALUES: Record<ThingCategory, number> = {
 	[ThingCategory.MISSILE]: 4
 };
 
-// Sprite Constants
 export const SPRITE_SIZE = 32;
-export const SPRITE_PIXELS = SPRITE_SIZE * SPRITE_SIZE; // 1024 pixels
-export const SPRITE_DATA_SIZE = SPRITE_PIXELS * 4; // 4096 bytes (RGBA)
+export const SPRITE_PIXELS = SPRITE_SIZE * SPRITE_SIZE;
+export const SPRITE_DATA_SIZE = SPRITE_PIXELS * 4;
 
-// File Positions
 export const DAT_FILE_POSITIONS = {
 	SIGNATURE: 0,
 	ITEMS_COUNT: 4,
@@ -38,61 +30,37 @@ export const SPR_FILE_POSITIONS = {
 } as const;
 
 export const SPR_FILE_SIZES = {
-	ADDRESS: 4, // 4 bytes per sprite address
-	HEADER_U16: 6, // 4 bytes signature + 2 bytes count
-	HEADER_U32: 8 // 4 bytes signature + 4 bytes count
+	ADDRESS: 4,
+	HEADER_U16: 6,
+	HEADER_U32: 8
 } as const;
 
-// Minimum IDs for each category
 export const MIN_ITEM_ID = 100;
 export const MIN_OUTFIT_ID = 1;
 export const MIN_EFFECT_ID = 1;
 export const MIN_MISSILE_ID = 1;
 
-/**
- * Animation frame duration data
- */
 export interface FrameDuration {
 	minimum: number;
 	maximum: number;
 }
 
-/**
- * Sprite data structure
- * Based on Object Builder's Sprite class with bitmap caching
- *
- * With the new RGBA optimization, sprites now store pre-decompressed RGBA pixels
- * directly from Rust, eliminating JavaScript decompression overhead.
- */
 export interface Sprite {
 	id: number;
 	isEmpty: boolean;
-	// Legacy fields for compatibility (kept for writing sprites back)
-	pixels?: Uint8Array; // ARGB format (used by outfit blending and sprite writing)
-
+	pixels?: Uint8Array;
 	transparent: boolean;
-
-	// Canvas-ready ImageData - cached after first render
 	imageData?: ImageData;
-
-	// RGBA pixel data (4096 bytes) - pre-decompressed by Rust
-	// This is in RGBA format, ready for direct use with ImageData
 	rgbaPixels: Uint8Array;
-	compressedPixels?: Uint8Array; // Original compressed data (optional, for writing)
+	compressedPixels?: Uint8Array;
 }
 
-/**
- * Thing/Object type definition
- * Represents an item, outfit, effect, or missile
- */
 export interface ThingType {
 	id: number;
-	// Texture/Sprite layout
 	width: number;
 	height: number;
 	layers: number;
 	frames: number;
-	// Cloth properties
 	cloth: boolean;
 	offsetX: number;
 	offsetY: number;
@@ -107,19 +75,14 @@ export interface ThingType {
 
 	lensHelp: number;
 	exactSize: number;
-	// Ground properties
 	isGround: boolean;
 	forceUse: boolean;
 
 	multiUse: boolean;
-	// Writing properties
 	writable: boolean;
-	// Positioning properties
 	hangable: boolean;
 
-	// Light properties
 	hasLight: boolean;
-	// Visual properties
 	dontHide: boolean;
 	elevation: number;
 	clothSlot: number;
@@ -131,7 +94,6 @@ export interface ThingType {
 	lightLevel: number;
 	lightColor: number;
 
-	// Offset properties
 	hasOffset: boolean;
 	marketName: string;
 	wrappable: boolean;
@@ -147,7 +109,6 @@ export interface ThingType {
 	ignoreLook: boolean;
 
 	hasCharges: boolean;
-	// Container properties
 	isContainer: boolean;
 	floorChange: boolean;
 
@@ -155,22 +116,18 @@ export interface ThingType {
 	marketShowAs: number;
 
 	unwrappable: boolean;
-	// Animation properties
 	isAnimation: boolean;
 	spriteIndex: number[];
 
 	writableOnce: boolean;
 	maxTextLength: number;
-	// Movement properties
 	isUnpassable: boolean;
 	isUnmoveable: boolean;
 	blockMissile: boolean;
 	isHorizontal: boolean;
-	// Elevation properties
 	hasElevation: boolean;
 	isFullGround: boolean;
 
-	// Market properties
 	isMarketItem: boolean;
 	marketTradeAs: number;
 
@@ -180,35 +137,28 @@ export interface ThingType {
 	bonesOffsetY: number[];
 	blockPathfind: boolean;
 	isTranslucent: boolean;
-	// Misc properties
 	isLyingObject: boolean;
 
 	animateAlways: boolean;
 	marketCategory: number;
-	frameGroups?: number[]; // For outfits with idle animations (10.57+)
+	frameGroups?: number[];
 	category: ThingCategory;
 	isGroundBorder: boolean;
 	noMoveAnimation: boolean;
-	// Fluid properties
 	isFluidContainer: boolean;
 
-	// Action properties
 	hasDefaultAction: boolean;
-	// Helper properties
 	texturePatterns?: number[];
 	marketRestrictLevel: number;
 	upgradeClassification?: number;
-	frameGroupsData?: FrameGroup[]; // Detailed data for each frame group
+	frameGroupsData?: FrameGroup[];
 	frameDurations: FrameDuration[];
 	marketRestrictProfession: number;
-	unknownFlags?: Array<{ orig: number; remapped: number }>; // For debugging
+	unknownFlags?: Array<{ orig: number; remapped: number }>;
 }
 
-/**
- * Frame Group data (for outfits 10.57+)
- */
 export interface FrameGroup {
-	type: number; // 0 = idle, 1 = moving
+	type: number;
 	width: number;
 	height: number;
 	layers: number;
@@ -252,25 +202,19 @@ export enum MarketCategory {
 	Creature_Products = 24
 }
 
-/**
- * Client version information
- */
 export interface ClientVersion {
 	value: number;
 	label: string;
 	datSignature: number;
 	sprSignature: number;
 	supportsExtended: boolean;
-	supportsAlphaChannel: boolean; // RGBA (4 bytes) vs RGB (3 bytes) per pixel
+	supportsAlphaChannel: boolean;
 	supportsFrameDurations: boolean;
 }
 
-/**
- * Loaded Tibia client data
- */
-export interface TibiaData {
-	datPath?: string; // Path to DAT file
-	sprPath?: string; // Path to SPR file for streaming from Rust
+export interface AssetData {
+	datPath?: string;
+	sprPath?: string;
 	extended: boolean;
 	itemsCount: number;
 
@@ -281,44 +225,19 @@ export interface TibiaData {
 	transparency: boolean;
 	missilesCount: number;
 	version: ClientVersion;
-	// Sprites
 	sprites: Map<number, Sprite>;
-	// Things
 	items: Map<number, ThingType>;
 	outfits: Map<number, ThingType>;
 	effects: Map<number, ThingType>;
 	missiles: Map<number, ThingType>;
 }
 
-/**
- * Check if a sprite ID is valid
- * Valid sprite IDs are from 1 to spritesCount (inclusive)
- * Sprite ID 0 is always invalid (sprites start at 1)
- */
 export function isValidSpriteId(spriteId: number, spritesCount?: number): boolean {
 	if (spriteId <= 0) return false;
 	if (spritesCount !== undefined && spriteId > spritesCount) return false;
 	return true;
 }
 
-/**
- * Calculate texture index for pattern/frame/layer combination
- * Based on Object Builder's ThingType.getTextureIndex() (ThingType.as lines 146-154)
- *
- * A "texture" is one complete pattern variant (width × height sprites)
- * This calculates which texture in the sprite sheet grid
- *
- * Formula: ((((frame % frames) * patternZ + pz) * patternY + py) *
- *           patternX + px) * layers + layer
- *
- * @param thing - The ThingType containing sprite layout information
- * @param layer - Layer index (0 to thing.layers-1)
- * @param patternX - Pattern X index (0 to thing.patternX-1)
- * @param patternY - Pattern Y index (0 to thing.patternY-1)
- * @param patternZ - Pattern Z index (0 to thing.patternZ-1)
- * @param frame - Frame index (0 to thing.frames-1)
- * @returns Texture index for calculating grid position
- */
 export function getTextureIndex(
 	thing: ThingType,
 	layer: number,
@@ -334,23 +253,6 @@ export function getTextureIndex(
 	);
 }
 
-/**
- * Calculate sprite index within spriteIndex array based on pattern/frame/layer
- * Based on Object Builder's ThingType.getSpriteIndex() (ThingType.as lines 156-171)
- *
- * Formula: ((((((frame % frames) * patternZ + pz) * patternY + py) *
- *           patternX + px) * layers + layer) * height + h) * width + w
- *
- * @param thing - The ThingType containing sprite layout information
- * @param width - Width index (0 to thing.width-1)
- * @param height - Height index (0 to thing.height-1)
- * @param layer - Layer index (0 to thing.layers-1)
- * @param patternX - Pattern X index (0 to thing.patternX-1)
- * @param patternY - Pattern Y index (0 to thing.patternY-1)
- * @param patternZ - Pattern Z index (0 to thing.patternZ-1)
- * @param frame - Frame index (0 to thing.frames-1)
- * @returns Index into thing.spriteIndex array
- */
 export function getSpriteIndex(
 	thing: ThingType,
 	width: number,
@@ -372,9 +274,6 @@ export function getSpriteIndex(
 	);
 }
 
-/**
- * Helper function to create an empty ThingType
- */
 export function createThingType(id: number, category: ThingCategory): ThingType {
 	const thing: ThingType = {
 		id,
@@ -457,10 +356,9 @@ export function createThingType(id: number, category: ThingCategory): ThingType 
 		marketRestrictProfession: 0
 	};
 
-	// Set category-specific defaults
 	if (category === ThingCategory.OUTFIT) {
-		thing.patternX = 4; // 4 directions
-		thing.frames = 3; // 3 animation frames
+		thing.patternX = 4;
+		thing.frames = 3;
 		thing.isAnimation = true;
 	} else if (category === ThingCategory.MISSILE) {
 		thing.patternX = 3;
@@ -470,10 +368,6 @@ export function createThingType(id: number, category: ThingCategory): ThingType 
 	return thing;
 }
 
-/**
- * Known client versions with signatures
- * Based on Object Builder's versions.xml
- */
 export const CLIENT_VERSIONS: ClientVersion[] = [
 	{
 		value: 710,

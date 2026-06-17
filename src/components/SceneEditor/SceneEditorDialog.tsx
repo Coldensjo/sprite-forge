@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
-import { type ThingType } from '@/lib/tibia';
+import { type ThingType } from '@/lib/formats/tibia';
 import { Label } from '@/components/ui/label';
 import { invoke } from '@tauri-apps/api/core';
 import { Button } from '@/components/ui/button';
 import { CheckerBoard } from '@/components/CheckerBoard';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { SpriteCanvas } from '@/components/commons/SpriteCanvas';
-import { useTibiaData } from '@/usecase/context/TibiaDataContext';
+import { useAssetData } from '@/usecase/context/AssetDataContext';
 import { Select, SelectItem, SelectValue, SelectContent, SelectTrigger } from '@/components/ui/select';
 import { X, Save, Star, Plus, Trash2, Search, Eraser, Pencil, Pipette, Maximize2, Minimize2 } from 'lucide-react';
 
@@ -33,7 +33,7 @@ const DEFAULT_WIDTH = 11;
 const DEFAULT_HEIGHT = 11;
 
 export const SceneEditorDialog = ({ open, itemToAdd, onItemAdded, onOpenChange }: SceneEditorDialogProps) => {
-	const { data } = useTibiaData();
+	const { data } = useAssetData();
 	const [width] = useState(DEFAULT_WIDTH);
 	const [height] = useState(DEFAULT_HEIGHT);
 	const [tiles, setTiles] = useState<SceneTile[][]>([]);

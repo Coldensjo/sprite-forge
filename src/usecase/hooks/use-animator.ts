@@ -1,7 +1,7 @@
 // Subscribes to a shared rAF clock instead of spawning its own loop,
 // so N visible animated sprites share one rAF callback per frame.
 
-import type { ThingType, FrameDuration, ThingCategory } from '@/lib/tibia/types.ts';
+import type { ThingType, FrameDuration, ThingCategory } from '@/lib/formats/tibia/types.ts';
 
 import { animationClock } from '@/lib/animationClock.ts';
 import { useRef, useState, useEffect, useCallback } from 'react';
@@ -13,7 +13,7 @@ import {
 	AnimationDirection,
 	shouldSkipFirstFrame,
 	generateDefaultDurations
-} from '@/lib/tibia/animation.ts';
+} from '@/lib/formats/tibia/animation.ts';
 
 export interface AnimatorState {
 	isPlaying: boolean;

@@ -3,9 +3,6 @@ use sha1::{Sha1, Digest};
 use crate::spr_manager::{SprManagerState, SprFileReader};
 use crate::spr_writer::SpriteWrite;
 
-/// Request:  [extended: u8][path: u16-len UTF-8][used_ids_blob: u32 LE per ID]
-/// Response: [old_total: u32][new_total: u32][removed_count: u32]
-///           [temp_path: u16-len UTF-8][remap_blob: u32 old + u32 new per pair]
 #[tauri::command]
 pub async fn optimize_sprites_rust(
     app: tauri::AppHandle,
@@ -27,8 +24,6 @@ pub async fn optimize_sprites_rust(
     let path = String::from_utf8_lossy(&bytes[3..3 + path_len]).into_owned();
     let used_ids_blob: Vec<u8> = bytes[3 + path_len..].to_vec();
 
-    // Use a local SPR reader and run on a blocking pool so we don't lock the
-    // shared manager or stall the async runtime during the multi-second pass.
     let path_clone = path.clone();
     let used_ids_blob_clone = used_ids_blob.clone();
     
@@ -37,7 +32,6 @@ pub async fn optimize_sprites_rust(
     let (remap_blob, removed_count, old_total, new_total, temp_path) = tauri::async_runtime::spawn_blocking(move || {
         use tauri::Emitter;
         
-        // Open a separate reader
         let mut reader = SprFileReader::open(&path_clone, extended)
             .map_err(|e| format!("Failed to open SPR file: {}", e))?;
             
@@ -45,7 +39,6 @@ pub async fn optimize_sprites_rust(
         let old_total = header.sprite_count;
         let signature = header.signature;
         
-        // Convert blob back to HashSet<u32>
         let used_set: HashSet<u32> = used_ids_blob_clone
             .chunks_exact(4)
             .map(|chunk| u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))
@@ -55,7 +48,6 @@ pub async fn optimize_sprites_rust(
         let mut remap: HashMap<u32, u32> = HashMap::new();
         let mut unique_sprites: HashMap<u32, Vec<u8>> = HashMap::new();
         
-        // 2. Hash sprites
         for id in 1..=old_total {
             if id % 1000 == 0 {
                 let _ = app_handle.emit("optimizer-progress", format!("Hashing sprites: {}/{}", id, old_total));
@@ -95,9 +87,8 @@ pub async fn optimize_sprites_rust(
             }
         }
         
-        // 3. Filter used sprites
         let _ = app_handle.emit("optimizer-progress", "Filtering unused sprites...");
-        
+
         let mut final_remap: HashMap<u32, u32> = HashMap::new();
         let mut new_sprites: Vec<(u32, Vec<u8>)> = Vec::new();
         let mut new_id_counter = 1;
@@ -112,7 +103,6 @@ pub async fn optimize_sprites_rust(
         let mut canonical_to_new: HashMap<u32, u32> = HashMap::new();
         
         for id in 1..=old_total {
-            // Check if this ID is a canonical sprite (it exists in unique_sprites) AND it is used
             if unique_sprites.contains_key(&id) && used_canonical_ids.contains(&id) {
                 let new_id = new_id_counter;
                 new_id_counter += 1;
@@ -149,8 +139,6 @@ pub async fn optimize_sprites_rust(
             }
         }).collect();
 
-        // NamedTempFile deletes on drop and can't cross the spawn_blocking boundary,
-        // so persist (= keep) the path here before write_spr_file overwrites it.
         let (_, path_buf) = temp_file.keep().map_err(|e| format!("Failed to persist temp file: {}", e))?;
         let persisted_path = path_buf.to_string_lossy().to_string();
 
@@ -192,11 +180,9 @@ pub fn apply_optimization(
 ) -> Result<(), String> {
     let mut manager = spr_state.lock().map_err(|e| format!("Lock error: {}", e))?;
 
-    // Release handles on both: original AND temp (which is currently open as data.sprPath).
     manager.close_file(&original_path).ok();
     manager.close_file(&temp_path).ok();
 
-    // copy + remove instead of rename — rename fails across drives (temp on C:, project on D:).
     if std::path::Path::new(&original_path).exists() {
          std::fs::remove_file(&original_path).map_err(|e| format!("Failed to remove original file: {}", e))?;
     }

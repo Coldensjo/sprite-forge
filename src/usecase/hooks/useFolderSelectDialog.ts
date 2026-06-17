@@ -9,7 +9,7 @@ import {
 	type DatHeader,
 	type SprHeader,
 	type ClientVersion
-} from '@/lib/tibia';
+} from '@/lib/formats/tibia';
 import {
 	pathString,
 	pathsEqual,

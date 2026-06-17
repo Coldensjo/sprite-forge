@@ -2,11 +2,11 @@ import type { SceneTile } from '@/usecase/util/spriteLayoutUtils';
 import type { OutfitData, Visibility } from '@/usecase/context/PropertiesContext/types';
 
 import React from 'react';
-import { ThingCategory } from '@/lib/tibia';
+import { ThingCategory } from '@/lib/formats/tibia';
 import { invoke } from '@tauri-apps/api/core';
 import { useToast } from '@/usecase/hooks/use-toast';
 import { ZOOM_LEVELS } from '@/usecase/util/constants';
-import { useTibiaData } from '@/usecase/context/TibiaDataContext';
+import { useAssetData } from '@/usecase/context/AssetDataContext';
 import { loadItemState, saveItemState, getItemStateKey, type ItemPropertiesState } from '@/usecase/util/itemStateUtils';
 
 export const useObjectProperties = () => {
@@ -26,7 +26,7 @@ export const useObjectProperties = () => {
 		markUnsavedChanges,
 		notifySpritesLoaded,
 		setHighlightedSpriteId
-	} = useTibiaData();
+	} = useAssetData();
 	const item = openedItemId && openedItemCategory ? getThing(openedItemId, openedItemCategory) : null;
 
 	const [draftItem, setDraftItem] = React.useState<typeof item>(null);
@@ -1009,7 +1009,7 @@ export const useObjectProperties = () => {
 
 		const loadItemSprites = async () => {
 			try {
-				const { loadSpriteIds } = await import('@/lib/tibia');
+				const { loadSpriteIds } = await import('@/lib/formats/tibia');
 				await loadSpriteIds(data.sprPath!, spriteIds, data.transparency, data.sprites);
 				notifySpritesLoaded();
 			} catch (err) {

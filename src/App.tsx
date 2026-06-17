@@ -4,7 +4,7 @@ import { Toaster as Sonner } from '@/components/ui/sonner';
 import { ThemeProvider } from '@/usecase/context/ThemeContext';
 import { Route, Routes, BrowserRouter } from 'react-router-dom';
 import { DragDropProvider } from '@/usecase/context/DragDropContext';
-import { TibiaDataProvider } from '@/usecase/context/TibiaDataContext';
+import { AssetDataProvider } from '@/usecase/context/AssetDataContext';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ErrorDialogProvider } from '@/usecase/context/ErrorDialogContext';
 import { PanelSettingsProvider } from '@/usecase/context/PanelSettingsContext';
@@ -20,7 +20,7 @@ const App = () => (
 		<ThemeProvider>
 			<TooltipProvider>
 				<ErrorDialogProvider>
-					<TibiaDataProvider>
+					<AssetDataProvider>
 						<PanelSettingsProvider>
 							<GeneralSettingsProvider>
 								<DragDropProvider>
@@ -35,7 +35,7 @@ const App = () => (
 								</DragDropProvider>
 							</GeneralSettingsProvider>
 						</PanelSettingsProvider>
-					</TibiaDataProvider>
+					</AssetDataProvider>
 				</ErrorDialogProvider>
 			</TooltipProvider>
 		</ThemeProvider>

@@ -12,7 +12,6 @@ pub struct SpriteWrite {
     pub compressed_pixels: Vec<u8>,
 }
 
-/// Write a complete SPR file
 pub fn write_spr_file(
     path: &str,
     signature: u32,
@@ -24,7 +23,6 @@ pub fn write_spr_file(
     let sprite_count = sprites.len() as u32;
     let header_size = if extended { 8 } else { 6 };
 
-    // Write header
     file.write_all(&signature.to_le_bytes())
         .map_err(|e| format!("Failed to write signature: {}", e))?;
 
@@ -39,33 +37,25 @@ pub fn write_spr_file(
             .map_err(|e| format!("Failed to write sprite count: {}", e))?;
     }
 
-    // Calculate address table size and data start position
-    let address_table_size = sprite_count * 4; // 4 bytes per address
+    let address_table_size = sprite_count * 4;
     let data_start = header_size + address_table_size as u64;
 
-    // Reserve space for address table (write zeros for now)
     let zero_addresses = vec![0u8; address_table_size as usize];
     file.write_all(&zero_addresses)
         .map_err(|e| format!("Failed to write address table placeholder: {}", e))?;
 
-    // Write sprites and collect addresses
     let mut addresses = Vec::with_capacity(sprite_count as usize);
     let mut current_position = data_start;
 
     for sprite in sprites {
         if sprite.is_empty {
-            // Empty sprite: address = 0
             addresses.push(0u32);
         } else {
-            // Write sprite data
             addresses.push(current_position as u32);
 
-            // CRITICAL: Write RGB header - this is the TRANSPARENCY COLOR (magenta: 0xFF, 0x00, 0xFF)
-            // Object Builder writes: 0xFF (red), 0x00 (green), 0xFF (blue)
             file.write_all(&[0xFF, 0x00, 0xFF])
                 .map_err(|e| format!("Failed to write sprite RGB header: {}", e))?;
 
-            // Write compressed data length (2 bytes)
             let length = sprite.compressed_pixels.len();
             if length > 0xFFFF {
                 return Err(format!("Sprite {} data too large ({})", sprite.id, length));
@@ -73,7 +63,6 @@ pub fn write_spr_file(
             file.write_all(&(length as u16).to_le_bytes())
                 .map_err(|e| format!("Failed to write sprite length: {}", e))?;
 
-            // Write compressed pixel data
             file.write_all(&sprite.compressed_pixels)
                 .map_err(|e| format!("Failed to write sprite data: {}", e))?;
 
@@ -81,7 +70,6 @@ pub fn write_spr_file(
         }
     }
 
-    // Go back and write the address table
     file.seek(SeekFrom::Start(header_size))
         .map_err(|e| format!("Failed to seek to address table: {}", e))?;
 
@@ -93,22 +81,18 @@ pub fn write_spr_file(
     Ok(())
 }
 
-/// Update specific sprites in an existing SPR file
-/// This is more efficient than rewriting the entire file
 pub fn update_sprites_in_spr(
     path: &str,
     extended: bool,
     sprites: Vec<SpriteWrite>,
     sprites_count: u32,
 ) -> Result<(), String> {
-    // Open file for reading and writing
     let mut file = File::options()
         .read(true)
         .write(true)
         .open(path)
         .map_err(|e| format!("Failed to open SPR file: {}", e))?;
 
-    // Read header
     let header_size = if extended { 8 } else { 6 };
 
     file.seek(SeekFrom::Start(0))
@@ -131,7 +115,6 @@ pub fn update_sprites_in_spr(
         u16::from_le_bytes(count_buf) as u32
     };
 
-    // Update sprite count in header if changed
     if sprites_count != existing_sprite_count {
         file.seek(SeekFrom::Start(4))
             .map_err(|e| format!("Failed to seek to sprite count: {}", e))?;
@@ -148,24 +131,20 @@ pub fn update_sprites_in_spr(
         }
     }
 
-    // Read entire address table (using the larger of the two counts to be safe)
     let max_count = std::cmp::max(existing_sprite_count, sprites_count);
-    
+
     file.seek(SeekFrom::Start(header_size))
         .map_err(|e| format!("Failed to seek to address table: {}", e))?;
 
-    // We only read what exists
     let mut address_table = vec![0u8; (existing_sprite_count * 4) as usize];
     file.read_exact(&mut address_table)
         .map_err(|e| format!("Failed to read address table: {}", e))?;
 
-    // Get file end position
     let file_end = file.seek(SeekFrom::End(0))
         .map_err(|e| format!("Failed to seek to end: {}", e))?;
 
-    // Create a map of sprite IDs to update
     let mut sprites_to_update: HashMap<u32, &SpriteWrite> = HashMap::new();
-    
+
     for sprite in &sprites {
         if sprite.id == 0 {
             return Err("Sprite ID cannot be 0".to_string());
@@ -173,11 +152,6 @@ pub fn update_sprites_in_spr(
         sprites_to_update.insert(sprite.id, sprite);
     }
 
-    // CRITICAL: If sprite count changed, we CANNOT safely do an in-place update.
-    // The address table size is (sprite_count * 4) bytes.
-    // If we expand it, we'll corrupt the sprite data that follows it.
-    // If we shrink it, addresses would be in the wrong positions.
-    // Return an error so the caller can fall back to a full rewrite.
     if sprites_count != existing_sprite_count {
         return Err(format!(
             "FULL_REWRITE_REQUIRED: Sprite count changed from {} to {}. In-place update not safe.",
@@ -186,30 +160,23 @@ pub fn update_sprites_in_spr(
         ));
     }
 
-    // Track which addresses we need to update
     let mut updated_addresses: HashMap<u32, u32> = HashMap::new();
     let mut current_write_position = file_end;
 
-    // Process each sprite that needs updating
     for (&sprite_id, sprite_data) in &sprites_to_update {
-        // Skip if sprite ID is beyond the new count (e.g. deleted from end)
         if sprite_id > sprites_count {
             continue;
         }
 
         if sprite_data.is_empty {
-            // Update address to 0 (empty sprite)
             updated_addresses.insert(sprite_id, 0);
         } else {
-            // Append new sprite data at the end of file
             file.seek(SeekFrom::Start(current_write_position))
                 .map_err(|e| format!("Failed to seek to write position: {}", e))?;
 
-            // CRITICAL: Write RGB header - transparency color (magenta: 0xFF, 0x00, 0xFF)
             file.write_all(&[0xFF, 0x00, 0xFF])
                 .map_err(|e| format!("Failed to write sprite RGB header: {}", e))?;
 
-            // Write compressed data length
             let length = sprite_data.compressed_pixels.len();
             if length > 0xFFFF {
                 return Err(format!("Sprite {} data too large", sprite_id));
@@ -217,17 +184,14 @@ pub fn update_sprites_in_spr(
             file.write_all(&(length as u16).to_le_bytes())
                 .map_err(|e| format!("Failed to write sprite length: {}", e))?;
 
-            // Write compressed pixel data
             file.write_all(&sprite_data.compressed_pixels)
                 .map_err(|e| format!("Failed to write sprite data: {}", e))?;
 
-            // Record the new address
             updated_addresses.insert(sprite_id, current_write_position as u32);
             current_write_position += 3 + 2 + length as u64;
         }
     }
 
-    // Update the address table
     for (sprite_id, new_address) in updated_addresses {
         let address_offset = header_size + ((sprite_id - 1) * 4) as u64;
 
@@ -238,16 +202,12 @@ pub fn update_sprites_in_spr(
             .map_err(|e| format!("Failed to write sprite address: {}", e))?;
     }
 
-    // Flush to ensure data is written to disk
     file.flush()
         .map_err(|e| format!("Failed to flush SPR file: {}", e))?;
 
     Ok(())
 }
 
-/// Copy an SPR file to a new location, applying sprite modifications
-/// This is the safest way to do a full recompile - it preserves all sprites
-/// that weren't modified, while updating the ones that were.
 pub fn copy_spr_with_modifications(
     source_path: &str,
     dest_path: &str,
@@ -256,28 +216,26 @@ pub fn copy_spr_with_modifications(
     target_count: u32,
     modifications: Vec<SpriteWrite>,
 ) -> Result<(), String> {
-    // If source and dest are the same, use a temp file
     let same_file = source_path == dest_path;
     let temp_path = if same_file {
         format!("{}.tmp", dest_path)
     } else {
         dest_path.to_string()
     };
-    
+
     let mut source = BufReader::new(
         File::open(source_path).map_err(|e| format!("Failed to open source SPR file: {}", e))?,
     );
-    
-    // Read source header
+
     let header_size = if extended { 8 } else { 6 };
-    
+
     source.seek(SeekFrom::Start(0))
         .map_err(|e| format!("Failed to seek in source: {}", e))?;
-    
+
     let mut sig_buf = [0u8; 4];
     source.read_exact(&mut sig_buf)
         .map_err(|e| format!("Failed to read source signature: {}", e))?;
-    
+
     let sprite_count = if extended {
         let mut count_buf = [0u8; 4];
         source.read_exact(&mut count_buf)
@@ -289,8 +247,7 @@ pub fn copy_spr_with_modifications(
             .map_err(|e| format!("Failed to read sprite count: {}", e))?;
         u16::from_le_bytes(count_buf) as u32
     };
-    
-    // Read source address table
+
     let mut source_addresses = Vec::with_capacity(sprite_count as usize);
     for _ in 0..sprite_count {
         let mut addr_buf = [0u8; 4];
@@ -298,28 +255,25 @@ pub fn copy_spr_with_modifications(
             .map_err(|e| format!("Failed to read address: {}", e))?;
         source_addresses.push(u32::from_le_bytes(addr_buf));
     }
-    
+
     let source_len = source
         .get_ref()
         .metadata()
         .map_err(|e| format!("Failed to stat source SPR file: {}", e))?
         .len();
 
-    // Create modifications map for quick lookup
     let mut mods_map: std::collections::HashMap<u32, &SpriteWrite> = std::collections::HashMap::new();
     for sprite in &modifications {
         mods_map.insert(sprite.id, sprite);
     }
-    
-    // Create destination file (use temp path if same as source)
+
     let mut dest = BufWriter::new(
         File::create(&temp_path).map_err(|e| format!("Failed to create dest SPR file: {}", e))?,
     );
-    
-    // Write header
+
     dest.write_all(&signature.to_le_bytes())
         .map_err(|e| format!("Failed to write signature: {}", e))?;
-    
+
     if extended {
         dest.write_all(&target_count.to_le_bytes())
             .map_err(|e| format!("Failed to write sprite count: {}", e))?;
@@ -331,14 +285,12 @@ pub fn copy_spr_with_modifications(
             .map_err(|e| format!("Failed to write sprite count: {}", e))?;
     }
 
-    // Reserve space for address table
     let address_table_size = target_count * 4;
     let data_start = header_size + address_table_size as u64;
     let zero_addresses = vec![0u8; address_table_size as usize];
     dest.write_all(&zero_addresses)
         .map_err(|e| format!("Failed to write address table placeholder: {}", e))?;
 
-    // Write sprite data
     let mut new_addresses = Vec::with_capacity(target_count as usize);
     let mut current_position = data_start;
     let mut bad_addresses = 0u32;
@@ -350,29 +302,25 @@ pub fn copy_spr_with_modifications(
             0
         };
 
-        // Check if we have a modification for this sprite
         if let Some(mod_sprite) = mods_map.get(&sprite_id) {
             if mod_sprite.is_empty {
                 new_addresses.push(0u32);
             } else {
                 new_addresses.push(current_position as u32);
-                
-                // Write RGB header (magenta transparency color)
+
                 dest.write_all(&[0xFF, 0x00, 0xFF])
                     .map_err(|e| format!("Failed to write RGB header: {}", e))?;
-                
-                // Write length and data
+
                 let length = mod_sprite.compressed_pixels.len();
                 dest.write_all(&(length as u16).to_le_bytes())
                     .map_err(|e| format!("Failed to write sprite length: {}", e))?;
-                
+
                 dest.write_all(&mod_sprite.compressed_pixels)
                     .map_err(|e| format!("Failed to write sprite data: {}", e))?;
-                
+
                 current_position += 3 + 2 + length as u64;
             }
         } else if source_address == 0 {
-            // Empty sprite in source
             new_addresses.push(0u32);
         } else {
             if source_address as u64 + 5 > source_len {
@@ -381,16 +329,13 @@ pub fn copy_spr_with_modifications(
                 continue;
             }
 
-            // Read sprite data from source
             source.seek(SeekFrom::Start(source_address as u64))
                 .map_err(|e| format!("Failed to seek to source sprite {}: {}", sprite_id, e))?;
 
-            // Read RGB header (3 bytes)
             let mut rgb = [0u8; 3];
             source.read_exact(&mut rgb)
                 .map_err(|e| format!("Failed to read RGB header for sprite {} at {}: {}", sprite_id, source_address, e))?;
 
-            // Read length
             let mut len_buf = [0u8; 2];
             source.read_exact(&mut len_buf)
                 .map_err(|e| format!("Failed to read length for sprite {} at {}: {}", sprite_id, source_address, e))?;
@@ -402,14 +347,12 @@ pub fn copy_spr_with_modifications(
                 continue;
             }
 
-            // Read pixel data
             let mut data = vec![0u8; length];
             if length > 0 {
                 source.read_exact(&mut data)
                     .map_err(|e| format!("Failed to read data for sprite {} at {}: {}", sprite_id, source_address, e))?;
             }
 
-            // Write to destination
             new_addresses.push(current_position as u32);
             dest.write_all(&rgb)
                 .map_err(|e| format!("Failed to write RGB header: {}", e))?;
@@ -429,31 +372,26 @@ pub fn copy_spr_with_modifications(
         );
     }
 
-    // Write address table
     dest.seek(SeekFrom::Start(header_size))
         .map_err(|e| format!("Failed to seek to address table: {}", e))?;
-    
+
     for address in new_addresses {
         dest.write_all(&address.to_le_bytes())
             .map_err(|e| format!("Failed to write sprite address: {}", e))?;
     }
-    
+
     dest.flush()
         .map_err(|e| format!("Failed to flush dest file: {}", e))?;
-    
-    // Drop to close file handles before rename
+
     drop(source);
     drop(dest);
-    
-    // If we used a temp file, rename it to the destination
+
     if same_file {
-        // Remove original first
         std::fs::remove_file(dest_path)
             .map_err(|e| format!("Failed to remove original file: {}", e))?;
-        // Rename temp to destination
         std::fs::rename(&temp_path, dest_path)
             .map_err(|e| format!("Failed to rename temp file: {}", e))?;
     }
-    
+
     Ok(())
 }

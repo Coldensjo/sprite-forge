@@ -1,15 +1,15 @@
 import { Play, Pause, FileQuestion } from 'lucide-react';
-import { ThingCategory, loadSpriteIds } from '@/lib/tibia';
+import { ThingCategory, loadSpriteIds } from '@/lib/formats/tibia';
 import { useRef, useMemo, useState, useEffect } from 'react';
-import { useTibiaData } from '@/usecase/context/TibiaDataContext';
-import { getPingPongFrame, AnimationDirection } from '@/lib/tibia/animation';
+import { useAssetData } from '@/usecase/context/AssetDataContext';
+import { getPingPongFrame, AnimationDirection } from '@/lib/formats/tibia/animation';
 
 import { Button } from './ui/button';
 import { CheckerBoard } from './CheckerBoard';
 import { SpriteCanvas } from './commons/SpriteCanvas';
 
 export const VisualizationPanel = () => {
-	const { data, getThing, selectedCategory, highlightedItemId, notifySpritesLoaded } = useTibiaData();
+	const { data, getThing, selectedCategory, highlightedItemId, notifySpritesLoaded } = useAssetData();
 	const item = highlightedItemId ? getThing(highlightedItemId, selectedCategory) : null;
 
 	// Animation state

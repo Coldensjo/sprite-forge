@@ -1,4 +1,4 @@
-import type { ThingType, TibiaData } from './types';
+import type { ThingType, AssetData } from './types';
 
 import { invoke } from '@tauri-apps/api/core';
 import { logger, EventCode } from '@/lib/debug';
@@ -20,7 +20,7 @@ export interface ImportOptions {
 
 export async function importObjectSheet(
 	thing: ThingType,
-	data: TibiaData,
+	data: AssetData,
 	file?: File | string,
 	options?: ImportOptions
 ): Promise<ImportResult> {
@@ -29,19 +29,15 @@ export async function importObjectSheet(
 		return { success: false };
 	}
 
-	// 1. Get image bytes
 	let imageBytes: Uint8Array;
 
 	try {
 		if (file instanceof File) {
-			// File object from drag & drop
 			imageBytes = new Uint8Array(await file.arrayBuffer());
 		} else if (typeof file === 'string') {
-			// File path - read via Tauri
 			const result = await invoke<Uint8Array>('read_file', { path: file });
 			imageBytes = result instanceof Uint8Array ? result : new Uint8Array(result as ArrayLike<number>);
 		} else {
-			// No file provided - open dialog
 			const selected = await open({
 				multiple: false,
 				filters: [{ name: 'Image', extensions: ['png', 'bmp', 'jpg', 'jpeg'] }]
@@ -58,7 +54,6 @@ export async function importObjectSheet(
 		return { success: false };
 	}
 
-	// 2. Calculate next sprite ID
 	let nextId = data.spritesCount + 1;
 	for (const id of data.sprites.keys()) {
 		if (id >= nextId) nextId = id + 1;
@@ -86,7 +81,6 @@ export async function importObjectSheet(
 
 		const buffer = response instanceof Uint8Array ? response : new Uint8Array(response);
 
-		// 4. Parse response (includes LZ4 decompression of sprites)
 		const { sprites, updatedThing } = parseImportResponse(buffer, data.transparency);
 
 		console.log('Import parsed:', {
@@ -100,12 +94,10 @@ export async function importObjectSheet(
 			patternY: updatedThing.patternY,
 			patternZ: updatedThing.patternZ,
 			spriteIds: sprites.slice(0, 5).map((s) => s.id),
-			// DEBUG: Full sprite index info
 			spriteIndexLength: updatedThing.spriteIndex?.length,
 			spriteIndexFirst20: updatedThing.spriteIndex?.slice(0, 20)
 		});
 
-		// 5. Populate sprite cache directly - no second IPC needed!
 		let maxSpriteId = data.spritesCount;
 		for (const sprite of sprites) {
 			data.sprites.set(sprite.id, sprite);
@@ -114,12 +106,10 @@ export async function importObjectSheet(
 			}
 		}
 
-		// 5b. Update spritesCount so SpriteList shows the new sprites
 		if (maxSpriteId > data.spritesCount) {
 			data.spritesCount = maxSpriteId;
 		}
 
-		// 6. Update category map with new ThingType
 		const categoryMap = {
 			item: data.items,
 			outfit: data.outfits,
@@ -131,7 +121,6 @@ export async function importObjectSheet(
 			categoryMap.set(thing.id, updatedThing);
 		}
 
-		// 7. Also mutate the passed-in thing for immediate local updates
 		Object.assign(thing, updatedThing);
 
 		const spriteIds = sprites.map((s) => s.id);

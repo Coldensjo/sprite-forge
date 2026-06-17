@@ -9,7 +9,7 @@ import {
 	type OtfiData,
 	type DatHeader,
 	type SprHeader
-} from '@/lib/tibia';
+} from '@/lib/formats/tibia';
 
 import { Label } from './ui/label';
 import { Input } from './ui/input';

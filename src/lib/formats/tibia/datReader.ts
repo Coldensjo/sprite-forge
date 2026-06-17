@@ -1,13 +1,5 @@
-/**
- * Tibia Metadata (.dat) File Reader
- * Based on Object Builder's MetadataReader classes
- */
-
 import { ThingType, ThingCategory, ClientVersion, createThingType, DAT_FILE_POSITIONS } from './types';
 
-/**
- * Metadata flags for client versions 7.80 - 8.54 (MetadataFlags4)
- */
 const MetadataFlags4 = {
 	FLUID: 0x0c,
 	GROUND: 0x00,
@@ -45,9 +37,6 @@ const MetadataFlags4 = {
 	FLUID_CONTAINER: 0x0b
 } as const;
 
-/**
- * Metadata flags for client versions 8.60 - 9.86 (MetadataFlags5)
- */
 const MetadataFlags5 = {
 	FLUID: 0x0b,
 	CLOTH: 0x20,
@@ -86,9 +75,6 @@ const MetadataFlags5 = {
 	FLUID_CONTAINER: 0x0a
 } as const;
 
-/**
- * Metadata flags for client versions 10.10 - 10.56 (MetadataFlags6)
- */
 const MetadataFlags6 = {
 	FLUID: 0x0b,
 	CLOTH: 0x21,
@@ -140,9 +126,6 @@ const MetadataFlags6 = {
 	UPGRADE_CLASSIFICATION: 0x27
 } as const;
 
-/**
- * Helper class to read binary data from a buffer
- */
 class BinaryReader {
 	private buffer: Uint8Array;
 	private position: number = 0;
@@ -199,7 +182,6 @@ class BinaryReader {
 		const bytes = this.buffer.slice(this.position, this.position + length);
 		this.position += length;
 
-		// Decode as Latin-1 (ISO-8859-1)
 		let str = '';
 		for (let i = 0; i < bytes.length; i++) {
 			str += String.fromCharCode(bytes[i]);
@@ -212,30 +194,20 @@ class BinaryReader {
 	}
 }
 
-/**
- * Get metadata flags based on client version
- * Based on Object Builder's version-to-reader mapping
- */
 function getMetadataFlags(version?: ClientVersion) {
 	if (!version) return MetadataFlags6;
 
-	// Version 7.80 - 8.54: MetadataFlags4 (MetadataReader4 in Object Builder)
 	if (version.value >= 780 && version.value <= 854) {
 		return MetadataFlags4;
 	}
 
-	// Version 8.60 - 9.86: MetadataFlags5 (MetadataReader5 in Object Builder)
 	if (version.value >= 860 && version.value <= 986) {
 		return MetadataFlags5;
 	}
 
-	// Version 10.10+: MetadataFlags6 (MetadataReader6 in Object Builder)
 	return MetadataFlags6;
 }
 
-/**
- * DAT File Reader
- */
 export class DatReader {
 	private reader: BinaryReader;
 	private extended: boolean;
@@ -248,52 +220,34 @@ export class DatReader {
 		this.extended = extended;
 		this.frameDurations = frameDurations;
 		this.metadataFlags = getMetadataFlags(version);
-		this.version = version?.value ?? 1098; // Default to 10.98
+		this.version = version?.value ?? 1098;
 	}
 
-	/**
-	 * Read file signature
-	 */
 	readSignature(): number {
 		this.reader.setPosition(DAT_FILE_POSITIONS.SIGNATURE);
 		return this.reader.readUInt32LE();
 	}
 
-	/**
-	 * Read items count
-	 */
 	readItemsCount(): number {
 		this.reader.setPosition(DAT_FILE_POSITIONS.ITEMS_COUNT);
 		return this.reader.readUInt16LE();
 	}
 
-	/**
-	 * Read outfits count
-	 */
 	readOutfitsCount(): number {
 		this.reader.setPosition(DAT_FILE_POSITIONS.OUTFITS_COUNT);
 		return this.reader.readUInt16LE();
 	}
 
-	/**
-	 * Read effects count
-	 */
 	readEffectsCount(): number {
 		this.reader.setPosition(DAT_FILE_POSITIONS.EFFECTS_COUNT);
 		return this.reader.readUInt16LE();
 	}
 
-	/**
-	 * Read missiles count
-	 */
 	readMissilesCount(): number {
 		this.reader.setPosition(DAT_FILE_POSITIONS.MISSILES_COUNT);
 		return this.reader.readUInt16LE();
 	}
 
-	/**
-	 * Read thing properties from the current position
-	 */
 	readProperties(thing: ThingType): boolean {
 		let flag = 0;
 
@@ -301,7 +255,7 @@ export class DatReader {
 
 		while (flag < MetadataFlags.LAST_FLAG) {
 			flag = this.reader.readUInt8();
-			const origFlag = flag; // Keep for error reporting
+			const origFlag = flag;
 
 			if (flag === MetadataFlags.LAST_FLAG) {
 				return true;
@@ -529,12 +483,9 @@ export class DatReader {
 				case (MetadataFlags as typeof MetadataFlags6).EXPIRE_STOP:
 				case (MetadataFlags as typeof MetadataFlags6).PODIUM:
 				case (MetadataFlags as typeof MetadataFlags6).DECO_KIT:
-					// Boolean flags not stored in ThingType yet
 					break;
 
 				default:
-					// Unknown flag - log as warning but don't throw
-					// OTClient silently ignores unknown flags (they're treated as boolean flags with no data)
 					if (!thing.unknownFlags) {
 						thing.unknownFlags = [];
 					}
@@ -549,20 +500,13 @@ export class DatReader {
 		return true;
 	}
 
-	/**
-	 * Read texture patterns (sprite layout information)
-	 * For outfits in version 10.57+, this uses frame groups
-	 */
 	readTexturePatterns(thing: ThingType): boolean {
-		// Check if this is an outfit with frame groups (idle animations)
-		// Frame groups were introduced in version 10.57 (1057)
 		const hasFrameGroups = thing.category === ThingCategory.OUTFIT && this.version >= 1057;
 		let groupCount = 1;
 		if (hasFrameGroups) {
 			groupCount = this.reader.readUInt8();
 		}
 
-		// Safety check: Ensure at least one group exists
 		if (groupCount === 0) {
 			groupCount = 1;
 		}
@@ -572,17 +516,14 @@ export class DatReader {
 
 		for (let groupIndex = 0; groupIndex < groupCount; groupIndex++) {
 			let frameGroupType = 0;
-			// Read frame group type if this outfit has frame groups
 			if (hasFrameGroups) {
 				frameGroupType = this.reader.readUInt8();
-				// Store frame group type for later use (0 = idle, 1 = moving)
 				if (!thing.frameGroups) {
 					thing.frameGroups = [];
 				}
 				thing.frameGroups.push(frameGroupType);
 			}
 
-			// Read dimensions
 			const width = this.reader.readUInt8();
 			const height = this.reader.readUInt8();
 
@@ -603,8 +544,6 @@ export class DatReader {
 			const patternZ = this.reader.readUInt8();
 			const frames = this.reader.readUInt8();
 
-			// Only update thing properties if this is the first group (Idle)
-			// This ensures we have consistent data for the first group, which is what Rust writes
 			if (groupIndex === 0) {
 				thing.width = width;
 				thing.height = height;
@@ -662,7 +601,6 @@ export class DatReader {
 						}
 					}
 				} else {
-					// Use default duration for older versions
 					const defaultDuration = getDefaultFrameDuration(thing.category);
 					for (let i = 0; i < frames; i++) {
 						currentFrameGroup.frameDurations.push({ minimum: defaultDuration, maximum: defaultDuration });
@@ -673,7 +611,6 @@ export class DatReader {
 				}
 			}
 
-			// Calculate sprites for this group
 			const groupTotalSprites = width * height * layers * patternX * patternY * patternZ * frames;
 
 			if (totalSpritesCount + groupTotalSprites > 4096) {
@@ -688,14 +625,10 @@ export class DatReader {
 				throw new Error(`Thing ${thing.category} ${thing.id} has more than 4096 sprites`);
 			}
 
-			// Initialize sprite index array if this is the first group
 			if (!thing.spriteIndex) {
 				thing.spriteIndex = [];
 			}
 
-			// Read sprite IDs for this group
-			// Object Builder uses extended (32-bit) sprite IDs when extended flag is set
-			// even for outfits with frame groups
 			const useExtendedSpriteIds = this.extended;
 
 			for (let i = 0; i < groupTotalSprites; i++) {
@@ -708,7 +641,6 @@ export class DatReader {
 
 				currentFrameGroup.spriteIndex.push(spriteId);
 
-				// Only add sprites if this is the first group
 				if (groupIndex === 0) {
 					thing.spriteIndex.push(spriteId);
 				}
@@ -721,9 +653,6 @@ export class DatReader {
 		return true;
 	}
 
-	/**
-	 * Read a complete thing type
-	 */
 	readThingType(id: number, category: ThingCategory): ThingType {
 		const thing = createThingType(id, category);
 		this.readProperties(thing);
@@ -731,41 +660,25 @@ export class DatReader {
 		return thing;
 	}
 
-	/**
-	 * Get current read position
-	 */
 	getPosition(): number {
 		return this.reader.getPosition();
 	}
 
-	/**
-	 * Set read position
-	 */
 	setPosition(pos: number): void {
 		this.reader.setPosition(pos);
 	}
 
-	/**
-	 * Get bytes available
-	 */
 	get bytesAvailable(): number {
 		return this.reader.bytesAvailable;
 	}
 }
 
-/**
- * Get default frame duration based on category
- */
 function getDefaultFrameDuration(category: ThingCategory): number {
-	// Default animation durations (in milliseconds)
-	// Default durations matching Object Builder (ObjectBuilderSettings.as)
-	// Note: OTClient uses 75ms for effects/missiles (in-game timing),
-	// but Object Builder uses 100ms for easier frame viewing in the editor
 	switch (category) {
 		case ThingCategory.OUTFIT:
 			return 300;
 		case ThingCategory.EFFECT:
-			return 100; // Object Builder default (OTClient uses 75ms)
+			return 100;
 		case ThingCategory.MISSILE:
 			return 150;
 		default:
@@ -773,9 +686,6 @@ function getDefaultFrameDuration(category: ThingCategory): number {
 	}
 }
 
-/**
- * Load complete Tibia metadata file (async with batched processing)
- */
 export async function loadDatFile(
 	buffer: Uint8Array | ArrayBuffer,
 	extended: boolean,
@@ -795,7 +705,6 @@ export async function loadDatFile(
 }> {
 	const reader = new DatReader(buffer, extended, frameDurations, version);
 
-	// Read counts
 	const signature = reader.readSignature();
 	const itemsCount = reader.readItemsCount();
 	const outfitsCount = reader.readOutfitsCount();
@@ -805,31 +714,25 @@ export async function loadDatFile(
 	const totalThings = itemsCount + outfitsCount + effectsCount + missilesCount;
 	let currentThing = 0;
 
-	// Batch size for yielding to event loop
 	const BATCH_SIZE = 250;
 	const PROGRESS_UPDATE_INTERVAL = 50;
 
-	// Position reader after header
 	reader.setPosition(12);
 
-	// Load items (start from ID 100)
 	const items = new Map<number, ThingType>();
 	for (let id = 100; id <= itemsCount; id++) {
 		items.set(id, reader.readThingType(id, ThingCategory.ITEM));
 		currentThing++;
 
-		// Yield to event loop every BATCH_SIZE items
 		if (currentThing % BATCH_SIZE === 0) {
 			await new Promise((resolve) => setTimeout(resolve, 0));
 		}
 
-		// Update progress every PROGRESS_UPDATE_INTERVAL items
 		if (onProgress && currentThing % PROGRESS_UPDATE_INTERVAL === 0) {
 			onProgress(currentThing, totalThings);
 		}
 	}
 
-	// Load outfits (start from ID 1)
 	const outfits = new Map<number, ThingType>();
 	for (let id = 1; id <= outfitsCount; id++) {
 		outfits.set(id, reader.readThingType(id, ThingCategory.OUTFIT));
@@ -844,7 +747,6 @@ export async function loadDatFile(
 		}
 	}
 
-	// Load effects (start from ID 1)
 	const effects = new Map<number, ThingType>();
 	for (let id = 1; id <= effectsCount; id++) {
 		effects.set(id, reader.readThingType(id, ThingCategory.EFFECT));
@@ -859,7 +761,6 @@ export async function loadDatFile(
 		}
 	}
 
-	// Load missiles (start from ID 1)
 	const missiles = new Map<number, ThingType>();
 	for (let id = 1; id <= missilesCount; id++) {
 		missiles.set(id, reader.readThingType(id, ThingCategory.MISSILE));
@@ -874,7 +775,6 @@ export async function loadDatFile(
 		}
 	}
 
-	// Final progress update
 	if (onProgress) {
 		onProgress(totalThings, totalThings);
 	}
