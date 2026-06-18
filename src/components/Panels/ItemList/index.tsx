@@ -1,12 +1,12 @@
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { ThingCategory } from '@/lib/formats/tibia';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { CheckerBoard } from '@/components/CheckerBoard';
 import { useItemList } from '@/usecase/hooks/useItemList';
 import { SpriteCanvas } from '@/components/commons/SpriteCanvas';
 import { ViewModeMenu } from '@/components/commons/ViewModeMenu';
 import { ListPagination } from '@/components/commons/ListPagination';
+import { ThingCategory, TIBIA_FORMAT_CONFIG } from '@/lib/formats/tibia';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
 import { Select, SelectItem, SelectValue, SelectContent, SelectTrigger } from '@/components/ui/select';
 import { ContextMenu, ContextMenuItem, ContextMenuContent, ContextMenuTrigger } from '@/components/ui/context-menu';
@@ -55,10 +55,11 @@ export const ItemList = () => {
 							<SelectValue />
 						</SelectTrigger>
 						<SelectContent>
-							<SelectItem value={ThingCategory.ITEM}>Item</SelectItem>
-							<SelectItem value={ThingCategory.OUTFIT}>Outfit</SelectItem>
-							<SelectItem value={ThingCategory.EFFECT}>Effect</SelectItem>
-							<SelectItem value={ThingCategory.MISSILE}>Missile</SelectItem>
+							{TIBIA_FORMAT_CONFIG.categories.map((cat) => (
+								<SelectItem key={cat.id} value={cat.id}>
+									{cat.label}
+								</SelectItem>
+							))}
 						</SelectContent>
 					</Select>
 					<span className="ml-auto text-xs text-muted-foreground font-mono">0</span>

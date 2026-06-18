@@ -8,7 +8,7 @@ import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { useAssetData } from '@/usecase/context/AssetDataContext';
 import { useErrorDialog } from '@/usecase/context/ErrorDialogContext';
 import { usePanelSettings } from '@/usecase/context/PanelSettingsContext';
-import { loadTibiaData, type ThingType, optimizeSprites } from '@/lib/formats/tibia';
+import { loadTibiaData, type ThingType, getCategoryMap, optimizeSprites, TIBIA_FORMAT_CONFIG } from '@/lib/formats/tibia';
 import {
 	X,
 	Eye,
@@ -104,7 +104,6 @@ export const Toolbar = () => {
 		if (!data) return;
 
 		setIsOptimizing(true);
-		// Store original path before optimization if not already stored
 		if (!originalSprPath) {
 			setOriginalSprPath(data.sprPath);
 		}
@@ -116,13 +115,10 @@ export const Toolbar = () => {
 
 			setOptimizerResult(result);
 
-			// Create new data object to avoid mutating state directly
-			// and to ensure setData closes the OLD path correctly
 			const newData = { ...data };
 			newData.sprPath = result.tempPath;
 			newData.spritesCount = result.newTotal;
 
-			// Update data reference to trigger re-render with new temp path
 			setData(newData, null as any);
 
 			toast({
@@ -130,7 +126,6 @@ export const Toolbar = () => {
 				description: `Removed ${result.removedCount} sprites. New total: ${result.newTotal}. Click Compile to save changes.`
 			});
 
-			// Mark as modified so Compile button is enabled
 			if (newData) {
 				notifyDataChanged();
 			}
@@ -145,15 +140,6 @@ export const Toolbar = () => {
 			setIsOptimizing(false);
 		}
 	};
-
-	// Effect to notify data changed when optimization completes successfully
-	// We do this in a separate effect or just call it if we extract it from context
-
-	// We can't call hook inside function, so we use the one from top level
-	// But runOptimization is inside component, so it has access to notifyDataChanged from line 22
-
-	// Let's update runOptimization to call notifyDataChanged
-	// Re-declaring runOptimization to include notifyDataChanged call
 
 	const handleFolderSelect = async (selectedPath: string, transparency: boolean) => {
 		try {
@@ -176,7 +162,6 @@ export const Toolbar = () => {
 
 			setData(tibiaData, null as any);
 
-			// Check if files are in a protected location
 			const protectedPaths = ['Program Files', 'Program Files (x86)', 'Windows', 'System32', 'ProgramData'];
 
 			const isProtectedLocation = protectedPaths.some((protectedPath) =>
@@ -193,7 +178,6 @@ export const Toolbar = () => {
 				});
 			}
 
-			// Loading complete - sprite preloading already happened in loadTibiaData()
 			setLoading(false);
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Failed to load files';
@@ -248,32 +232,23 @@ export const Toolbar = () => {
 		}
 
 		try {
-			// If we have an optimized temp file, apply it to the original path first
 			if (originalSprPath && data) {
 				const { invoke } = await import('@tauri-apps/api/core');
 
-				// 1. Close the TEMP file handle in the backend
 				await invoke('close_spr_file', { path: data.sprPath });
 
-				// 2. Apply optimization (swap files)
 				await invoke('apply_optimization', {
 					tempPath: data.sprPath,
 					originalPath: originalSprPath
 				});
 
-				// 3. Update data to point back to original path
 				data.sprPath = originalSprPath;
 				setOriginalSprPath(null);
 
-				// 4. Re-open the ORIGINAL file (now containing optimized data)
-				// This is crucial because compileFiles might need to read from it
 				await invoke('open_spr_file', {
 					path: data.sprPath,
 					extended: data.extended
 				});
-
-				// We still need to run compileFiles to save the DAT file (which has updated IDs)
-				// and any other changes
 			}
 
 			await compileFiles();
@@ -286,14 +261,12 @@ export const Toolbar = () => {
 			const errorMessage = errorToString(err);
 			console.error('Compile error details:', err);
 
-			// Check for permission errors
 			const isPermissionError =
 				errorMessage.includes('Acesso negado') ||
 				errorMessage.includes('Access denied') ||
 				errorMessage.includes('Permission denied') ||
 				errorMessage.includes('os error 5');
 
-			// Check for memory/timeout errors
 			const isMemoryError =
 				errorMessage.includes('out of memory') ||
 				errorMessage.includes('allocation') ||
@@ -302,7 +275,7 @@ export const Toolbar = () => {
 
 			if (isPermissionError) {
 				toast({
-					duration: 10000, // Show longer for important message
+					duration: 10000,
 					variant: 'destructive',
 					title: 'Permission Denied',
 					description:
@@ -467,15 +440,12 @@ export const Toolbar = () => {
 					onMouseDown={(e) => e.stopPropagation()}
 					onClick={async () => {
 						try {
-							// Try to get existing window first
 							const existingWindow = await WebviewWindow.getByLabel('find');
 
 							if (existingWindow) {
-								// Window exists, just show and focus it
 								await existingWindow.show();
 								await existingWindow.setFocus();
 							} else {
-								// Window doesn't exist, create it
 								const newWindow = new WebviewWindow('find', {
 									width: 900,
 									height: 600,
@@ -491,7 +461,6 @@ export const Toolbar = () => {
 									backgroundColor: [0, 0, 0, 0]
 								});
 
-								// Listen for creation success/error
 								newWindow.once('tauri://error', () => {
 									toast({
 										title: 'Error',
@@ -627,22 +596,12 @@ export const Toolbar = () => {
 											{data.version.datSignature.toString(16).toUpperCase()}
 										</span>
 									</div>
-									<div className="flex justify-between items-center gap-4">
-										<span className="text-muted-foreground whitespace-nowrap">Items:</span>
-										<span className="font-mono text-foreground text-right">{data.items.size}</span>
-									</div>
-									<div className="flex justify-between items-center gap-4">
-										<span className="text-muted-foreground whitespace-nowrap">Outfits:</span>
-										<span className="font-mono text-foreground text-right">{data.outfits.size}</span>
-									</div>
-									<div className="flex justify-between items-center gap-4">
-										<span className="text-muted-foreground whitespace-nowrap">Effects:</span>
-										<span className="font-mono text-foreground text-right">{data.effects.size}</span>
-									</div>
-									<div className="flex justify-between items-center gap-4">
-										<span className="text-muted-foreground whitespace-nowrap">Missiles:</span>
-										<span className="font-mono text-foreground text-right">{data.missiles.size}</span>
-									</div>
+									{TIBIA_FORMAT_CONFIG.categories.map((cat) => (
+										<div key={cat.id} className="flex justify-between items-center gap-4">
+											<span className="text-muted-foreground whitespace-nowrap">{cat.label}s:</span>
+											<span className="font-mono text-foreground text-right">{getCategoryMap(data, cat.id).size}</span>
+										</div>
+									))}
 									<div className="flex justify-between items-center gap-4">
 										<span className="text-muted-foreground whitespace-nowrap">Spr:</span>
 										<span className="font-mono text-foreground text-right">

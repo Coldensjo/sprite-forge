@@ -2,8 +2,8 @@ import type { Sprite, AssetData, ThingType, FrameDuration } from './types';
 
 import { invoke } from '@tauri-apps/api/core';
 
-import { ThingCategory } from './types';
 import { createCommit, readOnDiskSprites } from '../../versionControl';
+import { ThingCategory, getCategoryStartId, TIBIA_FORMAT_CONFIG } from './types';
 
 export class ByteWriter {
 	private buf: Uint8Array;
@@ -210,7 +210,7 @@ function collectThings(
 	map: Map<number, ThingType>,
 	category: ThingCategory
 ): { maxId: number; minId: number; things: ThingType[] } {
-	const minId = category === 'item' ? 100 : 1;
+	const minId = getCategoryStartId(TIBIA_FORMAT_CONFIG, category);
 
 	let maxId = minId;
 	const things: ThingType[] = [];
@@ -481,14 +481,14 @@ export interface CompileFilesArgs {
 	data: AssetData;
 	datPath: string;
 	sprPath: string;
-	modifiedItems: Map<string, { id: number; data: ThingType; category: ThingCategory }>;
 	directlyModifiedSprites: Map<number, Sprite>;
-	originalItems: Map<string, { id: number; category: ThingCategory; data: ThingType }>;
 	onProgress?: (stage: string, current: number, total: number) => void;
+	modifiedItems: Map<string, { id: number; data: ThingType; category: ThingCategory }>;
+	originalItems: Map<string, { id: number; data: ThingType; category: ThingCategory }>;
 }
 
 export async function compileFiles(args: CompileFilesArgs): Promise<void> {
-	const { data, datPath, sprPath, modifiedItems, directlyModifiedSprites, originalItems, onProgress } = args;
+	const { data, datPath, sprPath, onProgress, modifiedItems, originalItems, directlyModifiedSprites } = args;
 	const startTime = Date.now();
 
 	try {
@@ -510,20 +510,26 @@ export async function compileFiles(args: CompileFilesArgs): Promise<void> {
 		if (onProgress) onProgress('Creating version control commit...', 4, 5);
 		const commitMessage = `Compile: ${modifiedItems.size} items, ${modifiedSprites.size} sprites modified`;
 		try {
-			const itemEntries = new Map<string, { id: number; category: ThingCategory; before: ThingType | null; after: ThingType | null }>();
+			const itemEntries = new Map<
+				string,
+				{ id: number; category: ThingCategory; after: null | ThingType; before: null | ThingType }
+			>();
 			for (const [key, mod] of modifiedItems.entries()) {
 				const original = originalItems.get(key);
 				itemEntries.set(key, {
 					id: mod.id,
+					after: mod.data,
 					category: mod.category,
-					before: original ? original.data : null,
-					after: mod.data
+					before: original ? original.data : null
 				});
 			}
 
 			const spriteEntries = new Map<
 				number,
-				{ before: { transparent: boolean; compressedPixels: Uint8Array } | null; after: { transparent: boolean; compressedPixels: Uint8Array } | null }
+				{
+					after: null | { transparent: boolean; compressedPixels: Uint8Array };
+					before: null | { transparent: boolean; compressedPixels: Uint8Array };
+				}
 			>();
 			for (const [id, sprite] of modifiedSprites.entries()) {
 				const before = beforeSprites.get(id) ?? null;
@@ -537,8 +543,8 @@ export async function compileFiles(args: CompileFilesArgs): Promise<void> {
 			}
 
 			await createCommit({
-				message: commitMessage,
 				items: itemEntries,
+				message: commitMessage,
 				sprites: spriteEntries
 			});
 		} catch (commitError) {
@@ -559,8 +565,8 @@ async function captureBeforeSprites(
 	data: AssetData,
 	sprPath: string,
 	modifiedSprites: Map<number, Sprite>
-): Promise<Map<number, { transparent: boolean; compressedPixels: Uint8Array } | null>> {
-	const result = new Map<number, { transparent: boolean; compressedPixels: Uint8Array } | null>();
+): Promise<Map<number, null | { transparent: boolean; compressedPixels: Uint8Array }>> {
+	const result = new Map<number, null | { transparent: boolean; compressedPixels: Uint8Array }>();
 	if (modifiedSprites.size === 0) return result;
 
 	const ids = Array.from(modifiedSprites.keys()).filter((id) => id > 0 && id <= data.spritesCount);

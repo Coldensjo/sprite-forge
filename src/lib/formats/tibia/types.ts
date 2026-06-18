@@ -35,10 +35,29 @@ export const SPR_FILE_SIZES = {
 	HEADER_U32: 8
 } as const;
 
-export const MIN_ITEM_ID = 100;
-export const MIN_OUTFIT_ID = 1;
-export const MIN_EFFECT_ID = 1;
-export const MIN_MISSILE_ID = 1;
+export interface CategoryDef {
+	label: string;
+	startId: number;
+	id: ThingCategory;
+	defaults?: Partial<ThingType>;
+}
+
+export interface FormatConfig {
+	name: string;
+	spriteSize: number;
+	categories: CategoryDef[];
+}
+
+export const TIBIA_FORMAT_CONFIG: FormatConfig = {
+	name: 'Tibia',
+	spriteSize: 32,
+	categories: [
+		{ startId: 100, label: 'Item', id: ThingCategory.ITEM },
+		{ startId: 1, label: 'Outfit', id: ThingCategory.OUTFIT, defaults: { frames: 3, patternX: 4, isAnimation: true } },
+		{ startId: 1, label: 'Effect', id: ThingCategory.EFFECT },
+		{ startId: 1, label: 'Missile', id: ThingCategory.MISSILE, defaults: { patternX: 3, patternY: 3 } }
+	]
+};
 
 export interface FrameDuration {
 	minimum: number;
@@ -274,7 +293,54 @@ export function getSpriteIndex(
 	);
 }
 
-export function createThingType(id: number, category: ThingCategory): ThingType {
+export function getCategoryMap(data: AssetData, category: ThingCategory): Map<number, ThingType> {
+	switch (category) {
+		case ThingCategory.ITEM:
+			return data.items;
+		case ThingCategory.OUTFIT:
+			return data.outfits;
+		case ThingCategory.EFFECT:
+			return data.effects;
+		case ThingCategory.MISSILE:
+			return data.missiles;
+	}
+}
+
+export function getCategoryCount(data: AssetData, category: ThingCategory): number {
+	switch (category) {
+		case ThingCategory.ITEM:
+			return data.itemsCount;
+		case ThingCategory.OUTFIT:
+			return data.outfitsCount;
+		case ThingCategory.EFFECT:
+			return data.effectsCount;
+		case ThingCategory.MISSILE:
+			return data.missilesCount;
+	}
+}
+
+export function setCategoryCount(data: AssetData, category: ThingCategory, count: number): void {
+	switch (category) {
+		case ThingCategory.ITEM:
+			data.itemsCount = count;
+			break;
+		case ThingCategory.OUTFIT:
+			data.outfitsCount = count;
+			break;
+		case ThingCategory.EFFECT:
+			data.effectsCount = count;
+			break;
+		case ThingCategory.MISSILE:
+			data.missilesCount = count;
+			break;
+	}
+}
+
+export function getCategoryStartId(config: FormatConfig, category: ThingCategory): number {
+	return config.categories.find((c) => c.id === category)?.startId ?? 1;
+}
+
+export function createThingType(id: number, category: ThingCategory, config?: FormatConfig): ThingType {
 	const thing: ThingType = {
 		id,
 		category,
@@ -356,13 +422,18 @@ export function createThingType(id: number, category: ThingCategory): ThingType 
 		marketRestrictProfession: 0
 	};
 
-	if (category === ThingCategory.OUTFIT) {
-		thing.patternX = 4;
-		thing.frames = 3;
-		thing.isAnimation = true;
-	} else if (category === ThingCategory.MISSILE) {
-		thing.patternX = 3;
-		thing.patternY = 3;
+	const categoryDef = config?.categories.find((c) => c.id === category);
+	if (categoryDef?.defaults) {
+		Object.assign(thing, categoryDef.defaults);
+	} else if (!config) {
+		if (category === ThingCategory.OUTFIT) {
+			thing.patternX = 4;
+			thing.frames = 3;
+			thing.isAnimation = true;
+		} else if (category === ThingCategory.MISSILE) {
+			thing.patternX = 3;
+			thing.patternY = 3;
+		}
 	}
 
 	return thing;

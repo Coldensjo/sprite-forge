@@ -4,8 +4,8 @@ import { isValidSpriteId } from '@/lib/formats/tibia';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useAssetData } from '@/usecase/context/AssetDataContext';
-import { ThingType, ThingCategory } from '@/lib/formats/tibia/types';
 import { useRef, useMemo, useState, useEffect, useCallback } from 'react';
+import { ThingType, ThingCategory, TIBIA_FORMAT_CONFIG } from '@/lib/formats/tibia/types';
 import { X, List, Minus, Square, Trash2, Columns, Sparkles, LayoutGrid } from 'lucide-react';
 
 import { Input } from './ui/input';
@@ -777,10 +777,11 @@ export const FindWindow = () => {
 								</SelectTrigger>
 								<SelectContent>
 									<SelectItem value="all">All</SelectItem>
-									<SelectItem value="item">Item</SelectItem>
-									<SelectItem value="outfit">Outfit</SelectItem>
-									<SelectItem value="effect">Effect</SelectItem>
-									<SelectItem value="missile">Missile</SelectItem>
+									{TIBIA_FORMAT_CONFIG.categories.map((cat) => (
+										<SelectItem key={cat.id} value={cat.id}>
+											{cat.label}
+										</SelectItem>
+									))}
 								</SelectContent>
 							</Select>
 						</div>

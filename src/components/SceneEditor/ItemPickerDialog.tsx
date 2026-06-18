@@ -11,13 +11,12 @@ import { useAssetData } from '@/usecase/context/AssetDataContext';
 import { Dialog, DialogTitle, DialogHeader, DialogContent } from '@/components/ui/dialog';
 import { Select, SelectItem, SelectValue, SelectContent, SelectTrigger } from '@/components/ui/select';
 import {
-	MIN_ITEM_ID,
-	MIN_EFFECT_ID,
-	MIN_OUTFIT_ID,
 	ThingCategory,
-	MIN_MISSILE_ID,
 	type ThingType,
-	isValidSpriteId
+	getCategoryMap,
+	isValidSpriteId,
+	getCategoryCount,
+	getCategoryStartId
 } from '@/lib/formats/tibia';
 
 interface ItemPickerDialogProps {
@@ -29,7 +28,7 @@ interface ItemPickerDialogProps {
 const ITEMS_PER_PAGE = 100;
 
 export const ItemPickerDialog = ({ open, onOpenChange, onItemSelect }: ItemPickerDialogProps) => {
-	const { data, spriteSize, updateCounter, notifySpritesLoaded } = useAssetData();
+	const { data, spriteSize, formatConfig, updateCounter, notifySpritesLoaded } = useAssetData();
 	const [category, setCategory] = useState<ThingCategory>(ThingCategory.ITEM);
 	const [searchId, setSearchId] = useState('');
 	const [currentPage, setCurrentPage] = useState(1);
@@ -47,38 +46,9 @@ export const ItemPickerDialog = ({ open, onOpenChange, onItemSelect }: ItemPicke
 
 	const allItems = useMemo(() => {
 		if (!data) return [];
-
-		let map: undefined | Map<number, ThingType>;
-		let minId: number;
-		let count: number;
-
-		switch (category) {
-			case ThingCategory.ITEM:
-				map = data.items;
-				minId = MIN_ITEM_ID;
-				count = data.itemsCount;
-				break;
-			case ThingCategory.OUTFIT:
-				map = data.outfits;
-				minId = MIN_OUTFIT_ID;
-				count = data.outfitsCount;
-				break;
-			case ThingCategory.EFFECT:
-				map = data.effects;
-				minId = MIN_EFFECT_ID;
-				count = data.effectsCount;
-				break;
-			case ThingCategory.MISSILE:
-				map = data.missiles;
-				minId = MIN_MISSILE_ID;
-				count = data.missilesCount;
-				break;
-			default:
-				return [];
-		}
-
-		if (!map) return [];
-
+		const map = getCategoryMap(data, category);
+		const minId = getCategoryStartId(formatConfig, category);
+		const count = getCategoryCount(data, category);
 		const items: ThingType[] = [];
 		const maxId = minId + count - 1;
 		for (let id = minId; id <= maxId; id++) {
@@ -88,7 +58,7 @@ export const ItemPickerDialog = ({ open, onOpenChange, onItemSelect }: ItemPicke
 			}
 		}
 		return items;
-	}, [data, category, updateCounter]);
+	}, [data, category, formatConfig, updateCounter]);
 
 	const filteredItems = useMemo(() => {
 		return allItems.filter((item) => {
@@ -198,10 +168,11 @@ export const ItemPickerDialog = ({ open, onOpenChange, onItemSelect }: ItemPicke
 									<SelectValue />
 								</SelectTrigger>
 								<SelectContent>
-									<SelectItem value={ThingCategory.ITEM}>Item</SelectItem>
-									<SelectItem value={ThingCategory.OUTFIT}>Outfit</SelectItem>
-									<SelectItem value={ThingCategory.EFFECT}>Effect</SelectItem>
-									<SelectItem value={ThingCategory.MISSILE}>Missile</SelectItem>
+									{formatConfig.categories.map((cat) => (
+										<SelectItem key={cat.id} value={cat.id}>
+											{cat.label}
+										</SelectItem>
+									))}
 								</SelectContent>
 							</Select>
 						</div>

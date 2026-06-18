@@ -6,14 +6,14 @@ import { getThumbnailSpriteIds } from '@/usecase/util/thumbnailUtils';
 import { exportObjectSheet, importObjectSheet } from '@/lib/formats/tibia';
 import { useGeneralSettings } from '@/usecase/context/GeneralSettingsContext';
 import {
-	MIN_ITEM_ID,
-	MIN_OUTFIT_ID,
-	MIN_EFFECT_ID,
 	ThingCategory,
-	MIN_MISSILE_ID,
 	type ThingType,
 	isValidSpriteId,
-	createThingType
+	createThingType,
+	getCategoryCount,
+	setCategoryCount,
+	getCategoryStartId,
+	getCategoryMap as getCategoryMapUtil
 } from '@/lib/formats/tibia';
 
 import { useToast } from './use-toast';
@@ -25,6 +25,7 @@ export const useItemList = () => {
 		spriteSize,
 		updateThing,
 		openedItemId,
+		formatConfig,
 		updateCounter,
 		markAsNewItem,
 		setOpenedItemId,
@@ -54,18 +55,8 @@ export const useItemList = () => {
 
 	const getCategoryMap = React.useMemo(() => {
 		return (category: ThingCategory) => {
-			switch (category) {
-				case ThingCategory.ITEM:
-					return data?.items;
-				case ThingCategory.OUTFIT:
-					return data?.outfits;
-				case ThingCategory.EFFECT:
-					return data?.effects;
-				case ThingCategory.MISSILE:
-					return data?.missiles;
-				default:
-					return data?.items;
-			}
+			if (!data) return undefined;
+			return getCategoryMapUtil(data, category);
 		};
 	}, [data]);
 
@@ -79,49 +70,18 @@ export const useItemList = () => {
 
 	const allItemIds = React.useMemo(() => {
 		if (!data) return [];
+		const map = getCategoryMapUtil(data, selectedCategory);
+		const count = getCategoryCount(data, selectedCategory);
+		const minId = getCategoryStartId(formatConfig, selectedCategory);
 		const ids: number[] = [];
-
-		let map: undefined | Map<number, ThingType>;
-		let count: number;
-		let minId: number;
-
-		switch (selectedCategory) {
-			case ThingCategory.ITEM:
-				map = data.items;
-				count = data.itemsCount;
-				minId = MIN_ITEM_ID;
-				break;
-			case ThingCategory.OUTFIT:
-				map = data.outfits;
-				count = data.outfitsCount;
-				minId = MIN_OUTFIT_ID;
-				break;
-			case ThingCategory.EFFECT:
-				map = data.effects;
-				count = data.effectsCount;
-				minId = MIN_EFFECT_ID;
-				break;
-			case ThingCategory.MISSILE:
-				map = data.missiles;
-				count = data.missilesCount;
-				minId = MIN_MISSILE_ID;
-				break;
-			default:
-				map = data.items;
-				count = data.itemsCount;
-				minId = MIN_ITEM_ID;
-		}
-
-		if (map) {
-			const maxId = minId + count - 1;
-			for (let id = minId; id <= maxId; id++) {
-				if (map.has(id)) {
-					ids.push(id);
-				}
+		const maxId = minId + count - 1;
+		for (let id = minId; id <= maxId; id++) {
+			if (map.has(id)) {
+				ids.push(id);
 			}
 		}
 		return ids;
-	}, [data, selectedCategory, updateCounter]);
+	}, [data, selectedCategory, updateCounter, formatConfig]);
 
 	const totalPages = Math.max(1, Math.ceil(allItemIds.length / itemsPerPage));
 	const paginatedItemIds = React.useMemo(() => {
@@ -405,56 +365,19 @@ export const useItemList = () => {
 
 	const createNewItem = () => {
 		if (!data) return;
-		const map = getCategoryMap(selectedCategory);
-		let minId: number;
-		let count: number;
-
-		switch (selectedCategory) {
-			case ThingCategory.ITEM:
-				minId = MIN_ITEM_ID;
-				count = data.itemsCount;
-				break;
-			case ThingCategory.OUTFIT:
-				minId = MIN_OUTFIT_ID;
-				count = data.outfitsCount;
-				break;
-			case ThingCategory.EFFECT:
-				minId = MIN_EFFECT_ID;
-				count = data.effectsCount;
-				break;
-			case ThingCategory.MISSILE:
-				minId = MIN_MISSILE_ID;
-				count = data.missilesCount;
-				break;
-			default:
-				minId = MIN_ITEM_ID;
-				count = data.itemsCount;
-		}
+		const map = getCategoryMapUtil(data, selectedCategory);
+		const minId = getCategoryStartId(formatConfig, selectedCategory);
 
 		let newId = minId;
-		while (map?.has(newId)) {
+		while (map.has(newId)) {
 			newId++;
 		}
 
-		const newItem = createThingType(newId, selectedCategory);
+		const newItem = createThingType(newId, selectedCategory, formatConfig);
+		map.set(newId, newItem);
 
-		map?.set(newId, newItem);
-
-		const newCount = map?.size ?? count;
-		switch (selectedCategory) {
-			case ThingCategory.ITEM:
-				data.itemsCount = newCount;
-				break;
-			case ThingCategory.OUTFIT:
-				data.outfitsCount = newCount;
-				break;
-			case ThingCategory.EFFECT:
-				data.effectsCount = newCount;
-				break;
-			case ThingCategory.MISSILE:
-				data.missilesCount = newCount;
-				break;
-		}
+		const newCount = map.size;
+		setCategoryCount(data, selectedCategory, newCount);
 
 		const updatedMaxId = minId + newCount - 1;
 		const updatedAllItemIds: number[] = [];
@@ -484,9 +407,9 @@ export const useItemList = () => {
 
 	const duplicateItem = (id: number, item: ThingType) => {
 		if (!data) return;
-		const map = getCategoryMap(selectedCategory);
+		const map = getCategoryMapUtil(data, selectedCategory);
 		let newId = id + 1;
-		while (map?.has(newId)) {
+		while (map.has(newId)) {
 			newId++;
 		}
 
@@ -502,36 +425,11 @@ export const useItemList = () => {
 			}))
 		};
 
-		map?.set(newId, duplicate);
+		map.set(newId, duplicate);
 
-		let minId: number;
-		let updatedCount: number;
-		switch (selectedCategory) {
-			case ThingCategory.ITEM:
-				minId = MIN_ITEM_ID;
-				updatedCount = Math.max(data.itemsCount, newId - minId + 1);
-				data.itemsCount = updatedCount;
-				break;
-			case ThingCategory.OUTFIT:
-				minId = MIN_OUTFIT_ID;
-				updatedCount = Math.max(data.outfitsCount, newId - minId + 1);
-				data.outfitsCount = updatedCount;
-				break;
-			case ThingCategory.EFFECT:
-				minId = MIN_EFFECT_ID;
-				updatedCount = Math.max(data.effectsCount, newId - minId + 1);
-				data.effectsCount = updatedCount;
-				break;
-			case ThingCategory.MISSILE:
-				minId = MIN_MISSILE_ID;
-				updatedCount = Math.max(data.missilesCount, newId - minId + 1);
-				data.missilesCount = updatedCount;
-				break;
-			default:
-				minId = MIN_ITEM_ID;
-				updatedCount = Math.max(data.itemsCount, newId - minId + 1);
-				data.itemsCount = updatedCount;
-		}
+		const minId = getCategoryStartId(formatConfig, selectedCategory);
+		const updatedCount = Math.max(getCategoryCount(data, selectedCategory), newId - minId + 1);
+		setCategoryCount(data, selectedCategory, updatedCount);
 
 		const updatedMaxId = minId + updatedCount - 1;
 		const updatedAllItemIds: number[] = [];

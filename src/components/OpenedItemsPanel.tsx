@@ -1,7 +1,7 @@
 import { X } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { ThingCategory } from '@/lib/formats/tibia';
 import { useAssetData } from '@/usecase/context/AssetDataContext';
+import { ThingCategory, TIBIA_FORMAT_CONFIG } from '@/lib/formats/tibia';
 
 import { Button } from './ui/button';
 import { ScrollArea } from './ui/scroll-area';
@@ -26,24 +26,11 @@ export const OpenedItemsPanel = () => {
 	}
 
 	const handleItemClick = (item: { id: number; category: ThingCategory }) => {
-		// Use the combined function to set both category and item atomically
 		setSelectedCategoryAndItem(item.category, item.id);
 	};
 
-	const getCategoryLabel = (category: ThingCategory) => {
-		switch (category) {
-			case ThingCategory.ITEM:
-				return 'Item';
-			case ThingCategory.OUTFIT:
-				return 'Outfit';
-			case ThingCategory.EFFECT:
-				return 'Effect';
-			case ThingCategory.MISSILE:
-				return 'Missile';
-			default:
-				return '';
-		}
-	};
+	const getCategoryLabel = (category: ThingCategory) =>
+		TIBIA_FORMAT_CONFIG.categories.find((c) => c.id === category)?.label ?? category;
 
 	return (
 		<div

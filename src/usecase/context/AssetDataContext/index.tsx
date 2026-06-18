@@ -1,8 +1,8 @@
-import type { Sprite, AssetData, ThingType } from '@/lib/formats/tibia';
+import type { Sprite, AssetData, ThingType, FormatConfig } from '@/lib/formats/tibia';
 
 import React from 'react';
 import { logger, EventCode } from '@/lib/debug';
-import { SpriteReader, ThingCategory } from '@/lib/formats/tibia';
+import { SpriteReader, ThingCategory, getCategoryMap, TIBIA_FORMAT_CONFIG } from '@/lib/formats/tibia';
 
 interface AssetDataContextType {
 	spriteSize: number;
@@ -13,6 +13,7 @@ interface AssetDataContextType {
 	data: null | AssetData;
 	openedItems: ThingType[];
 	spriteLoadVersion: number;
+	formatConfig: FormatConfig;
 	openedItemId: null | number;
 	spriteImportVersion: number;
 	openedSpriteId: null | number;
@@ -29,10 +30,6 @@ interface AssetDataContextType {
 	setError: (error: null | string) => void;
 	getSprite: (id: number) => null | Sprite;
 	openedItemCategory: null | ThingCategory;
-	getItem: (id: number) => null | ThingType;
-	getOutfit: (id: number) => null | ThingType;
-	getEffect: (id: number) => null | ThingType;
-	getMissile: (id: number) => null | ThingType;
 	setOpenedSpriteId: (id: null | number) => void;
 	notifyDataChanged: (spriteIds?: number[]) => void;
 	setHighlightedItemId: (id: null | number) => void;
@@ -271,54 +268,12 @@ export const AssetDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 		}
 	}, [data]);
 
-	const getItem = React.useCallback(
-		(id: number): null | ThingType => {
-			return data?.items.get(id) || null;
-		},
-
-		[data, updateCounter]
-	);
-
-	const getOutfit = React.useCallback(
-		(id: number): null | ThingType => {
-			return data?.outfits.get(id) || null;
-		},
-
-		[data, updateCounter]
-	);
-
-	const getEffect = React.useCallback(
-		(id: number): null | ThingType => {
-			return data?.effects.get(id) || null;
-		},
-
-		[data, updateCounter]
-	);
-
-	const getMissile = React.useCallback(
-		(id: number): null | ThingType => {
-			return data?.missiles.get(id) || null;
-		},
-
-		[data, updateCounter]
-	);
-
 	const getThing = React.useCallback(
 		(id: number, category: ThingCategory): null | ThingType => {
-			switch (category) {
-				case 'item':
-					return getItem(id);
-				case 'outfit':
-					return getOutfit(id);
-				case 'effect':
-					return getEffect(id);
-				case 'missile':
-					return getMissile(id);
-				default:
-					return null;
-			}
+			if (!data) return null;
+			return getCategoryMap(data, category).get(id) ?? null;
 		},
-		[getItem, getOutfit, getEffect, getMissile]
+		[data, updateCounter]
 	);
 
 	const setOpenedItemId = React.useCallback(
@@ -407,23 +362,9 @@ export const AssetDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 		(id: number, category: ThingCategory, updates: Partial<ThingType>) => {
 			if (!data) return;
 
-			let collection: undefined | Map<number, ThingType>;
-			switch (category) {
-				case 'item':
-					collection = data.items;
-					break;
-				case 'outfit':
-					collection = data.outfits;
-					break;
-				case 'effect':
-					collection = data.effects;
-					break;
-				case 'missile':
-					collection = data.missiles;
-					break;
-			}
+			const collection = getCategoryMap(data, category);
 
-			if (collection && collection.has(id)) {
+			if (collection.has(id)) {
 				const thing = collection.get(id)!;
 				const key = `${category}-${id}`;
 
@@ -510,8 +451,7 @@ export const AssetDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 		setSpriteLoadVersion((v) => {
 			try {
 				logger.log(EventCode.CTX_LOAD_END, { v: v + 1 });
-			} catch {
-			}
+			} catch {}
 			return v + 1;
 		});
 	}, []);
@@ -554,21 +494,18 @@ export const AssetDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
 			try {
 				logger.log(EventCode.CTX_SPRITE_REQ, { id });
-			} catch {
-			}
+			} catch {}
 
 			if (data.sprites.has(id)) {
 				try {
 					logger.log(EventCode.CTX_SPRITE_HIT, { id });
-				} catch {
-				}
+				} catch {}
 				return data.sprites.get(id)!;
 			}
 
 			try {
 				logger.log(EventCode.CTX_SPRITE_MISS, { id, v: spriteLoadVersion, sz: data.sprites.size });
-			} catch {
-			}
+			} catch {}
 			return null;
 		},
 		[data, spriteLoadVersion]
@@ -686,18 +623,14 @@ export const AssetDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 				data,
 				error,
 				setData,
-				getItem,
 				setError,
 				getThing,
 				isLoading,
 				clearData,
-				getOutfit,
-				getEffect,
 				getSprite,
 				isNewItem,
 				spriteSize,
 				setLoading,
-				getMissile,
 				updateThing,
 				openedItems,
 				spriteReader,
@@ -730,7 +663,8 @@ export const AssetDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 				modifiedSinceCompile,
 				clearModifiedTracking,
 				setHighlightedSpriteId,
-				setSelectedCategoryAndItem
+				setSelectedCategoryAndItem,
+				formatConfig: TIBIA_FORMAT_CONFIG
 			}}
 		>
 			{children}
