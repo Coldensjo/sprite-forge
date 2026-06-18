@@ -1,7 +1,7 @@
 import { Play, Pause, FileQuestion } from 'lucide-react';
-import { ThingCategory, loadSpriteIds } from '@/lib/formats/tibia';
 import { useRef, useMemo, useState, useEffect } from 'react';
 import { useAssetData } from '@/usecase/context/AssetDataContext';
+import { loadSpriteIds, getCategoryRenderConfig } from '@/lib/formats/tibia';
 import { getPingPongFrame, AnimationDirection } from '@/lib/formats/tibia/animation';
 
 import { Button } from './ui/button';
@@ -9,19 +9,16 @@ import { CheckerBoard } from './CheckerBoard';
 import { SpriteCanvas } from './commons/SpriteCanvas';
 
 export const VisualizationPanel = () => {
-	const { data, getThing, selectedCategory, highlightedItemId, notifySpritesLoaded } = useAssetData();
+	const { data, getThing, formatConfig, selectedCategory, highlightedItemId, notifySpritesLoaded } = useAssetData();
 	const item = highlightedItemId ? getThing(highlightedItemId, selectedCategory) : null;
 
-	// Animation state
-	const [currentFrame, setCurrentFrame] = useState(0);
+const [currentFrame, setCurrentFrame] = useState(0);
 	const [isPlaying, setIsPlaying] = useState(false);
 
-	// Use ref to avoid stale closure issues in animation loop
-	const itemRef = useRef(item);
+const itemRef = useRef(item);
 	itemRef.current = item;
 
-	// Animation timing refs
-	const animationState = useRef({
+const animationState = useRef({
 		frame: 0,
 		frames: 0,
 		lastTime: 0,
@@ -35,8 +32,7 @@ export const VisualizationPanel = () => {
 	});
 	const requestRef = useRef<number>();
 
-	// Reset animation when item changes
-	useEffect(() => {
+useEffect(() => {
 		setCurrentFrame(0);
 		setIsPlaying(false);
 		animationState.current = {
@@ -78,10 +74,15 @@ export const VisualizationPanel = () => {
 		});
 	}, [highlightedItemId, item, data, notifySpritesLoaded]);
 
+	const itemRenderConfig = useMemo(
+		() => (item ? getCategoryRenderConfig(formatConfig, item.category) : undefined),
+		[item, formatConfig]
+	);
+
 	const animationInfo = useMemo(() => {
 		if (!item) return null;
 
-		if (item.category === ThingCategory.OUTFIT && item.frameGroupsData && item.frameGroupsData.length > 1) {
+		if (itemRenderConfig?.frameGroups && item.frameGroupsData && item.frameGroupsData.length > 1) {
 			const walkingGroup = item.frameGroupsData[1];
 			if (walkingGroup && walkingGroup.frames > 1) {
 				return { index: 1, group: walkingGroup };
@@ -98,15 +99,13 @@ export const VisualizationPanel = () => {
 		}
 
 		return null;
-	}, [item]);
+	}, [item, itemRenderConfig]);
 	const hasAnimation = animationInfo !== null;
 
-	// Create synthetic thing with correct frame group's sprite data for animation
-	const displayThing = useMemo(() => {
+const displayThing = useMemo(() => {
 		if (!item) return null;
 
-		// If using a specific frame group for animation, override sprite data
-		if (animationInfo?.group && animationInfo.index >= 0) {
+if (animationInfo?.group && animationInfo.index >= 0) {
 			const group = animationInfo.group;
 			return {
 				...item,
@@ -124,11 +123,9 @@ export const VisualizationPanel = () => {
 		return item;
 	}, [item, animationInfo]);
 
-	// Auto-play animation for animated items
-	useEffect(() => {
+useEffect(() => {
 		if (item && hasAnimation) {
-			// Small delay before auto-playing to avoid flickering during quick hovers
-			const timer = setTimeout(() => {
+const timer = setTimeout(() => {
 				setIsPlaying(true);
 			}, 100);
 			return () => clearTimeout(timer);
@@ -194,8 +191,7 @@ export const VisualizationPanel = () => {
 		requestRef.current = requestAnimationFrame(animate);
 	};
 
-	// Animation setup effect
-	useEffect(() => {
+useEffect(() => {
 		if (isPlaying && item && hasAnimation && animationInfo) {
 			const currentGroup = animationInfo.group;
 			const frameCount = currentGroup?.frames ?? item.frames;
@@ -207,10 +203,7 @@ export const VisualizationPanel = () => {
 			} else if (item.frameDurations && item.frameDurations.length > 0) {
 				durations = item.frameDurations.map((d) => d.minimum);
 			} else {
-				let defaultDuration = 500;
-				if (item.category === ThingCategory.OUTFIT) defaultDuration = 300;
-				else if (item.category === ThingCategory.EFFECT) defaultDuration = 100;
-				else if (item.category === ThingCategory.MISSILE) defaultDuration = 150;
+				const defaultDuration = itemRenderConfig?.defaultFrameDuration ?? 500;
 				durations = new Array(frameCount).fill(defaultDuration);
 			}
 
@@ -225,9 +218,8 @@ export const VisualizationPanel = () => {
 			const loopCount = currentGroup?.loopCount ?? item.loopCount ?? 0;
 			const rawStartFrame = currentGroup?.startFrame ?? item.startFrame ?? -1;
 
-			const isOutfit = item.category === ThingCategory.OUTFIT;
 			const isIdle = currentGroup?.type !== 1;
-			const skipFirstFrame = isOutfit && !item.animateAlways && isIdle;
+			const skipFirstFrame = !!itemRenderConfig?.skipFirstIdleFrame && !item.animateAlways && isIdle;
 
 			const startFrame = rawStartFrame > -1 ? rawStartFrame : Math.floor(Math.random() * frameCount);
 			const initialFrame = skipFirstFrame && startFrame === 0 ? 1 % frameCount : startFrame;
@@ -244,11 +236,9 @@ export const VisualizationPanel = () => {
 			animationState.current.lastTime = 0;
 			setCurrentFrame(initialFrame);
 
-			// Start loop
-			requestRef.current = requestAnimationFrame(animate);
+requestRef.current = requestAnimationFrame(animate);
 		} else {
-			// Stop animation
-			animationState.current.frames = 0;
+animationState.current.frames = 0;
 			if (requestRef.current) cancelAnimationFrame(requestRef.current);
 		}
 
@@ -262,8 +252,7 @@ export const VisualizationPanel = () => {
 			setIsPlaying(true);
 		} else {
 			setIsPlaying(false);
-			// Reset to frame 0 for outfits
-			if (item?.category === ThingCategory.OUTFIT) {
+			if (itemRenderConfig?.resetFrameOnPause) {
 				setCurrentFrame(0);
 			}
 		}
@@ -285,8 +274,6 @@ export const VisualizationPanel = () => {
 		);
 	}
 
-	// hasAnimation is already computed above with getAnimationFrameGroup()
-
 	return (
 		<div className="w-full h-[150px] bg-card rounded-lg shadow-island flex flex-col overflow-hidden flex-shrink-0">
 			<div className="h-8 px-3 flex items-center border-b border-border/50 bg-secondary/80 flex-shrink-0">
@@ -306,9 +293,11 @@ export const VisualizationPanel = () => {
 							renderMode="preview"
 							width={displayThing.width}
 							height={displayThing.height}
-							patternX={displayThing.category === ThingCategory.OUTFIT ? Math.min(2, displayThing.patternX - 1) : 0}
+							patternX={
+								itemRenderConfig?.listPatternXClamp ? Math.min(itemRenderConfig.listPatternXClamp, displayThing.patternX - 1) : 0
+							}
 							outfitData={
-								displayThing.category === ThingCategory.OUTFIT && displayThing.layers > 1
+								itemRenderConfig?.layerCompositing && displayThing.layers > 1
 									? {
 											head: 0,
 											body: 0,

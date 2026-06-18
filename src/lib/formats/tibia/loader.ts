@@ -11,17 +11,19 @@ import {
 	Sprite,
 	AssetData,
 	ThingType,
-	ThingCategory,
 	ClientVersion,
 	getSpriteIndex,
 	CLIENT_VERSIONS,
-	isValidSpriteId
+	isValidSpriteId,
+	TIBIA_FORMAT_CONFIG,
+	getCategoryRenderConfig
 } from './types';
 
 function collectThumbnailIds(things: Iterable<ThingType>, into: Set<number>): void {
 	for (const thing of things) {
 		if (!thing.spriteIndex || thing.spriteIndex.length === 0) continue;
-		const defaultPatternX = thing.category === ThingCategory.OUTFIT && thing.patternX > 2 ? 2 : 0;
+		const clamp = getCategoryRenderConfig(TIBIA_FORMAT_CONFIG, thing.category)?.listPatternXClamp;
+		const defaultPatternX = clamp && thing.patternX > clamp ? clamp : 0;
 		for (let h = 0; h < thing.height; h++) {
 			for (let w = 0; w < thing.width; w++) {
 				const index = getSpriteIndex(thing, w, h, 0, defaultPatternX, 0, 0, 0);

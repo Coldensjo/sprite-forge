@@ -7,7 +7,7 @@ import { blendOutfit } from '@/lib/formats/tibia/outfit';
 import { useDragDrop } from '@/usecase/context/DragDropContext';
 import { useAssetData } from '@/usecase/context/AssetDataContext';
 import { computeSpriteLayout } from '@/usecase/util/spriteLayoutUtils';
-import { getSpriteIndex, isValidSpriteId, importObjectSheet } from '@/lib/formats/tibia';
+import { getSpriteIndex, isValidSpriteId, importObjectSheet, getCategoryRenderConfig } from '@/lib/formats/tibia';
 
 interface Slot {
 	x: number;
@@ -97,6 +97,7 @@ export const useSpriteCanvas = (props: SpriteCanvasProps) => {
 		getSprite,
 		isNewItem,
 		spriteSize,
+		formatConfig,
 		spriteLoadVersion,
 		notifyDataChanged,
 		notifySpriteImport,
@@ -112,6 +113,11 @@ export const useSpriteCanvas = (props: SpriteCanvasProps) => {
 	const [isFileDragging, setIsFileDragging] = React.useState(false);
 	const [isFileDragOver, setIsFileDragOver] = React.useState(false);
 	const currentHighlightRef = React.useRef<null | Slot>(null);
+
+	const renderConfig = React.useMemo(
+		() => (thing ? getCategoryRenderConfig(formatConfig, thing.category) : undefined),
+		[thing, formatConfig]
+	);
 
 	const { canvasWidth, canvasHeight, spriteLayout } = React.useMemo(
 		() =>
@@ -130,7 +136,8 @@ export const useSpriteCanvas = (props: SpriteCanvasProps) => {
 				sceneWidth,
 				outfitData,
 				spriteSize,
-				sceneHeight
+				sceneHeight,
+				renderConfig
 			}),
 		[
 			thing,
@@ -220,7 +227,7 @@ export const useSpriteCanvas = (props: SpriteCanvasProps) => {
 
 		ctx.clearRect(0, 0, canvasWidth, canvasHeight);
 
-		if (sceneTiles && sceneWidth > 0 && sceneHeight > 0 && renderMode === 'preview' && thing?.category === 'outfit') {
+		if (sceneTiles && sceneWidth > 0 && sceneHeight > 0 && renderMode === 'preview' && renderConfig?.scenePreview) {
 			const sceneCache = sceneCacheRef.current;
 			const scenePixelWidth = sceneWidth * spriteSize;
 			const scenePixelHeight = sceneHeight * spriteSize;
@@ -334,7 +341,7 @@ export const useSpriteCanvas = (props: SpriteCanvasProps) => {
 		let loadedSprites = 0;
 		let missingSprites = 0;
 
-		if (thing?.category === 'outfit' && outfitData && thing.layers === 2) {
+		if (renderConfig?.layerCompositing && outfitData && thing && thing.layers === 2) {
 			const spritesByPatternAndPos = new Map<number, Map<string, { x: number; y: number; layer0?: any; layer1?: any }>>();
 
 			for (const { x: posX, y: posY, patternY: py, layer: spriteLayerIndex, spriteId: currentSpriteId } of spriteLayout) {
@@ -540,7 +547,7 @@ export const useSpriteCanvas = (props: SpriteCanvasProps) => {
 		let exactSizeCenterX = pixelsWidth - exactSize / 2;
 		let exactSizeCenterY = pixelsHeight - exactSize / 2;
 
-		if (sceneTiles && sceneWidth > 0 && sceneHeight > 0 && thing.category === 'outfit') {
+		if (sceneTiles && sceneWidth > 0 && sceneHeight > 0 && renderConfig?.scenePreview) {
 			const centerTileX = Math.floor(sceneWidth / 2);
 			const centerTileY = Math.floor(sceneHeight / 2);
 			const offsetX = centerTileX * spriteSize - (thing.width - 1) * spriteSize;

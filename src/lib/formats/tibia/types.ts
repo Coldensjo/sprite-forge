@@ -35,11 +35,24 @@ export const SPR_FILE_SIZES = {
 	HEADER_U32: 8
 } as const;
 
+export interface CategoryRenderConfig {
+	addonSlots: boolean;
+	frameGroups: boolean;
+	scenePreview: boolean;
+	listLayerCount?: number;
+	layerCompositing: boolean;
+	listPatternXClamp?: number;
+	resetFrameOnPause: boolean;
+	skipFirstIdleFrame: boolean;
+	defaultFrameDuration: number;
+}
+
 export interface CategoryDef {
 	label: string;
 	startId: number;
 	id: ThingCategory;
 	defaults?: Partial<ThingType>;
+	rendering?: CategoryRenderConfig;
 }
 
 export interface FormatConfig {
@@ -52,10 +65,66 @@ export const TIBIA_FORMAT_CONFIG: FormatConfig = {
 	name: 'Tibia',
 	spriteSize: 32,
 	categories: [
-		{ startId: 100, label: 'Item', id: ThingCategory.ITEM },
-		{ startId: 1, label: 'Outfit', id: ThingCategory.OUTFIT, defaults: { frames: 3, patternX: 4, isAnimation: true } },
-		{ startId: 1, label: 'Effect', id: ThingCategory.EFFECT },
-		{ startId: 1, label: 'Missile', id: ThingCategory.MISSILE, defaults: { patternX: 3, patternY: 3 } }
+		{
+			startId: 100,
+			label: 'Item',
+			id: ThingCategory.ITEM,
+			rendering: {
+				addonSlots: false,
+				frameGroups: false,
+				scenePreview: false,
+				layerCompositing: false,
+				resetFrameOnPause: false,
+				defaultFrameDuration: 500,
+				skipFirstIdleFrame: false
+			}
+		},
+		{
+			startId: 1,
+			label: 'Outfit',
+			id: ThingCategory.OUTFIT,
+			defaults: { frames: 3, patternX: 4, isAnimation: true },
+			rendering: {
+				addonSlots: true,
+				listLayerCount: 1,
+				frameGroups: true,
+				scenePreview: true,
+				listPatternXClamp: 2,
+				layerCompositing: true,
+				resetFrameOnPause: true,
+				skipFirstIdleFrame: true,
+				defaultFrameDuration: 300
+			}
+		},
+		{
+			startId: 1,
+			label: 'Effect',
+			id: ThingCategory.EFFECT,
+			rendering: {
+				addonSlots: false,
+				frameGroups: false,
+				scenePreview: false,
+				layerCompositing: false,
+				resetFrameOnPause: false,
+				defaultFrameDuration: 100,
+				skipFirstIdleFrame: false
+			}
+		},
+		{
+			startId: 1,
+			label: 'Missile',
+			id: ThingCategory.MISSILE,
+			defaults: { patternX: 3, patternY: 3 },
+			rendering: {
+				addonSlots: false,
+				frameGroups: false,
+				scenePreview: false,
+				layerCompositing: false,
+				defaultFrameDuration: 75,
+				resetFrameOnPause: false,
+				skipFirstIdleFrame: false
+			}
+		}
 	]
 };
 
@@ -338,6 +407,10 @@ export function setCategoryCount(data: AssetData, category: ThingCategory, count
 
 export function getCategoryStartId(config: FormatConfig, category: ThingCategory): number {
 	return config.categories.find((c) => c.id === category)?.startId ?? 1;
+}
+
+export function getCategoryRenderConfig(config: FormatConfig, category: ThingCategory): undefined | CategoryRenderConfig {
+	return config.categories.find((c) => c.id === category)?.rendering;
 }
 
 export function createThingType(id: number, category: ThingCategory, config?: FormatConfig): ThingType {

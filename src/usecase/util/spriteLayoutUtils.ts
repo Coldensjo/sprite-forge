@@ -1,6 +1,6 @@
 import type { OutfitData } from '@/usecase/context/PropertiesContext/types';
 
-import { getSpriteIndex, type ThingType } from '@/lib/formats/tibia';
+import { getSpriteIndex, type ThingType, type CategoryRenderConfig } from '@/lib/formats/tibia';
 
 export interface SceneItem {
 	id: number;
@@ -34,6 +34,7 @@ interface ComputeLayoutParams {
 	spriteIds?: number[];
 	outfitData?: OutfitData;
 	sceneTiles?: null | SceneTile[][];
+	renderConfig?: CategoryRenderConfig;
 	renderMode: 'list' | 'full' | 'preview';
 }
 
@@ -59,7 +60,8 @@ export const computeSpriteLayout = (params: ComputeLayoutParams): LayoutResult =
 		sceneWidth,
 		outfitData,
 		spriteSize,
-		sceneHeight
+		sceneHeight,
+		renderConfig
 	} = params;
 
 	let canvasW: number;
@@ -70,9 +72,10 @@ export const computeSpriteLayout = (params: ComputeLayoutParams): LayoutResult =
 		canvasW = thing.width * spriteSize;
 		canvasH = thing.height * spriteSize;
 
-		const defaultPatternX = thing.category === 'outfit' && thing.patternX > 2 ? 2 : 0;
+		const clamp = renderConfig?.listPatternXClamp;
+		const defaultPatternX = clamp && thing.patternX > clamp ? clamp : 0;
 
-		const layerCount = thing.category === 'outfit' ? 1 : thing.layers;
+		const layerCount = renderConfig?.listLayerCount ?? thing.layers;
 
 		for (let l = 0; l < layerCount; l++) {
 			for (let h = 0; h < thing.height; h++) {
@@ -93,7 +96,7 @@ export const computeSpriteLayout = (params: ComputeLayoutParams): LayoutResult =
 			}
 		}
 	} else if (renderMode === 'preview' && thing) {
-		if (sceneTiles && sceneWidth > 0 && sceneHeight > 0 && thing.category === 'outfit') {
+		if (sceneTiles && sceneWidth > 0 && sceneHeight > 0 && renderConfig?.scenePreview) {
 			canvasW = sceneWidth * spriteSize;
 			canvasH = sceneHeight * spriteSize;
 		} else {
@@ -105,7 +108,7 @@ export const computeSpriteLayout = (params: ComputeLayoutParams): LayoutResult =
 
 		const patternYsToRender: number[] = [];
 
-		if (thing.category === 'outfit' && outfitData) {
+		if (renderConfig?.addonSlots && outfitData) {
 			patternYsToRender.push(0);
 			if (thing.patternY > 1 && outfitData.addons) {
 				for (let i = 0; i < outfitData.addons.length && i < thing.patternY - 1; i++) {
@@ -120,7 +123,7 @@ export const computeSpriteLayout = (params: ComputeLayoutParams): LayoutResult =
 
 		let offsetX = 0;
 		let offsetY = 0;
-		if (sceneTiles && sceneWidth > 0 && sceneHeight > 0 && thing.category === 'outfit') {
+		if (sceneTiles && sceneWidth > 0 && sceneHeight > 0 && renderConfig?.scenePreview) {
 			const centerTileX = Math.floor(sceneWidth / 2);
 			const centerTileY = Math.floor(sceneHeight / 2);
 			offsetX = centerTileX * spriteSize - (thing.width - 1) * spriteSize;

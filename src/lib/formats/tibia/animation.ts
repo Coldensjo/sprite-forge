@@ -1,5 +1,6 @@
+import type { ThingType, FormatConfig, FrameDuration, ThingCategory } from './types';
 
-import type { ThingType, FrameDuration, ThingCategory } from './types';
+import { TIBIA_FORMAT_CONFIG, getCategoryRenderConfig } from './types';
 
 export const AnimationMode = {
 	SYNCHRONOUS: 1,
@@ -25,17 +26,8 @@ export function getFrameDuration(frameDuration: FrameDuration): number {
 	return frameDuration.minimum + Math.round(Math.random() * (frameDuration.maximum - frameDuration.minimum));
 }
 
-export function getDefaultDuration(category: ThingCategory): number {
-	switch (category) {
-		case 'outfit':
-			return 300;
-		case 'effect':
-			return 100;
-		case 'missile':
-			return 75;
-		default:
-			return 500;
-	}
+export function getDefaultDuration(category: ThingCategory, config: FormatConfig = TIBIA_FORMAT_CONFIG): number {
+	return getCategoryRenderConfig(config, category)?.defaultFrameDuration ?? 500;
 }
 
 export function generateDefaultDurations(thing: ThingType, category: ThingCategory): FrameDuration[] {
@@ -52,8 +44,13 @@ export function generateDefaultDurations(thing: ThingType, category: ThingCatego
 	return durations;
 }
 
-export function shouldSkipFirstFrame(thing: ThingType, category: ThingCategory): boolean {
-	return category === 'outfit' && !thing.animateAlways;
+export function shouldSkipFirstFrame(
+	thing: ThingType,
+	category: ThingCategory,
+	config: FormatConfig = TIBIA_FORMAT_CONFIG
+): boolean {
+	const renderConfig = getCategoryRenderConfig(config, category);
+	return !!renderConfig?.skipFirstIdleFrame && !thing.animateAlways;
 }
 
 export function getStartFrame(thing: ThingType): number {
