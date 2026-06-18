@@ -7,6 +7,7 @@ export * from './optimizer';
 export * from './datDecoder';
 export * from './spriteReader';
 export * from './spriteManager';
+export * from './propertySchema';
 
 export { exportObjectSheet } from './export';
 export { decodeDatResponse } from './datDecoder';
