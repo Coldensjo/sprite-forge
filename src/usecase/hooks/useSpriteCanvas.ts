@@ -7,7 +7,7 @@ import { blendOutfit } from '@/lib/formats/tibia/outfit';
 import { useDragDrop } from '@/usecase/context/DragDropContext';
 import { useAssetData } from '@/usecase/context/AssetDataContext';
 import { computeSpriteLayout } from '@/usecase/util/spriteLayoutUtils';
-import { SPRITE_SIZE, getSpriteIndex, isValidSpriteId, importObjectSheet } from '@/lib/formats/tibia';
+import { getSpriteIndex, isValidSpriteId, importObjectSheet } from '@/lib/formats/tibia';
 
 interface Slot {
 	x: number;
@@ -92,8 +92,16 @@ export const useSpriteCanvas = (props: SpriteCanvasProps) => {
 
 	const canvasRef = React.useRef<HTMLCanvasElement>(null);
 	const containerRef = React.useRef<HTMLDivElement>(null);
-	const { data, getSprite, isNewItem, spriteLoadVersion, notifyDataChanged, notifySpriteImport, notifySpritesLoaded } =
-		useAssetData();
+	const {
+		data,
+		getSprite,
+		isNewItem,
+		spriteSize,
+		spriteLoadVersion,
+		notifyDataChanged,
+		notifySpriteImport,
+		notifySpritesLoaded
+	} = useAssetData();
 	const { dragType, isDragging, draggedItem } = useDragDrop();
 	const [isLoading, setIsLoading] = React.useState(false);
 	const [isPanning, setIsPanning] = React.useState(false);
@@ -121,6 +129,7 @@ export const useSpriteCanvas = (props: SpriteCanvasProps) => {
 				sceneTiles,
 				sceneWidth,
 				outfitData,
+				spriteSize,
 				sceneHeight
 			}),
 		[
@@ -198,8 +207,8 @@ export const useSpriteCanvas = (props: SpriteCanvasProps) => {
 
 		if (!offscreenCanvasRef.current) {
 			offscreenCanvasRef.current = document.createElement('canvas');
-			offscreenCanvasRef.current.width = SPRITE_SIZE;
-			offscreenCanvasRef.current.height = SPRITE_SIZE;
+			offscreenCanvasRef.current.width = spriteSize;
+			offscreenCanvasRef.current.height = spriteSize;
 		}
 		const offscreenCtx = offscreenCanvasRef.current.getContext('2d');
 		if (!offscreenCtx) return;
@@ -213,8 +222,8 @@ export const useSpriteCanvas = (props: SpriteCanvasProps) => {
 
 		if (sceneTiles && sceneWidth > 0 && sceneHeight > 0 && renderMode === 'preview' && thing?.category === 'outfit') {
 			const sceneCache = sceneCacheRef.current;
-			const scenePixelWidth = sceneWidth * SPRITE_SIZE;
-			const scenePixelHeight = sceneHeight * SPRITE_SIZE;
+			const scenePixelWidth = sceneWidth * spriteSize;
+			const scenePixelHeight = sceneHeight * spriteSize;
 
 			const needsRebuild =
 				!sceneCache.canvas ||
@@ -246,8 +255,8 @@ export const useSpriteCanvas = (props: SpriteCanvasProps) => {
 									const tile = sceneTiles[tileY]?.[tileX];
 									if (!tile) continue;
 
-									const drawBaseX = tileX * SPRITE_SIZE + offsetX;
-									const drawBaseY = tileY * SPRITE_SIZE + offsetY;
+									const drawBaseX = tileX * spriteSize + offsetX;
+									const drawBaseY = tileY * spriteSize + offsetY;
 									let elevation = 0;
 
 									for (const sceneItem of tile.items) {
@@ -266,15 +275,15 @@ export const useSpriteCanvas = (props: SpriteCanvasProps) => {
 													const sceneSprite = getSprite(sceneSpriteId);
 													if (sceneSprite && !sceneSprite.isEmpty) {
 														if (!sceneSprite.imageData) {
-															const imageData = offscreenCtx.createImageData(SPRITE_SIZE, SPRITE_SIZE);
+															const imageData = offscreenCtx.createImageData(spriteSize, spriteSize);
 															imageData.data.set(sceneSprite.rgbaPixels);
 															sceneSprite.imageData = imageData;
 														}
-														offscreenCtx.clearRect(0, 0, SPRITE_SIZE, SPRITE_SIZE);
+														offscreenCtx.clearRect(0, 0, spriteSize, spriteSize);
 														offscreenCtx.putImageData(sceneSprite.imageData, 0, 0);
 
-														const drawX = drawBaseX - elevation - w * SPRITE_SIZE;
-														const drawY = drawBaseY - elevation - h * SPRITE_SIZE;
+														const drawX = drawBaseX - elevation - w * spriteSize;
+														const drawY = drawBaseY - elevation - h * spriteSize;
 														cacheCtx.drawImage(offscreenCanvasRef.current!, drawX, drawY);
 													}
 												}
@@ -349,7 +358,7 @@ export const useSpriteCanvas = (props: SpriteCanvasProps) => {
 				loadedSprites++;
 
 				if (!sprite.imageData) {
-					const imageData = offscreenCtx.createImageData(SPRITE_SIZE, SPRITE_SIZE);
+					const imageData = offscreenCtx.createImageData(spriteSize, spriteSize);
 					imageData.data.set(sprite.rgbaPixels);
 					sprite.imageData = imageData;
 				}
@@ -378,7 +387,7 @@ export const useSpriteCanvas = (props: SpriteCanvasProps) => {
 				const patternGroup = spritesByPatternAndPos.get(py)!;
 
 				for (const entry of patternGroup.values()) {
-					offscreenCtx.clearRect(0, 0, SPRITE_SIZE, SPRITE_SIZE);
+					offscreenCtx.clearRect(0, 0, spriteSize, spriteSize);
 					let drawn = false;
 
 					if (entry.layer0 && entry.layer1) {
@@ -389,7 +398,7 @@ export const useSpriteCanvas = (props: SpriteCanvasProps) => {
 							feet: Math.max(0, Math.min(255, Math.floor(outfitData.feet || 0)))
 						};
 						const blendedPixels = blendOutfit(entry.layer0.imageData.data, entry.layer1.imageData.data, colors);
-						const blendedImageData = offscreenCtx.createImageData(SPRITE_SIZE, SPRITE_SIZE);
+						const blendedImageData = offscreenCtx.createImageData(spriteSize, spriteSize);
 						blendedImageData.data.set(blendedPixels);
 						offscreenCtx.putImageData(blendedImageData, 0, 0);
 						drawn = true;
@@ -430,12 +439,12 @@ export const useSpriteCanvas = (props: SpriteCanvasProps) => {
 				loadedSprites++;
 
 				if (!sprite.imageData) {
-					const imageData = offscreenCtx.createImageData(SPRITE_SIZE, SPRITE_SIZE);
+					const imageData = offscreenCtx.createImageData(spriteSize, spriteSize);
 					imageData.data.set(sprite.rgbaPixels);
 					sprite.imageData = imageData;
 				}
 
-				offscreenCtx.clearRect(0, 0, SPRITE_SIZE, SPRITE_SIZE);
+				offscreenCtx.clearRect(0, 0, spriteSize, spriteSize);
 				offscreenCtx.putImageData(sprite.imageData, 0, 0);
 				ctx.drawImage(offscreenCanvasRef.current, posX, posY);
 			}
@@ -448,12 +457,12 @@ export const useSpriteCanvas = (props: SpriteCanvasProps) => {
 			ctx.lineWidth = 1;
 			ctx.beginPath();
 
-			for (let x = 0; x <= canvasWidth; x += SPRITE_SIZE) {
+			for (let x = 0; x <= canvasWidth; x += spriteSize) {
 				ctx.moveTo(x, 0);
 				ctx.lineTo(x, canvasHeight);
 			}
 
-			for (let y = 0; y <= canvasHeight; y += SPRITE_SIZE) {
+			for (let y = 0; y <= canvasHeight; y += spriteSize) {
 				ctx.moveTo(0, y);
 				ctx.lineTo(canvasWidth, y);
 			}
@@ -462,7 +471,7 @@ export const useSpriteCanvas = (props: SpriteCanvasProps) => {
 		}
 
 		if (showExactSize && thing) {
-			const exactSize = thing.exactSize || SPRITE_SIZE;
+			const exactSize = thing.exactSize || spriteSize;
 			ctx.strokeStyle = '#00FF00';
 			ctx.lineWidth = 1;
 
@@ -474,8 +483,8 @@ export const useSpriteCanvas = (props: SpriteCanvasProps) => {
 				rows = thing.patternY;
 			}
 
-			const pixelsWidth = thing.width * SPRITE_SIZE;
-			const pixelsHeight = thing.height * SPRITE_SIZE;
+			const pixelsWidth = thing.width * spriteSize;
+			const pixelsHeight = thing.height * spriteSize;
 
 			for (let r = 0; r < rows; r++) {
 				for (let c = 0; c < cols; c++) {
@@ -499,9 +508,7 @@ export const useSpriteCanvas = (props: SpriteCanvasProps) => {
 					miss: missingSprites > 0,
 					ids: spriteLayout.slice(0, 3).map((s) => s.spriteId)
 				});
-			} catch {
-				// noop
-			}
+			} catch {}
 		}
 	}, [
 		spriteLayout,
@@ -526,9 +533,9 @@ export const useSpriteCanvas = (props: SpriteCanvasProps) => {
 	const exactSizeCenter = React.useMemo(() => {
 		if (!thing) return null;
 
-		const exactSize = thing.exactSize || SPRITE_SIZE;
-		const pixelsWidth = thing.width * SPRITE_SIZE;
-		const pixelsHeight = thing.height * SPRITE_SIZE;
+		const exactSize = thing.exactSize || spriteSize;
+		const pixelsWidth = thing.width * spriteSize;
+		const pixelsHeight = thing.height * spriteSize;
 
 		let exactSizeCenterX = pixelsWidth - exactSize / 2;
 		let exactSizeCenterY = pixelsHeight - exactSize / 2;
@@ -536,8 +543,8 @@ export const useSpriteCanvas = (props: SpriteCanvasProps) => {
 		if (sceneTiles && sceneWidth > 0 && sceneHeight > 0 && thing.category === 'outfit') {
 			const centerTileX = Math.floor(sceneWidth / 2);
 			const centerTileY = Math.floor(sceneHeight / 2);
-			const offsetX = centerTileX * SPRITE_SIZE - (thing.width - 1) * SPRITE_SIZE;
-			const offsetY = centerTileY * SPRITE_SIZE - (thing.height - 1) * SPRITE_SIZE;
+			const offsetX = centerTileX * spriteSize - (thing.width - 1) * spriteSize;
+			const offsetY = centerTileY * spriteSize - (thing.height - 1) * spriteSize;
 			exactSizeCenterX += offsetX;
 			exactSizeCenterY += offsetY;
 		}
@@ -617,8 +624,8 @@ export const useSpriteCanvas = (props: SpriteCanvasProps) => {
 				const canvasX = relX * (canvasWidth / rect.width);
 				const canvasY = relY * (canvasHeight / rect.height);
 
-				const pixelsWidth = thing.width * SPRITE_SIZE;
-				const pixelsHeight = thing.height * SPRITE_SIZE;
+				const pixelsWidth = thing.width * spriteSize;
+				const pixelsHeight = thing.height * spriteSize;
 
 				const col = Math.floor(canvasX / pixelsWidth);
 				const row = Math.floor(canvasY / pixelsHeight);
@@ -626,8 +633,8 @@ export const useSpriteCanvas = (props: SpriteCanvasProps) => {
 				const cellX = canvasX % pixelsWidth;
 				const cellY = canvasY % pixelsHeight;
 
-				const slotX = Math.floor(cellX / SPRITE_SIZE) * SPRITE_SIZE;
-				const slotY = Math.floor(cellY / SPRITE_SIZE) * SPRITE_SIZE;
+				const slotX = Math.floor(cellX / spriteSize) * spriteSize;
+				const slotY = Math.floor(cellY / spriteSize) * spriteSize;
 
 				const highlightX = col * pixelsWidth + slotX;
 				const highlightY = row * pixelsHeight + slotY;
@@ -635,8 +642,8 @@ export const useSpriteCanvas = (props: SpriteCanvasProps) => {
 				const newHighlight = {
 					x: highlightX,
 					y: highlightY,
-					w: SPRITE_SIZE,
-					h: SPRITE_SIZE
+					w: spriteSize,
+					h: spriteSize
 				};
 
 				currentHighlightRef.current = newHighlight;
@@ -649,8 +656,8 @@ export const useSpriteCanvas = (props: SpriteCanvasProps) => {
 
 		const handleGlobalMouseUp = () => {
 			if (currentHighlightRef.current) {
-				const pixelsWidth = thing.width * SPRITE_SIZE;
-				const pixelsHeight = thing.height * SPRITE_SIZE;
+				const pixelsWidth = thing.width * spriteSize;
+				const pixelsHeight = thing.height * spriteSize;
 
 				const col = Math.floor(currentHighlightRef.current.x / pixelsWidth);
 				const row = Math.floor(currentHighlightRef.current.y / pixelsHeight);
@@ -658,8 +665,8 @@ export const useSpriteCanvas = (props: SpriteCanvasProps) => {
 				const cellX = currentHighlightRef.current.x % pixelsWidth;
 				const cellY = currentHighlightRef.current.y % pixelsHeight;
 
-				const w = thing.width - 1 - Math.floor(cellX / SPRITE_SIZE);
-				const h = thing.height - 1 - Math.floor(cellY / SPRITE_SIZE);
+				const w = thing.width - 1 - Math.floor(cellX / spriteSize);
+				const h = thing.height - 1 - Math.floor(cellY / spriteSize);
 
 				const pY = row;
 				const pZ = Math.floor(col / thing.patternX);
@@ -858,8 +865,8 @@ export const useSpriteCanvas = (props: SpriteCanvasProps) => {
 			return;
 		}
 
-		const pixelsWidth = thing.width * SPRITE_SIZE;
-		const pixelsHeight = thing.height * SPRITE_SIZE;
+		const pixelsWidth = thing.width * spriteSize;
+		const pixelsHeight = thing.height * spriteSize;
 
 		const col = Math.floor(canvasX / pixelsWidth);
 		const row = Math.floor(canvasY / pixelsHeight);
@@ -867,8 +874,8 @@ export const useSpriteCanvas = (props: SpriteCanvasProps) => {
 		const cellX = canvasX % pixelsWidth;
 		const cellY = canvasY % pixelsHeight;
 
-		const slotX = Math.floor(cellX / SPRITE_SIZE) * SPRITE_SIZE;
-		const slotY = Math.floor(cellY / SPRITE_SIZE) * SPRITE_SIZE;
+		const slotX = Math.floor(cellX / spriteSize) * spriteSize;
+		const slotY = Math.floor(cellY / spriteSize) * spriteSize;
 
 		const highlightX = col * pixelsWidth + slotX;
 		const highlightY = row * pixelsHeight + slotY;
@@ -876,8 +883,8 @@ export const useSpriteCanvas = (props: SpriteCanvasProps) => {
 		setHighlightedSlot({
 			x: highlightX,
 			y: highlightY,
-			w: SPRITE_SIZE,
-			h: SPRITE_SIZE
+			w: spriteSize,
+			h: spriteSize
 		});
 	};
 
@@ -897,7 +904,7 @@ export const useSpriteCanvas = (props: SpriteCanvasProps) => {
 			const canvasY = y * (canvasHeight / rect.height);
 
 			const clickedSprite = spriteLayout.find((s) => {
-				return canvasX >= s.x && canvasX < s.x + SPRITE_SIZE && canvasY >= s.y && canvasY < s.y + SPRITE_SIZE;
+				return canvasX >= s.x && canvasX < s.x + spriteSize && canvasY >= s.y && canvasY < s.y + spriteSize;
 			});
 
 			if (clickedSprite) {
@@ -920,14 +927,14 @@ export const useSpriteCanvas = (props: SpriteCanvasProps) => {
 			const canvasY = y * (canvasHeight / rect.height);
 
 			const hoveredSprite = spriteLayout.find((s) => {
-				return canvasX >= s.x && canvasX < s.x + SPRITE_SIZE && canvasY >= s.y && canvasY < s.y + SPRITE_SIZE;
+				return canvasX >= s.x && canvasX < s.x + spriteSize && canvasY >= s.y && canvasY < s.y + spriteSize;
 			});
 
 			if (hoveredSprite) {
 				onSpriteHover(hoveredSprite.spriteId);
 				setHoveredSlot({
-					w: SPRITE_SIZE,
-					h: SPRITE_SIZE,
+					w: spriteSize,
+					h: spriteSize,
 					x: hoveredSprite.x,
 					y: hoveredSprite.y
 				});
@@ -965,8 +972,8 @@ export const useSpriteCanvas = (props: SpriteCanvasProps) => {
 		const newSpriteId = parseInt(spriteIdStr, 10);
 		if (isNaN(newSpriteId)) return;
 
-		const pixelsWidth = thing.width * SPRITE_SIZE;
-		const pixelsHeight = thing.height * SPRITE_SIZE;
+		const pixelsWidth = thing.width * spriteSize;
+		const pixelsHeight = thing.height * spriteSize;
 
 		const col = Math.floor(highlightedSlot.x / pixelsWidth);
 		const row = Math.floor(highlightedSlot.y / pixelsHeight);
@@ -974,8 +981,8 @@ export const useSpriteCanvas = (props: SpriteCanvasProps) => {
 		const cellX = highlightedSlot.x % pixelsWidth;
 		const cellY = highlightedSlot.y % pixelsHeight;
 
-		const w = thing.width - 1 - Math.floor(cellX / SPRITE_SIZE);
-		const h = thing.height - 1 - Math.floor(cellY / SPRITE_SIZE);
+		const w = thing.width - 1 - Math.floor(cellX / spriteSize);
+		const h = thing.height - 1 - Math.floor(cellY / spriteSize);
 
 		let pX, pY, pZ;
 

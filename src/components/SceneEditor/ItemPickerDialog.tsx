@@ -29,12 +29,11 @@ interface ItemPickerDialogProps {
 const ITEMS_PER_PAGE = 100;
 
 export const ItemPickerDialog = ({ open, onOpenChange, onItemSelect }: ItemPickerDialogProps) => {
-	const { data, updateCounter, notifySpritesLoaded } = useAssetData();
+	const { data, spriteSize, updateCounter, notifySpritesLoaded } = useAssetData();
 	const [category, setCategory] = useState<ThingCategory>(ThingCategory.ITEM);
 	const [searchId, setSearchId] = useState('');
 	const [currentPage, setCurrentPage] = useState(1);
 
-	// Filters
 	const [filters, setFilters] = useState({
 		isFluid: false,
 		isGround: false,
@@ -46,7 +45,6 @@ export const ItemPickerDialog = ({ open, onOpenChange, onItemSelect }: ItemPicke
 
 	const scrollViewportRef = useRef<HTMLDivElement>(null);
 
-	// Get all items for current category
 	const allItems = useMemo(() => {
 		if (!data) return [];
 
@@ -92,15 +90,12 @@ export const ItemPickerDialog = ({ open, onOpenChange, onItemSelect }: ItemPicke
 		return items;
 	}, [data, category, updateCounter]);
 
-	// Filter items
 	const filteredItems = useMemo(() => {
 		return allItems.filter((item) => {
-			// ID Search
 			if (searchId && !item.id.toString().includes(searchId)) {
 				return false;
 			}
 
-			// Property Filters
 			if (filters.isContainer && !item.isContainer) return false;
 			if (filters.isStackable && !item.stackable) return false;
 			if (filters.isGround && !item.isGround) return false;
@@ -112,19 +107,16 @@ export const ItemPickerDialog = ({ open, onOpenChange, onItemSelect }: ItemPicke
 		});
 	}, [allItems, searchId, filters]);
 
-	// Pagination
 	const totalPages = Math.ceil(filteredItems.length / ITEMS_PER_PAGE);
 	const paginatedItems = useMemo(() => {
 		const start = (currentPage - 1) * ITEMS_PER_PAGE;
 		return filteredItems.slice(start, start + ITEMS_PER_PAGE);
 	}, [filteredItems, currentPage]);
 
-	// Reset page when filters change
 	useEffect(() => {
 		setCurrentPage(1);
 	}, [category, searchId, filters]);
 
-	// Load sprites
 	useEffect(() => {
 		if (!data || !data.sprPath || !open) return;
 
@@ -143,7 +135,6 @@ export const ItemPickerDialog = ({ open, onOpenChange, onItemSelect }: ItemPicke
 							}
 						}
 					}
-					// Frame groups for outfits
 					if (item.frameGroupsData) {
 						for (const group of item.frameGroupsData) {
 							if (group.spriteIndex) {
@@ -181,7 +172,6 @@ export const ItemPickerDialog = ({ open, onOpenChange, onItemSelect }: ItemPicke
 		};
 	}, [paginatedItems, data, open, notifySpritesLoaded]);
 
-	// Scroll to top on page change
 	useEffect(() => {
 		if (scrollViewportRef.current) {
 			const viewport = scrollViewportRef.current.querySelector('[data-radix-scroll-area-viewport]');
@@ -332,10 +322,10 @@ export const ItemPickerDialog = ({ open, onOpenChange, onItemSelect }: ItemPicke
 										<CheckerBoard className="w-12 h-12 rounded border border-border/50 overflow-hidden bg-background">
 											<SpriteCanvas
 												thing={item}
-												renderMode="list" // Use list mode for better fit
+												renderMode="list"
 												width={item.width}
 												height={item.height}
-												scale={48 / (Math.max(item.width, item.height) * 32)}
+												scale={48 / (Math.max(item.width, item.height) * spriteSize)}
 											/>
 										</CheckerBoard>
 										<span className="text-[10px] font-mono text-muted-foreground group-hover:text-foreground">{item.id}</span>

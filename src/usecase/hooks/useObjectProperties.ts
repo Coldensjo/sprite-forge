@@ -2,8 +2,8 @@ import type { SceneTile } from '@/usecase/util/spriteLayoutUtils';
 import type { OutfitData, Visibility } from '@/usecase/context/PropertiesContext/types';
 
 import React from 'react';
-import { ThingCategory } from '@/lib/formats/tibia';
 import { invoke } from '@tauri-apps/api/core';
+import { ThingCategory } from '@/lib/formats/tibia';
 import { useToast } from '@/usecase/hooks/use-toast';
 import { ZOOM_LEVELS } from '@/usecase/util/constants';
 import { useAssetData } from '@/usecase/context/AssetDataContext';
@@ -14,6 +14,7 @@ export const useObjectProperties = () => {
 		data,
 		getThing,
 		isNewItem,
+		spriteSize,
 		updateThing,
 		openedItemId,
 		clearNewItem,
@@ -404,7 +405,7 @@ export const useObjectProperties = () => {
 
 		const width = 1;
 		const height = 1;
-		const exactSize = 32;
+		const exactSize = spriteSize;
 		const layers = 1;
 		const patternX = 4;
 		const patternY = 1;

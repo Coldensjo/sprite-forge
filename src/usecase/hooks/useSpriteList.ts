@@ -1,6 +1,6 @@
 import React from 'react';
-import { type Sprite } from '@/lib/formats/tibia';
 import { invoke } from '@tauri-apps/api/core';
+import { type Sprite } from '@/lib/formats/tibia';
 import { useDragDrop } from '@/usecase/context/DragDropContext';
 import { useListViewMode } from '@/usecase/hooks/useListViewMode';
 import { useAssetData } from '@/usecase/context/AssetDataContext';
@@ -11,6 +11,7 @@ import { useToast } from './use-toast';
 export const useSpriteList = () => {
 	const {
 		data,
+		spriteSize,
 		updateCounter,
 		openedSpriteId,
 		setOpenedSpriteId,
@@ -262,14 +263,14 @@ export const useSpriteList = () => {
 						img.onload = async () => {
 							URL.revokeObjectURL(url);
 
-							if (img.width % 32 !== 0 || img.height % 32 !== 0) {
-								alert(`Image dimensions must be multiples of 32 pixels.\nCurrent size: ${img.width}x${img.height}`);
+							if (img.width % spriteSize !== 0 || img.height % spriteSize !== 0) {
+								alert(`Image dimensions must be multiples of ${spriteSize} pixels.\nCurrent size: ${img.width}x${img.height}`);
 								return;
 							}
 
-							if (targetSpriteId !== undefined && (img.width !== 32 || img.height !== 32)) {
+							if (targetSpriteId !== undefined && (img.width !== spriteSize || img.height !== spriteSize)) {
 								alert(
-									`When pasting into an existing sprite, image must be exactly 32x32 pixels.\nCurrent size: ${img.width}x${img.height}`
+									`When pasting into an existing sprite, image must be exactly ${spriteSize}x${spriteSize} pixels.\nCurrent size: ${img.width}x${img.height}`
 								);
 								return;
 							}
@@ -283,19 +284,19 @@ export const useSpriteList = () => {
 							ctx.drawImage(img, 0, 0);
 							const imageData = ctx.getImageData(0, 0, img.width, img.height);
 
-							const tilesX = img.width / 32;
-							const tilesY = img.height / 32;
+							const tilesX = img.width / spriteSize;
+							const tilesY = img.height / spriteSize;
 
 							let lastCreatedId = targetSpriteId;
 							const modifiedSpriteIds: number[] = [];
 
 							for (let ty = 0; ty < tilesY; ty++) {
 								for (let tx = 0; tx < tilesX; tx++) {
-									const pixels = new Uint8Array(32 * 32 * 4);
-									for (let y = 0; y < 32; y++) {
-										for (let x = 0; x < 32; x++) {
-											const srcIdx = ((ty * 32 + y) * img.width + (tx * 32 + x)) * 4;
-											const dstIdx = (y * 32 + x) * 4;
+									const pixels = new Uint8Array(spriteSize * spriteSize * 4);
+									for (let y = 0; y < spriteSize; y++) {
+										for (let x = 0; x < spriteSize; x++) {
+											const srcIdx = ((ty * spriteSize + y) * img.width + (tx * spriteSize + x)) * 4;
+											const dstIdx = (y * spriteSize + x) * 4;
 											pixels[dstIdx] = imageData.data[srcIdx];
 											pixels[dstIdx + 1] = imageData.data[srcIdx + 1];
 											pixels[dstIdx + 2] = imageData.data[srcIdx + 2];

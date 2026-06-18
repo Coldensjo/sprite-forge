@@ -3,8 +3,8 @@ import { invoke } from '@tauri-apps/api/core';
 import { isValidSpriteId } from '@/lib/formats/tibia';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { ThingType, ThingCategory } from '@/lib/formats/tibia/types';
 import { useAssetData } from '@/usecase/context/AssetDataContext';
+import { ThingType, ThingCategory } from '@/lib/formats/tibia/types';
 import { useRef, useMemo, useState, useEffect, useCallback } from 'react';
 import { X, List, Minus, Square, Trash2, Columns, Sparkles, LayoutGrid } from 'lucide-react';
 
@@ -73,7 +73,6 @@ type ViewMode = 'list' | 'grid' | 'large' | 'compact';
 
 const VIEW_MODES: ViewMode[] = ['list', 'grid', 'compact', 'large'];
 
-// Property display names and their corresponding ThingType property names
 const PROPERTIES: Array<{ display: string; property: string }> = [
 	{ display: 'Is Ground', property: 'isGround' },
 	{ display: 'Ground Border', property: 'isGroundBorder' },
@@ -121,7 +120,7 @@ const PROPERTIES: Array<{ display: string; property: string }> = [
 ];
 
 export const FindWindow = () => {
-	const { data, setData, setOpenedItemId, notifySpritesLoaded } = useAssetData();
+	const { data, setData, spriteSize, setOpenedItemId, notifySpritesLoaded } = useAssetData();
 	const [selectedCategory, setSelectedCategory] = useState<'all' | ThingCategory>('all');
 	const [properties, setProperties] = useState<Record<string, boolean>>(
 		PROPERTIES.reduce((acc, prop) => ({ ...acc, [prop.property]: false }), {})
@@ -172,7 +171,6 @@ export const FindWindow = () => {
 		if (viewMode === 'grid') return 2;
 		if (viewMode === 'compact') {
 			const width = parentWidth || 400;
-			// 48px (image) + 4px (padding) + 2px (gap) = 54px approx
 			return Math.max(1, Math.floor(width / 54));
 		}
 		return 1;
@@ -180,7 +178,6 @@ export const FindWindow = () => {
 
 	const rowCount = Math.ceil(searchResults.length / itemsPerRow);
 
-	// Virtualizer for efficient rendering of large lists
 	const virtualizer = useVirtualizer({
 		overscan: 5,
 		count: rowCount,
@@ -188,7 +185,7 @@ export const FindWindow = () => {
 		estimateSize: () => {
 			if (viewMode === 'list') return 40;
 			if (viewMode === 'grid') return 54;
-			if (viewMode === 'compact') return 74; // Increased height to fit ID
+			if (viewMode === 'compact') return 74;
 			if (viewMode === 'large') return 140;
 			return 40;
 		}
@@ -328,7 +325,6 @@ export const FindWindow = () => {
 					offset += 4;
 				}
 
-				// Create minimal ThingType for SpriteCanvas
 				const thing: ThingType = {
 					id,
 					width,
@@ -347,8 +343,6 @@ export const FindWindow = () => {
 					elevation: 0,
 					clothSlot: 0,
 					loopCount: 0,
-					// Defaults for required fields
-					exactSize: 32,
 					usable: false,
 					lightLevel: 0,
 					lightColor: 0,
@@ -399,6 +393,7 @@ export const FindWindow = () => {
 					isTranslucent: false,
 					isLyingObject: false,
 					animateAlways: false,
+					exactSize: spriteSize,
 					isGroundBorder: false,
 					noMoveAnimation: false,
 					marketRestrictLevel: 0,
@@ -455,16 +450,13 @@ export const FindWindow = () => {
 		[selectResult]
 	);
 
-	// Fetch ThingType logic removed - now handled by binary search response
 	useEffect(() => {
-		// Only load sprites now
 		const loadSprites = async () => {
 			if (!data || !data.sprPath || searchResults.length === 0) return;
 
 			const { loadSpriteIds } = await import('@/lib/formats/tibia');
 			const idsToLoad: number[] = [];
 
-			// Collect sprite IDs from the already populated resultThings
 			for (const result of searchResults) {
 				const key = `${result.category}-${result.id}`;
 				const thing = resultThings.get(key);
@@ -478,16 +470,14 @@ export const FindWindow = () => {
 			}
 
 			if (idsToLoad.length > 0) {
-				// Load sprites in batches if needed, but loadSpriteIds handles it well
 				await loadSpriteIds(data.sprPath, idsToLoad, data.transparency, data.sprites);
 				notifySpritesLoaded();
 			}
 		};
 
 		loadSprites();
-	}, [searchResults, data, notifySpritesLoaded]); // Removed resultThings dependency to avoid loop if it changes (it's set with searchResults)
+	}, [searchResults, data, notifySpritesLoaded]);
 
-	// Initialize data from localStorage if needed (for SpriteCanvas)
 	useEffect(() => {
 		if (!data) {
 			const datPath = localStorage.getItem('sprite-forge-dat-path');
@@ -508,7 +498,6 @@ export const FindWindow = () => {
 					version: { value: 0 },
 					spritesCount: spritesCount || 999999
 				};
-				// Skip backend sync to avoid overwriting search data
 				setData(minimalData, {} as any, true);
 			}
 		}
@@ -547,7 +536,6 @@ export const FindWindow = () => {
 		[handleClear]
 	);
 
-	// Listen for data cleared event from main window
 	useEffect(() => {
 		let unlisten: undefined | (() => void);
 
@@ -973,10 +961,10 @@ export const FindWindow = () => {
 																			height={thing.height}
 																			scale={
 																				viewMode === 'list'
-																					? 32 / (Math.max(thing.width, thing.height) * 32)
+																					? 32 / (Math.max(thing.width, thing.height) * spriteSize)
 																					: viewMode === 'grid' || viewMode === 'compact'
-																						? 48 / (Math.max(thing.width, thing.height) * 32)
-																						: 128 / (Math.max(thing.width, thing.height) * 32)
+																						? 48 / (Math.max(thing.width, thing.height) * spriteSize)
+																						: 128 / (Math.max(thing.width, thing.height) * spriteSize)
 																			}
 																		/>
 																	</CheckerBoard>

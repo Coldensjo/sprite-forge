@@ -1,6 +1,6 @@
 import type { OutfitData } from '@/usecase/context/PropertiesContext/types';
 
-import { SPRITE_SIZE, getSpriteIndex, type ThingType } from '@/lib/formats/tibia';
+import { getSpriteIndex, type ThingType } from '@/lib/formats/tibia';
 
 export interface SceneItem {
 	id: number;
@@ -29,6 +29,7 @@ interface ComputeLayoutParams {
 	thing?: ThingType;
 	spriteId?: number;
 	sceneWidth: number;
+	spriteSize: number;
 	sceneHeight: number;
 	spriteIds?: number[];
 	outfitData?: OutfitData;
@@ -57,6 +58,7 @@ export const computeSpriteLayout = (params: ComputeLayoutParams): LayoutResult =
 		sceneTiles,
 		sceneWidth,
 		outfitData,
+		spriteSize,
 		sceneHeight
 	} = params;
 
@@ -65,8 +67,8 @@ export const computeSpriteLayout = (params: ComputeLayoutParams): LayoutResult =
 	const layout: SpriteLayoutItem[] = [];
 
 	if (renderMode === 'list' && thing) {
-		canvasW = thing.width * SPRITE_SIZE;
-		canvasH = thing.height * SPRITE_SIZE;
+		canvasW = thing.width * spriteSize;
+		canvasH = thing.height * spriteSize;
 
 		const defaultPatternX = thing.category === 'outfit' && thing.patternX > 2 ? 2 : 0;
 
@@ -77,8 +79,8 @@ export const computeSpriteLayout = (params: ComputeLayoutParams): LayoutResult =
 				for (let w = 0; w < thing.width; w++) {
 					const index = getSpriteIndex(thing, w, h, l, defaultPatternX, 0, 0, 0);
 					if (index < thing.spriteIndex.length) {
-						const posX = (thing.width - w - 1) * SPRITE_SIZE;
-						const posY = (thing.height - h - 1) * SPRITE_SIZE;
+						const posX = (thing.width - w - 1) * spriteSize;
+						const posY = (thing.height - h - 1) * spriteSize;
 						layout.push({
 							x: posX,
 							y: posY,
@@ -92,11 +94,11 @@ export const computeSpriteLayout = (params: ComputeLayoutParams): LayoutResult =
 		}
 	} else if (renderMode === 'preview' && thing) {
 		if (sceneTiles && sceneWidth > 0 && sceneHeight > 0 && thing.category === 'outfit') {
-			canvasW = sceneWidth * SPRITE_SIZE;
-			canvasH = sceneHeight * SPRITE_SIZE;
+			canvasW = sceneWidth * spriteSize;
+			canvasH = sceneHeight * spriteSize;
 		} else {
-			canvasW = thing.width * SPRITE_SIZE;
-			canvasH = thing.height * SPRITE_SIZE;
+			canvasW = thing.width * spriteSize;
+			canvasH = thing.height * spriteSize;
 		}
 
 		const currentFrame = thing.frames > 1 ? frame : 0;
@@ -121,8 +123,8 @@ export const computeSpriteLayout = (params: ComputeLayoutParams): LayoutResult =
 		if (sceneTiles && sceneWidth > 0 && sceneHeight > 0 && thing.category === 'outfit') {
 			const centerTileX = Math.floor(sceneWidth / 2);
 			const centerTileY = Math.floor(sceneHeight / 2);
-			offsetX = centerTileX * SPRITE_SIZE - (thing.width - 1) * SPRITE_SIZE;
-			offsetY = centerTileY * SPRITE_SIZE - (thing.height - 1) * SPRITE_SIZE;
+			offsetX = centerTileX * spriteSize - (thing.width - 1) * spriteSize;
+			offsetY = centerTileY * spriteSize - (thing.height - 1) * spriteSize;
 		}
 
 		for (const py of patternYsToRender) {
@@ -131,8 +133,8 @@ export const computeSpriteLayout = (params: ComputeLayoutParams): LayoutResult =
 					for (let w = 0; w < thing.width; w++) {
 						const index = getSpriteIndex(thing, w, h, l, patternX, py, patternZ, currentFrame);
 						if (index < thing.spriteIndex.length) {
-							const posX = (thing.width - w - 1) * SPRITE_SIZE + offsetX;
-							const posY = (thing.height - h - 1) * SPRITE_SIZE + offsetY;
+							const posX = (thing.width - w - 1) * spriteSize + offsetX;
+							const posY = (thing.height - h - 1) * spriteSize + offsetY;
 							layout.push({
 								x: posX,
 								y: posY,
@@ -149,11 +151,11 @@ export const computeSpriteLayout = (params: ComputeLayoutParams): LayoutResult =
 		const cols = thing.patternX * thing.patternZ;
 		const rows = thing.patternY;
 
-		canvasW = cols * thing.width * SPRITE_SIZE;
-		canvasH = rows * thing.height * SPRITE_SIZE;
+		canvasW = cols * thing.width * spriteSize;
+		canvasH = rows * thing.height * spriteSize;
 
-		const pixelsWidth = thing.width * SPRITE_SIZE;
-		const pixelsHeight = thing.height * SPRITE_SIZE;
+		const pixelsWidth = thing.width * spriteSize;
+		const pixelsHeight = thing.height * spriteSize;
 
 		const currentFrame = thing.frames > 1 ? frame : 0;
 
@@ -172,8 +174,8 @@ export const computeSpriteLayout = (params: ComputeLayoutParams): LayoutResult =
 								const spriteIndex = getSpriteIndex(thing, w, h, l, x, y, z, currentFrame);
 
 								if (spriteIndex < thing.spriteIndex.length) {
-									const px = (thing.width - w - 1) * SPRITE_SIZE;
-									const py = (thing.height - h - 1) * SPRITE_SIZE;
+									const px = (thing.width - w - 1) * spriteSize;
+									const py = (thing.height - h - 1) * spriteSize;
 									const sId = thing.spriteIndex[spriteIndex];
 
 									layout.push({
@@ -192,15 +194,15 @@ export const computeSpriteLayout = (params: ComputeLayoutParams): LayoutResult =
 		}
 	} else {
 		const spritesToRender = spriteIds || (spriteId !== undefined ? [spriteId] : []);
-		canvasW = width * SPRITE_SIZE;
-		canvasH = height * SPRITE_SIZE;
+		canvasW = width * spriteSize;
+		canvasH = height * spriteSize;
 
 		for (let y = 0; y < height; y++) {
 			for (let x = 0; x < width; x++) {
 				const index = y * width + x;
 				if (index < spritesToRender.length) {
-					const posX = (width - x - 1) * SPRITE_SIZE;
-					const posY = (height - y - 1) * SPRITE_SIZE;
+					const posX = (width - x - 1) * spriteSize;
+					const posY = (height - y - 1) * spriteSize;
 					layout.push({
 						x: posX,
 						y: posY,

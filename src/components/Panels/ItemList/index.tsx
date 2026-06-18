@@ -1,6 +1,6 @@
 import { cn } from '@/lib/utils';
-import { ThingCategory } from '@/lib/formats/tibia';
 import { Button } from '@/components/ui/button';
+import { ThingCategory } from '@/lib/formats/tibia';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { CheckerBoard } from '@/components/CheckerBoard';
 import { useItemList } from '@/usecase/hooks/useItemList';
@@ -21,6 +21,7 @@ export const ItemList = () => {
 		inputValue,
 		removeItem,
 		totalPages,
+		spriteSize,
 		currentPage,
 		setViewMode,
 		exportSheet,
@@ -157,14 +158,14 @@ export const ItemList = () => {
 													height={item.height}
 													scale={
 														viewMode === 'list'
-															? 36 / (Math.max(item.width, item.height) * 32)
+															? 36 / (Math.max(item.width, item.height) * spriteSize)
 															: viewMode === 'grid'
-																? 48 / (Math.max(item.width, item.height) * 32)
+																? 48 / (Math.max(item.width, item.height) * spriteSize)
 																: viewMode === 'grid-3'
-																	? 44 / (Math.max(item.width, item.height) * 32)
+																	? 44 / (Math.max(item.width, item.height) * spriteSize)
 																	: viewMode === 'grid-4'
-																		? 36 / (Math.max(item.width, item.height) * 32)
-																		: 128 / (Math.max(item.width, item.height) * 32)
+																		? 36 / (Math.max(item.width, item.height) * spriteSize)
+																		: 128 / (Math.max(item.width, item.height) * spriteSize)
 													}
 												/>
 											</CheckerBoard>

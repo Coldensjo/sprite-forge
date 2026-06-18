@@ -2,8 +2,8 @@ import React from 'react';
 import { logger, EventCode } from '@/lib/debug';
 import { useListViewMode } from '@/usecase/hooks/useListViewMode';
 import { useAssetData } from '@/usecase/context/AssetDataContext';
-import { exportObjectSheet, importObjectSheet } from '@/lib/formats/tibia';
 import { getThumbnailSpriteIds } from '@/usecase/util/thumbnailUtils';
+import { exportObjectSheet, importObjectSheet } from '@/lib/formats/tibia';
 import { useGeneralSettings } from '@/usecase/context/GeneralSettingsContext';
 import {
 	MIN_ITEM_ID,
@@ -22,6 +22,7 @@ export const useItemList = () => {
 	const {
 		data,
 		isNewItem,
+		spriteSize,
 		updateThing,
 		openedItemId,
 		updateCounter,
@@ -625,6 +626,7 @@ export const useItemList = () => {
 		inputValue,
 		removeItem,
 		totalPages,
+		spriteSize,
 		currentPage,
 		setViewMode,
 		exportSheet,

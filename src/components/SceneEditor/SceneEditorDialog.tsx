@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { type ThingType } from '@/lib/formats/tibia';
 import { Label } from '@/components/ui/label';
 import { invoke } from '@tauri-apps/api/core';
 import { Button } from '@/components/ui/button';
+import { type ThingType } from '@/lib/formats/tibia';
 import { CheckerBoard } from '@/components/CheckerBoard';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { SpriteCanvas } from '@/components/commons/SpriteCanvas';
@@ -33,7 +33,7 @@ const DEFAULT_WIDTH = 11;
 const DEFAULT_HEIGHT = 11;
 
 export const SceneEditorDialog = ({ open, itemToAdd, onItemAdded, onOpenChange }: SceneEditorDialogProps) => {
-	const { data } = useAssetData();
+	const { data, spriteSize } = useAssetData();
 	const [width] = useState(DEFAULT_WIDTH);
 	const [height] = useState(DEFAULT_HEIGHT);
 	const [tiles, setTiles] = useState<SceneTile[][]>([]);
@@ -47,7 +47,6 @@ export const SceneEditorDialog = ({ open, itemToAdd, onItemAdded, onOpenChange }
 	const [defaultSceneName, setDefaultSceneName] = useState<null | string>(null);
 	const [loadingDefaultScene, setLoadingDefaultScene] = useState(false);
 
-	// Load scenes and default scene on mount/open
 	useEffect(() => {
 		if (open) {
 			refreshScenes();
@@ -55,24 +54,19 @@ export const SceneEditorDialog = ({ open, itemToAdd, onItemAdded, onOpenChange }
 		}
 	}, [open]);
 
-	// Initialize default scene if no tiles
 	useEffect(() => {
 		if (open && tiles.length === 0 && !loadingDefaultScene) {
-			// If we have a default scene configured, try to load it
 			if (defaultSceneName) {
 				handleLoadScene(defaultSceneName);
 			} else {
-				// Load the public default scene if no configured default scene exists
 				loadPublicDefaultScene().catch((e) => {
 					console.error('Failed to load public default scene:', e);
-					// Fallback to empty scene if loading fails
 					initializeScene(width, height);
 				});
 			}
 		}
-	}, [open, defaultSceneName]); // Depend on defaultSceneName to load it when available
+	}, [open, defaultSceneName]);
 
-	// Handle itemToAdd from props
 	useEffect(() => {
 		if (open && itemToAdd) {
 			setSelectedItemId(itemToAdd.id);
@@ -114,7 +108,6 @@ export const SceneEditorDialog = ({ open, itemToAdd, onItemAdded, onOpenChange }
 			const json = await response.json();
 			if (json.tiles && json.width && json.height) {
 				setTiles(json.tiles);
-				// Note: width and height are already set via useState, but we could update them if needed
 			}
 		} catch (e) {
 			console.error('Failed to load public default scene:', e);
@@ -139,7 +132,6 @@ export const SceneEditorDialog = ({ open, itemToAdd, onItemAdded, onOpenChange }
 	const handleTileClick = (x: number, y: number) => {
 		if (!data) return;
 
-		// For pick mode, get the top item from the tile and switch to draw mode
 		if (toolMode === 'pick') {
 			if (y >= 0 && y < tiles.length && tiles[y] && x >= 0 && x < tiles[y].length) {
 				const tile = tiles[y][x];
@@ -152,17 +144,14 @@ export const SceneEditorDialog = ({ open, itemToAdd, onItemAdded, onOpenChange }
 			return;
 		}
 
-		// For draw mode, check if item exists
 		if (toolMode === 'draw') {
 			const item = data.items.get(selectedItemId);
 			if (!item) return;
 		}
 
 		setTiles((prev) => {
-			// Expand tiles array if needed (e.g., upgrading 11x9 to 11x11)
 			const newTiles = prev.map((row) => [...row]);
 
-			// Ensure we have enough rows
 			while (newTiles.length <= y) {
 				const newRow: SceneTile[] = [];
 				for (let i = 0; i < width; i++) {
@@ -171,14 +160,12 @@ export const SceneEditorDialog = ({ open, itemToAdd, onItemAdded, onOpenChange }
 				newTiles.push(newRow);
 			}
 
-			// Ensure each row has enough columns
 			for (const row of newTiles) {
 				while (row.length <= x) {
 					row.push({ items: [] });
 				}
 			}
 
-			// Bounds check after expansion
 			if (y < 0 || x < 0 || !newTiles[y]) {
 				return prev;
 			}
@@ -186,12 +173,10 @@ export const SceneEditorDialog = ({ open, itemToAdd, onItemAdded, onOpenChange }
 			const tile = { ...newTiles[y][x] };
 
 			if (toolMode === 'erase') {
-				// Remove the top item from the stack
 				if (tile.items.length > 0) {
 					tile.items = tile.items.slice(0, -1);
 				}
 			} else {
-				// Add item to stack
 				tile.items = [...tile.items, { id: selectedItemId }];
 			}
 
@@ -228,11 +213,6 @@ export const SceneEditorDialog = ({ open, itemToAdd, onItemAdded, onOpenChange }
 		if (!name) {
 			name = prompt('Enter scene name:', `scene_${Date.now()}`);
 			if (!name) return;
-		} else {
-			// Confirm overwrite if it's an existing scene (implied by currentSceneName not null)
-			// But maybe user wants to Save As?
-			// For now, let's just save. If they want to save as new, they can clear name or we can add "Save As" button.
-			// Let's stick to simple Save.
 		}
 
 		try {
@@ -279,25 +259,19 @@ export const SceneEditorDialog = ({ open, itemToAdd, onItemAdded, onOpenChange }
 			const wasDefaultScene = currentSceneName === defaultSceneName;
 			if (wasDefaultScene) {
 				setDefaultSceneName(null);
-				// Also update config
 				const config = await invoke<any | { default_scene?: string }>('get_config');
 				config.default_scene = null;
 				await invoke('save_config', { config });
 			}
 
-			// After deletion, reload default scene or public default
 			setCurrentSceneName(null);
 
-			// Check if there's still a configured default scene that exists
 			const remainingDefaultScene = wasDefaultScene ? null : defaultSceneName;
 			if (remainingDefaultScene && updatedScenes.includes(remainingDefaultScene)) {
-				// Load the configured default scene
 				await handleLoadScene(remainingDefaultScene);
 			} else {
-				// Load public default scene if no configured default exists
 				await loadPublicDefaultScene().catch((e) => {
 					console.error('Failed to load public default scene:', e);
-					// Fallback to empty scene if loading fails
 					initializeScene(width, height);
 				});
 			}
@@ -325,7 +299,6 @@ export const SceneEditorDialog = ({ open, itemToAdd, onItemAdded, onOpenChange }
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
 			<DialogContent className="max-w-[1000px] max-h-[90vh] flex flex-col p-0 gap-0 [&>button]:hidden overflow-hidden">
-				{/* Header */}
 				<div className="border-b border-border px-4 py-2.5 flex items-center justify-between bg-card/50">
 					<h2 className="text-base font-semibold">Scene Editor</h2>
 					<button
@@ -336,7 +309,6 @@ export const SceneEditorDialog = ({ open, itemToAdd, onItemAdded, onOpenChange }
 					</button>
 				</div>
 
-				{/* Scene Selection Bar */}
 				<div className="border-b border-border px-4 py-2 flex items-center gap-2 bg-muted/20">
 					<Button
 						size="sm"
@@ -373,7 +345,6 @@ export const SceneEditorDialog = ({ open, itemToAdd, onItemAdded, onOpenChange }
 				</div>
 
 				<div className="flex-1 flex overflow-hidden">
-					{/* Sidebar */}
 					<div className="w-64 border-r border-border p-4 flex flex-col gap-4 bg-secondary/20 overflow-y-auto">
 						<div className="space-y-2">
 							<Label>Selected Item</Label>
@@ -389,7 +360,7 @@ export const SceneEditorDialog = ({ open, itemToAdd, onItemAdded, onOpenChange }
 											thing={selectedItem}
 											width={selectedItem.width}
 											height={selectedItem.height}
-											scale={64 / (Math.max(selectedItem.width, selectedItem.height) * 32)}
+											scale={64 / (Math.max(selectedItem.width, selectedItem.height) * spriteSize)}
 										/>
 									) : (
 										<div className="w-full h-full flex items-center justify-center text-muted-foreground text-xs">?</div>
@@ -474,7 +445,6 @@ export const SceneEditorDialog = ({ open, itemToAdd, onItemAdded, onOpenChange }
 						</div>
 					</div>
 
-					{/* Canvas Area */}
 					<div className="flex-1 bg-neutral-900 overflow-auto flex items-center justify-center p-8 min-w-0">
 						<SceneCanvas width={width} tiles={tiles} scale={scale} height={height} onTileClick={handleTileClick} />
 					</div>

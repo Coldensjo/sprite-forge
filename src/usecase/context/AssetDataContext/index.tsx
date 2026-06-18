@@ -5,6 +5,7 @@ import { logger, EventCode } from '@/lib/debug';
 import { SpriteReader, ThingCategory } from '@/lib/formats/tibia';
 
 interface AssetDataContextType {
+	spriteSize: number;
 	isLoading: boolean;
 	error: null | string;
 	clearData: () => void;
@@ -13,7 +14,6 @@ interface AssetDataContextType {
 	openedItems: ThingType[];
 	spriteLoadVersion: number;
 	openedItemId: null | number;
-	// Sprite import notification - triggers SpriteList to go to last page
 	spriteImportVersion: number;
 	openedSpriteId: null | number;
 	notifySpriteImport: () => void;
@@ -24,7 +24,6 @@ interface AssetDataContextType {
 	spriteReader: null | SpriteReader;
 	compileFiles: () => Promise<void>;
 	clearModifiedTracking: () => void;
-	restoreCommit: (hash: string) => Promise<{ itemsRestored: number; spritesRestored: number; itemsSkipped: number; spritesSkipped: number }>;
 	highlightedSpriteId: null | number;
 	modifiedSprites: Map<number, Sprite>;
 	setError: (error: null | string) => void;
@@ -51,9 +50,11 @@ interface AssetDataContextType {
 	setData: (data: AssetData, reader: SpriteReader, skipBackendSync?: boolean) => void;
 	markUnsavedChanges: (id: number, category: ThingCategory, hasChanges: boolean) => void;
 	updateThing: (id: number, category: ThingCategory, updates: Partial<ThingType>) => void;
-	// Compile tracking
 	modifiedSinceCompile: Map<string, { id: number; data: ThingType; category: ThingCategory }>;
 	setLoading: (loading: boolean, progress?: { stage: string; total: number; current: number }) => void;
+	restoreCommit: (
+		hash: string
+	) => Promise<{ itemsSkipped: number; itemsRestored: number; spritesSkipped: number; spritesRestored: number }>;
 }
 
 const AssetDataContext = React.createContext<undefined | AssetDataContextType>(undefined);
@@ -64,11 +65,8 @@ export const AssetDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 	const [isLoading, setIsLoading] = React.useState(false);
 	const [loadingProgress, setLoadingProgress] = React.useState<null | { stage: string; total: number; current: number }>(null);
 	const [error, setError] = React.useState<null | string>(null);
-	// Counter to force re-renders when data is mutated in place
 	const [updateCounter, setUpdateCounter] = React.useState(0);
-	// Counter to notify SpriteList about new sprite imports (go to last page)
 	const [spriteImportVersion, setSpriteImportVersion] = React.useState(0);
-	// Load initial state from localStorage
 	const loadOpenedItemsState = (): {
 		openedId: null | number;
 		openedCategory: null | ThingCategory;
@@ -98,10 +96,10 @@ export const AssetDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 	const hasPreloadedRef = React.useRef(false);
 	const [openedSpriteId, setOpenedSpriteId] = React.useState<null | number>(null);
 	const [highlightedSpriteId, setHighlightedSpriteId] = React.useState<null | number>(null);
+	const [spriteSize, _setSpriteSize] = React.useState(32);
 	const [spriteLoadVersion, setSpriteLoadVersion] = React.useState(0);
 	const [unsavedChanges, setUnsavedChanges] = React.useState<Set<string>>(new Set());
 	const [newItemKeys, setNewItemKeys] = React.useState<Set<string>>(new Set());
-	// Compile tracking
 	const [modifiedSinceCompile, setModifiedSinceCompile] = React.useState<
 		Map<string, { id: number; data: ThingType; category: ThingCategory }>
 	>(new Map());
@@ -110,7 +108,6 @@ export const AssetDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 	>(new Map());
 	const [modifiedSprites, setModifiedSprites] = React.useState<Map<number, Sprite>>(new Map());
 
-	// Save opened items state to localStorage whenever it changes
 	const saveOpenedItemsState = React.useCallback(
 		(items: ThingType[], openedId: null | number, openedCategory: null | ThingCategory) => {
 			try {
@@ -138,13 +135,11 @@ export const AssetDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 				const newItems = prev.filter((item) => !(item.id === id && item.category === category));
 				return newItems;
 			});
-			// If removing the currently opened item, clear it
 			if (openedItemId === id && openedItemCategory === category) {
 				setOpenedItemIdState(null);
 				setOpenedItemCategoryState(null);
 			}
 
-			// Clear unsaved changes flag since the draft is lost
 			const key = `${category}-${id}`;
 			setUnsavedChanges((prev) => {
 				const next = new Set(prev);
@@ -176,11 +171,9 @@ export const AssetDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 				}
 			}
 
-			// Clear localStorage FIRST (before setting new data)
 			try {
 				if (typeof window !== 'undefined') {
 					localStorage.removeItem('sprite-forge-opened-items');
-					// Clear all item property states
 					const keysToRemove: string[] = [];
 					for (let i = 0; i < localStorage.length; i++) {
 						const key = localStorage.key(i);
@@ -194,7 +187,6 @@ export const AssetDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 				console.error('Failed to clear localStorage:', e);
 			}
 
-			// Clear all application state when loading new files
 			setOpenedItemIdState(null);
 			setOpenedItemCategoryState(null);
 			setOpenedItems([]);
@@ -203,7 +195,6 @@ export const AssetDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 			setNewItemKeys(new Set());
 			setSelectedCategoryState(ThingCategory.ITEM);
 
-			// Reset restoration flag BEFORE setting new data
 			hasRestoredRef.current = false;
 			hasPreloadedRef.current = false;
 
@@ -211,9 +202,6 @@ export const AssetDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 			setSpriteReader(reader);
 			setError(null);
 
-			// Store paths in localStorage for Find window to access
-			// NOTE: DAT data is already stored in Rust backend by parse_dat_file_bin command
-			// No need to call store_dat_data again - that would be redundant and slow
 			if (newData.datPath && !skipBackendSync) {
 				try {
 					if (typeof window !== 'undefined') {
@@ -227,7 +215,6 @@ export const AssetDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 					console.log('DAT paths stored in localStorage for cross-window access');
 				} catch (e) {
 					console.error('Failed to store paths in localStorage:', e);
-					// Non-fatal - continue execution
 				}
 			}
 		},
@@ -253,12 +240,10 @@ export const AssetDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 		setOpenedSpriteId(null);
 		setUnsavedChanges(new Set());
 		setNewItemKeys(new Set());
-		// Clear localStorage when data is cleared
 		try {
 			if (typeof window !== 'undefined') {
 				localStorage.removeItem('sprite-forge-opened-items');
 				localStorage.removeItem('sprite-forge-dat-path');
-				// Clear all item property states
 				const keysToRemove: string[] = [];
 				for (let i = 0; i < localStorage.length; i++) {
 					const key = localStorage.key(i);
@@ -272,7 +257,6 @@ export const AssetDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 			console.error('Failed to clear localStorage:', e);
 		}
 
-		// Clear DAT data in Rust backend
 		if (currentDatPath) {
 			try {
 				const { invoke } = await import('@tauri-apps/api/core');
@@ -283,7 +267,6 @@ export const AssetDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 				console.log('DAT data cleared from Rust backend and event emitted');
 			} catch (e) {
 				console.error('Failed to clear DAT data from Rust backend:', e);
-				// Non-fatal
 			}
 		}
 	}, [data]);
@@ -358,7 +341,6 @@ export const AssetDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 			} else {
 				setOpenedItemCategoryState(null);
 			}
-			// Reset flag after a short delay to allow React.useEffect to check it
 			setTimeout(() => {
 				settingItemRef.current = false;
 			}, 0);
@@ -372,23 +354,16 @@ export const AssetDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
 	const setSelectedCategoryAndItem = React.useCallback(
 		(category: ThingCategory, itemId: number) => {
-			// Don't change the listing category - just open the item
 			setOpenedItemId(itemId, category);
 		},
 		[setOpenedItemId]
 	);
 
-	// Don't clear openedItemId when category changes - keep them independent
-
-	// Save opened items state to localStorage whenever it changes
 	React.useEffect(() => {
 		saveOpenedItemsState(openedItems, openedItemId, openedItemCategory);
 	}, [openedItems, openedItemId, openedItemCategory, saveOpenedItemsState]);
 
-	// Restore opened items when data is loaded (only once, and only if localStorage wasn't just cleared)
 	React.useEffect(() => {
-		// Only restore if we have data, haven't restored yet
-		// Check localStorage directly (not initialState) to see if items exist
 		if (data && !hasRestoredRef.current) {
 			try {
 				if (typeof window !== 'undefined') {
@@ -407,7 +382,6 @@ export const AssetDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 							if (restoredItems.length > 0) {
 								setOpenedItems(restoredItems);
 							}
-							// Restore opened item if it exists
 							if (savedState.openedId !== null && savedState.openedCategory) {
 								const thing = getThing(savedState.openedId, savedState.openedCategory);
 								if (thing) {
@@ -476,9 +450,7 @@ export const AssetDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 					return next;
 				});
 
-				// Force re-render by incrementing counter
 				setUpdateCounter((prev) => prev + 1);
-				// Clear unsaved changes when saved
 				setUnsavedChanges((prev) => {
 					const next = new Set(prev);
 					next.delete(key);
@@ -539,7 +511,6 @@ export const AssetDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 			try {
 				logger.log(EventCode.CTX_LOAD_END, { v: v + 1 });
 			} catch {
-				// Ignore logger errors
 			}
 			return v + 1;
 		});
@@ -553,7 +524,6 @@ export const AssetDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 		(spriteIds?: number[]) => {
 			setUpdateCounter((c) => c + 1);
 
-			// If sprite IDs are provided, track them as modified
 			if (spriteIds && spriteIds.length > 0 && data) {
 				setModifiedSprites((prev) => {
 					const next = new Map(prev);
@@ -562,13 +532,11 @@ export const AssetDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 						if (sprite) {
 							next.set(spriteId, sprite);
 						} else {
-							// Sprite was deleted (removed from map)
-							// We need to track it so compiler knows to update it (e.g. mark as empty or handle count reduction)
 							next.set(spriteId, {
 								id: spriteId,
 								isEmpty: true,
 								transparent: data.transparency,
-								rgbaPixels: new Uint8Array(4096), // Empty RGBA
+								rgbaPixels: new Uint8Array(4096),
 								compressedPixels: new Uint8Array(0)
 							} as Sprite);
 						}
@@ -587,31 +555,25 @@ export const AssetDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 			try {
 				logger.log(EventCode.CTX_SPRITE_REQ, { id });
 			} catch {
-				// Ignore logger errors
 			}
 
-			// Check cache first - sprites loaded via window-based loading
 			if (data.sprites.has(id)) {
 				try {
 					logger.log(EventCode.CTX_SPRITE_HIT, { id });
 				} catch {
-					// Ignore logger errors
 				}
 				return data.sprites.get(id)!;
 			}
 
-			// Sprite not in cache - will be loaded when user navigates to that page
 			try {
 				logger.log(EventCode.CTX_SPRITE_MISS, { id, v: spriteLoadVersion, sz: data.sprites.size });
 			} catch {
-				// Ignore logger errors
 			}
 			return null;
 		},
-		[data, spriteLoadVersion] // Include version to re-run when sprites load
+		[data, spriteLoadVersion]
 	);
 
-	// Compile tracking methods
 	const hasModifiedItems = React.useCallback(() => {
 		return modifiedSinceCompile.size > 0 || modifiedSprites.size > 0;
 	}, [modifiedSinceCompile, modifiedSprites]);
@@ -698,10 +660,10 @@ export const AssetDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 				const payload = decodeCommitSpritePayload(entry.before);
 				data.sprites.set(entry.id, {
 					id: entry.id,
-					isEmpty: payload.compressedPixels.length === 0,
 					transparent: payload.transparent,
 					rgbaPixels: new Uint8Array(4096),
-					compressedPixels: payload.compressedPixels
+					compressedPixels: payload.compressedPixels,
+					isEmpty: payload.compressedPixels.length === 0
 				} as Sprite);
 				restoredSpriteIds.push(entry.id);
 				spritesRestored++;
@@ -713,15 +675,10 @@ export const AssetDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 				notifyDataChanged();
 			}
 
-			return { itemsRestored, spritesRestored, itemsSkipped, spritesSkipped };
+			return { itemsSkipped, itemsRestored, spritesSkipped, spritesRestored };
 		},
 		[data, updateThing, notifyDataChanged]
 	);
-
-	// NOTE: Global sprite preloading has been REMOVED
-	// Preloading now happens directly in loadTibiaData() in loader.ts
-	// This eliminates the redundant second preload phase that was causing 1-2s extra delay
-	// Sprites are loaded on-demand as user navigates (Object Builder pattern)
 
 	return (
 		<AssetDataContext.Provider
@@ -738,6 +695,7 @@ export const AssetDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 				getEffect,
 				getSprite,
 				isNewItem,
+				spriteSize,
 				setLoading,
 				getMissile,
 				updateThing,
@@ -745,8 +703,8 @@ export const AssetDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 				spriteReader,
 				openedItemId,
 				compileFiles,
-				restoreCommit,
 				clearNewItem,
+				restoreCommit,
 				updateCounter,
 				markAsNewItem,
 				openedSpriteId,
@@ -767,10 +725,8 @@ export const AssetDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 				setSelectedCategory,
 				notifySpritesLoaded,
 				highlightedSpriteId,
-				// Sprite import notification
 				spriteImportVersion,
 				setHighlightedItemId,
-				// Compile tracking
 				modifiedSinceCompile,
 				clearModifiedTracking,
 				setHighlightedSpriteId,
