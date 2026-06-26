@@ -1,13 +1,15 @@
 import type { useObjectProperties } from '~/usecase/hooks/useObjectProperties';
 
-import { X, Plus } from 'lucide-react';
+import { X, Plus, Crop } from 'lucide-react';
 
 import { Label } from '~/components/ui/label';
 import { Switch } from '~/components/ui/switch';
 import { Button } from '~/components/ui/button';
 import { PropertyWithUndo } from '../PropertyWithUndo';
 import { NumberInput } from '~/components/ui/number-input';
+import { computeExactSize } from '~/usecase/util/exactSizeUtils';
 import { TibiaColorPicker } from '~/components/TibiaColorPicker';
+import { useAssetData } from '~/usecase/context/AssetDataContext';
 import { EightBitColorPicker } from '~/components/EightBitColorPicker';
 import { usePropertiesContext } from '~/usecase/context/PropertiesContext';
 import { Select, SelectItem, SelectValue, SelectContent, SelectTrigger } from '~/components/ui/select';
@@ -32,8 +34,14 @@ export const BasicsColumn = ({ preview, frameGroups }: BasicsColumnProps) => {
 		handlePropertyChange,
 		showDisplacementElevation
 	} = usePropertiesContext();
-	const { showGrid, showExactSize } = preview;
+	const { getSprite, spriteSize } = useAssetData();
+	const { showGrid, showExactSize, getSpriteOverride } = preview;
 	const { selectedFrameGroup, onSelectFrameGroup, onCreateFrameGroup, onDeleteFrameGroup } = frameGroups;
+
+	const handleAutoExactSize = () => {
+		const resolve = getSpriteOverride ?? getSprite;
+		handlePropertyChange('exactSize', computeExactSize(draftItem, resolve, spriteSize));
+	};
 
 	return (
 		<>
@@ -119,16 +127,27 @@ export const BasicsColumn = ({ preview, frameGroups }: BasicsColumnProps) => {
 							<Label htmlFor="crop-size" className="text-xs whitespace-nowrap text-muted-foreground">
 								Exact Size
 							</Label>
-							<PropertyWithUndo property="exactSize">
-								<NumberInput
-									min={1}
-									max={128}
-									id="crop-size"
-									value={draftItem.exactSize}
-									className="h-7 w-16 text-right"
-									onChange={(val) => handlePropertyChange('exactSize', val)}
-								/>
-							</PropertyWithUndo>
+							<div className="flex items-center gap-1">
+								<Button
+									size="icon"
+									variant="ghost"
+									onClick={handleAutoExactSize}
+									title="Auto-calculate from non-transparent pixels"
+									className="h-7 w-7 p-0 hover:bg-secondary/50 shrink-0"
+								>
+									<Crop className="h-3 w-3 text-muted-foreground" />
+								</Button>
+								<PropertyWithUndo property="exactSize">
+									<NumberInput
+										min={1}
+										max={128}
+										id="crop-size"
+										value={draftItem.exactSize}
+										className="h-7 w-16 text-right"
+										onChange={(val) => handlePropertyChange('exactSize', val)}
+									/>
+								</PropertyWithUndo>
+							</div>
 						</div>
 						<div className="flex items-center justify-between gap-2">
 							<Label htmlFor="frames" className="text-xs whitespace-nowrap text-muted-foreground">
