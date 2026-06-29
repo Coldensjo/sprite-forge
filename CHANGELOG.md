@@ -5,6 +5,24 @@ All notable changes to Sprite Forge are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-06-29
+
+### Added
+- Lua-scripted custom formats: drop a `.lua` script into the scripts folder to add a new file format with its own categories, load dialog title, and read/write logic; no app rebuild required.
+- Slice/crop editor window with layers, marching-ants selection, transform mode, rectangular pixel select, proximity grid snap, and layer keyboard ops.
+- New project dialog (File → New…) for creating empty `.dat`/`.spr` projects with version, transparency, extended, frame groups, and improved animations toggles.
+- Right-click `Import…` on an item to replace it; when multiple objects are selected in the import dialog, the first replaces the clicked item and the rest are added as new.
+- In-app confirm modal for replace flows.
+- Auto-calculate exact size for items from their non-transparent pixel bounds.
+- Expanded client version table to cover 7.10–12.86.
+- Fallback to `.otfi` metadata + version 1099 when the DAT signature is unrecognized.
+
+### Fixed
+- Sprite optimizer now applies the temp file atomically and refuses to overwrite the original with itself, eliminating a case where the SPR file could be deleted on compile.
+
+### Performance
+- Faster compiles on large projects: the DAT file is no longer rewritten when only sprites changed, and the backup copy runs in parallel with sprite-state capture instead of blocking the write.
+
 ## [0.2.2] - 2026-06-25
 
 ### Added
