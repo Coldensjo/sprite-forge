@@ -158,11 +158,24 @@ interface LuaFormatMeta {
 	name: string;
 	exts: string[];
 	sprite_size: number;
+	properties?: unknown[];
 	kind: 'file' | 'folder';
 	categories: LuaCategory[];
 	load_dialog_title?: string;
 	companion?: { ext: string; label: string };
 }
+
+const toCamelKey = (k: string): string => k.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase());
+
+const deepCamel = (v: unknown): unknown => {
+	if (Array.isArray(v)) return v.map(deepCamel);
+	if (v && typeof v === 'object') {
+		const out: Record<string, unknown> = {};
+		for (const [k, val] of Object.entries(v as Record<string, unknown>)) out[toCamelKey(k)] = deepCamel(val);
+		return out;
+	}
+	return v;
+};
 
 const toCategoryDef = (c: LuaCategory): CategoryDef => ({
 	label: c.label,
@@ -268,7 +281,8 @@ const makeHandler = (meta: LuaFormatMeta): FormatHandler => {
 	const config: FormatConfig = {
 		name: meta.name,
 		spriteSize: meta.sprite_size,
-		categories: meta.categories.map(toCategoryDef)
+		categories: meta.categories.map(toCategoryDef),
+		properties: meta.properties ? (deepCamel(meta.properties) as unknown[]) : undefined
 	};
 	const version: ClientVersion = {
 		value: 0,

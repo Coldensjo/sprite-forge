@@ -59,6 +59,7 @@ export interface CategoryDef {
 export interface FormatConfig {
 	name: string;
 	spriteSize: number;
+	properties?: unknown[];
 	categories: CategoryDef[];
 }
 

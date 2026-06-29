@@ -676,11 +676,7 @@ export const Toolbar = () => {
 										return (
 											<>
 												{visible.map((entry) => (
-													<MenubarItem
-														key={entry.datPath}
-														title={entry.folderPath}
-														onSelect={() => void handleOpenRecent(entry)}
-													>
+													<MenubarItem key={entry.datPath} title={entry.folderPath} onSelect={() => void handleOpenRecent(entry)}>
 														{entry.otbPath && <Server className="mr-2 h-3.5 w-3.5 text-primary" />}
 														{entry.label}
 													</MenubarItem>

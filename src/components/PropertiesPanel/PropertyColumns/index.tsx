@@ -1,3 +1,4 @@
+import type { SchemaEntry } from '~/lib/formats/tibia/propertySchema';
 import type { Visibility } from '~/usecase/context/PropertiesContext/types';
 
 import { Shuffle } from 'lucide-react';
@@ -7,8 +8,8 @@ import { Switch } from '~/components/ui/switch';
 import { Button } from '~/components/ui/button';
 import { SchemaSection } from './SchemaRenderer';
 import { TibiaColorPicker } from '~/components/TibiaColorPicker';
+import { useAssetData } from '~/usecase/context/AssetDataContext';
 import { usePropertiesContext } from '~/usecase/context/PropertiesContext';
-import { TIBIA_PROPERTY_SCHEMA } from '~/lib/formats/tibia/propertySchema';
 
 export const PropertyColumns = () => {
 	const {
@@ -83,11 +84,13 @@ export const PropertyColumns = () => {
 		showDisplacementElevation
 	};
 
-	const col1 = TIBIA_PROPERTY_SCHEMA.filter((s) => s.column === 1);
-	const col2 = TIBIA_PROPERTY_SCHEMA.filter((s) => s.column === 2);
-	const col3 = TIBIA_PROPERTY_SCHEMA.filter((s) => s.column === 3);
+	const { formatConfig } = useAssetData();
+	const schema = (formatConfig.properties ?? []) as SchemaEntry[];
+	const col1 = schema.filter((s) => s.column === 1);
+	const col2 = schema.filter((s) => s.column === 2);
+	const col3 = schema.filter((s) => s.column === 3);
 
-	const renderEntry = (entry: (typeof TIBIA_PROPERTY_SCHEMA)[number]) => {
+	const renderEntry = (entry: (typeof schema)[number]) => {
 		if (entry.kind === 'custom') {
 			const customVisible =
 				entry.show === true

@@ -3,7 +3,10 @@ import { join } from '@tauri-apps/api/path';
 import { optimizeSprites } from './optimizer';
 import { TIBIA_FORMAT_CONFIG } from './types';
 import { type FormatHandler } from '../registry';
+import { TIBIA_PROPERTY_SCHEMA } from './propertySchema';
 import { loadTibiaData, loadSpriteIds, loadSpriteIdsLz4 } from './loader';
+
+TIBIA_FORMAT_CONFIG.properties = TIBIA_PROPERTY_SCHEMA;
 
 export const tibiaHandler: FormatHandler = {
 	id: 'tibia',
