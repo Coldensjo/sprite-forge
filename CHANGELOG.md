@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Lua-scripted custom formats: drop a `.lua` script into the scripts folder to add a new file format with its own categories, load dialog title, and read/write logic; no app rebuild required.
+- Tools → Lua Scripts dialog with an enable/disable toggle, script browser, and syntax-highlighted Lua editor for live edits and reloads.
+- Format scripts declare their own property schema (sections, fields, visibility, grids), so each format shows only the editor controls it actually supports.
 - Slice/crop editor window with layers, marching-ants selection, transform mode, rectangular pixel select, proximity grid snap, and layer keyboard ops.
 - New project dialog (File → New…) for creating empty `.dat`/`.spr` projects with version, transparency, extended, frame groups, and improved animations toggles.
 - Right-click `Import…` on an item to replace it; when multiple objects are selected in the import dialog, the first replaces the clicked item and the rest are added as new.
@@ -19,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Sprite optimizer now applies the temp file atomically and refuses to overwrite the original with itself, eliminating a case where the SPR file could be deleted on compile.
+- Light, Displacement, and Minimap fields no longer appear twice on wide property panels; the Visuals block and the body columns share a single breakpoint.
 
 ### Performance
 - Faster compiles on large projects: the DAT file is no longer rewritten when only sprites changed, and the backup copy runs in parallel with sprite-state capture instead of blocking the write.
