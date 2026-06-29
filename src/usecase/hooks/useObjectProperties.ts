@@ -1024,8 +1024,8 @@ export const useObjectProperties = (override?: { item: null | ThingType; getSpri
 
 		const loadItemSprites = async () => {
 			try {
-				const { loadSpriteIds } = await import('~/lib/formats/tibia');
-				await loadSpriteIds(data.sprPath!, spriteIds, data.transparency, data.sprites);
+				const { loadSprites } = await import('~/lib/formats/sprites');
+				await loadSprites(data, spriteIds);
 				notifySpritesLoaded();
 			} catch (err) {
 				console.error('Failed to load item sprites:', err);

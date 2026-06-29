@@ -52,8 +52,8 @@ export const SceneCanvas = memo(({ width, tiles, height, scale = 1, onTileClick 
 			const missingIds = spriteIds.filter((id) => !data.sprites.has(id));
 			if (missingIds.length === 0) return;
 
-			const { loadSpriteIds } = await import('~/lib/formats/tibia');
-			await loadSpriteIds(data.sprPath, missingIds, data.transparency, data.sprites);
+			const { loadSprites } = await import('~/lib/formats/sprites');
+			await loadSprites(data, missingIds);
 			notifySpritesLoaded();
 		};
 

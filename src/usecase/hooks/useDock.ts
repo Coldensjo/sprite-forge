@@ -6,6 +6,7 @@ import {
 	dockAt,
 	floatAt,
 	PanelId,
+	DockOpts,
 	heightOf,
 	DockZone,
 	placedIds,
@@ -49,6 +50,7 @@ export interface DockApi {
 	dragging: null | PanelId;
 	dropTarget: null | DropTarget;
 	setResizing: (value: boolean) => void;
+	ensurePanels: (ids: PanelId[]) => void;
 	sensors: ReturnType<typeof useSensors>;
 	isRenderable: (id: PanelId) => boolean;
 	handleDragEnd: (event: DragEndEvent) => void;
@@ -62,8 +64,10 @@ export interface DockApi {
 	resizeFloatPanel: (id: PanelId, side: ResizeSide, dx: number, dy: number) => void;
 }
 
-export const useDock = (isContentReady: (id: PanelId) => boolean): DockApi => {
-	const [layout, setLayout] = React.useState<DockLayout>(loadDockLayout);
+export const useDock = (isContentReady: (id: PanelId) => boolean, opts?: DockOpts): DockApi => {
+	const optsRef = React.useRef(opts);
+	optsRef.current = opts;
+	const [layout, setLayout] = React.useState<DockLayout>(() => loadDockLayout(opts));
 	const [dragging, setDragging] = React.useState<null | PanelId>(null);
 	const [resizing, setResizingState] = React.useState(false);
 	const layoutRef = React.useRef(layout);
@@ -71,7 +75,7 @@ export const useDock = (isContentReady: (id: PanelId) => boolean): DockApi => {
 
 	const setResizing = React.useCallback((value: boolean) => {
 		setResizingState(value);
-		if (!value) requestAnimationFrame(() => saveDockLayout(layoutRef.current));
+		if (!value) requestAnimationFrame(() => saveDockLayout(layoutRef.current, optsRef.current));
 	}, []);
 	const [dragSize, setDragSize] = React.useState<null | { width: number; height: number }>(null);
 	const [dropTarget, setDropTarget] = React.useState<null | DropTarget>(null);
@@ -188,7 +192,7 @@ export const useDock = (isContentReady: (id: PanelId) => boolean): DockApi => {
 		setDropTarget(null);
 		setLayout((prev) => {
 			const next = target ? dockAt(prev, id, target, maxStack) : floatAt(prev, id, dropRect(prev, id, event.delta));
-			saveDockLayout(next);
+			saveDockLayout(next, optsRef.current);
 			return next;
 		});
 	};
@@ -209,10 +213,27 @@ export const useDock = (isContentReady: (id: PanelId) => boolean): DockApi => {
 	};
 
 	const resetLayout = () => {
-		const next = defaultDockLayout();
-		saveDockLayout(next);
+		const next = defaultDockLayout(optsRef.current);
+		saveDockLayout(next, optsRef.current);
 		setLayout(next);
 	};
+
+	const ensurePanels = React.useCallback(
+		(ids: PanelId[]) => {
+			setLayout((prev) => {
+				const placed = new Set(placedIds(prev));
+				let next = prev;
+				for (const id of ids) {
+					if (placed.has(id)) continue;
+					next = dockAt(next, id, { row: null, zone: 'right', col: next.right.length }, maxStack);
+					placed.add(id);
+				}
+				if (next !== prev) saveDockLayout(next, optsRef.current);
+				return next;
+			});
+		},
+		[maxStack]
+	);
 
 	React.useEffect(() => {
 		const onResize = () => {
@@ -220,7 +241,7 @@ export const useDock = (isContentReady: (id: PanelId) => boolean): DockApi => {
 			if (!ws) return;
 			setLayout((prev) => {
 				const next = clampFloatsToBounds(prev, { width: ws.width, height: ws.height });
-				if (next !== prev) saveDockLayout(next);
+				if (next !== prev) saveDockLayout(next, optsRef.current);
 				return next;
 			});
 		};
@@ -246,6 +267,7 @@ export const useDock = (isContentReady: (id: PanelId) => boolean): DockApi => {
 		origTarget,
 		setResizing,
 		resetLayout,
+		ensurePanels,
 		workspaceRef,
 		isRenderable,
 		handleDragEnd,

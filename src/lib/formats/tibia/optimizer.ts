@@ -1,9 +1,7 @@
-import type { ThingType, AssetData } from './types';
+import type { AssetData } from './types';
 
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-
-import { loadSpriteIds } from './loader';
 
 export async function optimizeSprites(
 	data: AssetData,

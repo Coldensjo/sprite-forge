@@ -1,15 +1,21 @@
 import { join } from '@tauri-apps/api/path';
 
-import { loadTibiaData } from './loader';
+import { optimizeSprites } from './optimizer';
 import { TIBIA_FORMAT_CONFIG } from './types';
-import { registerFormat, type FormatHandler } from '../registry';
+import { type FormatHandler } from '../registry';
+import { loadTibiaData, loadSpriteIds, loadSpriteIdsLz4 } from './loader';
 
 export const tibiaHandler: FormatHandler = {
 	id: 'tibia',
 	kind: 'folder',
 	config: TIBIA_FORMAT_CONFIG,
 	exts: ['dat', 'spr', 'otfi'],
+	optimize: (data, onProgress) => optimizeSprites(data, onProgress),
 
+	loadDialogTitle: 'Select folder containing Tibia.dat and Tibia.spr',
+
+	loadSprites: (data, ids) => loadSpriteIds(data.sprPath!, ids, data.transparency, data.sprites),
+	loadSpritesLz4: (data, ids) => loadSpriteIdsLz4(data.sprPath!, ids, data.transparency, data.sprites),
 	async load(req) {
 		const datPath = req.datPath ?? (await join(req.folderPath, 'Tibia.dat'));
 		const sprPath = req.sprPath ?? (await join(req.folderPath, 'Tibia.spr'));
@@ -22,6 +28,7 @@ export const tibiaHandler: FormatHandler = {
 			{ extended: req.extended, frameGroups: req.frameGroups, frameDurations: req.improvedAnimations },
 			{ otbPath: req.otbPath, xmlPath: req.xmlPath }
 		);
+		data.formatId = 'tibia';
 		return { data, formatConfig: TIBIA_FORMAT_CONFIG };
 	},
 
@@ -60,5 +67,3 @@ export const tibiaHandler: FormatHandler = {
 		return otbResult;
 	}
 };
-
-registerFormat(tibiaHandler);

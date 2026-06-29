@@ -203,8 +203,8 @@ export const useSpriteCanvas = (props: SpriteCanvasProps) => {
 			const missingIds = Array.from(sceneSpriteIds).filter((id) => !data.sprites.has(id));
 			if (missingIds.length === 0) return;
 
-			const { loadSpriteIds } = await import('~/lib/formats/tibia');
-			await loadSpriteIds(data.sprPath, missingIds, data.transparency, data.sprites);
+			const { loadSprites } = await import('~/lib/formats/sprites');
+			await loadSprites(data, missingIds);
 			notifySpritesLoaded();
 		};
 

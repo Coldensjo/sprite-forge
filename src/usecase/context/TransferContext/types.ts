@@ -1,8 +1,10 @@
-import type { ImportSource } from '~/lib/formats/tibia';
+import type { ImportSource, ThingCategory } from '~/lib/formats/tibia';
 
 export interface ImportPreset {
 	paths: string[];
+	replaceId?: number;
 	source: ImportSource;
+	replaceCategory?: ThingCategory;
 }
 
 export interface TransferContextValue {

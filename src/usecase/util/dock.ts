@@ -4,7 +4,7 @@ export type DockZone = 'left' | 'right';
 
 export type PanelKind = 'itemList' | 'spriteList' | 'openedItems' | 'recentExports' | 'visualization';
 
-export type PanelId = PanelKind;
+export type PanelId = string;
 
 export type DockColumn = PanelId[];
 
@@ -20,7 +20,7 @@ export interface DragHandleProps {
 }
 
 export interface PanelMeta {
-	id: PanelKind;
+	id: PanelId;
 	title: string;
 	minWidth: number;
 	minHeight: number;
@@ -95,9 +95,34 @@ export const PANELS: Record<PanelKind, PanelMeta> = {
 	}
 };
 
-export const isPanelId = (id: unknown): id is PanelId => typeof id === 'string' && id in PANELS;
+const EXTRA_PANELS: Record<string, PanelMeta> = {};
 
-export const panelMeta = (id: PanelId): PanelMeta => PANELS[id];
+export function registerExtraPanels(metas: { id: string; title: string }[]): void {
+	for (const m of metas) {
+		EXTRA_PANELS[m.id] = {
+			id: m.id,
+			title: m.title,
+			resizable: true,
+			stackable: true,
+			minWidth: MIN_PANEL_WIDTH,
+			minHeight: MIN_PANEL_HEIGHT
+		};
+	}
+}
+
+const DEFAULT_META = (id: string): PanelMeta => ({
+	id,
+	title: id,
+	resizable: true,
+	stackable: true,
+	minWidth: MIN_PANEL_WIDTH,
+	minHeight: MIN_PANEL_HEIGHT
+});
+
+export const isPanelId = (id: unknown): id is PanelId => typeof id === 'string' && (id in PANELS || id in EXTRA_PANELS);
+
+export const panelMeta = (id: PanelId): PanelMeta =>
+	(PANELS as Record<string, PanelMeta>)[id] ?? EXTRA_PANELS[id] ?? DEFAULT_META(id);
 
 export const DEFAULT_DOCK_LAYOUT: DockLayout = {
 	float: {},
@@ -111,6 +136,27 @@ const PANEL_KINDS = Object.keys(PANELS) as PanelKind[];
 
 const STORAGE_KEY = 'sprite-forge-dock-layout';
 
+export interface DockOpts {
+	storageKey?: string;
+	knownPanelIds?: string[];
+	defaultLayout?: DockLayout;
+	autoFillKinds?: PanelKind[];
+}
+
+interface ResolvedOpts {
+	storageKey: string;
+	defaultLayout: DockLayout;
+	autoFillKinds: PanelKind[];
+	knownPanelIds: null | Set<string>;
+}
+
+const resolveOpts = (o?: DockOpts): ResolvedOpts => ({
+	storageKey: o?.storageKey ?? STORAGE_KEY,
+	autoFillKinds: o?.autoFillKinds ?? PANEL_KINDS,
+	defaultLayout: o?.defaultLayout ?? DEFAULT_DOCK_LAYOUT,
+	knownPanelIds: o?.knownPanelIds ? new Set(o.knownPanelIds) : null
+});
+
 export function placedIds(layout: DockLayout): PanelId[] {
 	const ids = new Set<PanelId>();
 	for (const zone of ['left', 'right'] as DockZone[]) for (const col of layout[zone]) for (const id of col) ids.add(id);
@@ -118,13 +164,14 @@ export function placedIds(layout: DockLayout): PanelId[] {
 	return [...ids];
 }
 
-export function defaultDockLayout(): DockLayout {
+export function defaultDockLayout(opts?: DockOpts): DockLayout {
+	const d = resolveOpts(opts).defaultLayout;
 	return {
-		float: {},
-		width: { ...DEFAULT_DOCK_LAYOUT.width },
-		height: { ...DEFAULT_DOCK_LAYOUT.height },
-		left: DEFAULT_DOCK_LAYOUT.left.map((c) => [...c]),
-		right: DEFAULT_DOCK_LAYOUT.right.map((c) => [...c])
+		float: { ...d.float },
+		width: { ...d.width },
+		height: { ...d.height },
+		left: d.left.map((c) => [...c]),
+		right: d.right.map((c) => [...c])
 	};
 }
 
@@ -284,30 +331,33 @@ function isValidRect(value: unknown): value is FloatRect {
 function parseColumns(arr: unknown): DockColumn[] {
 	if (!Array.isArray(arr)) return [];
 	const cols: DockColumn[] = [];
+	const ok = (id: unknown): id is string => typeof id === 'string' && id.length > 0;
 	for (const entry of arr) {
 		if (Array.isArray(entry)) {
-			const col = entry.filter((id) => isPanelId(id)) as PanelId[];
+			const col = entry.filter(ok);
 			if (col.length) cols.push(col);
-		} else if (isPanelId(entry)) {
+		} else if (ok(entry)) {
 			cols.push([entry]);
 		}
 	}
 	return cols;
 }
 
-function parseDockLayout(parsed: null | Partial<DockLayout>): DockLayout {
-	if (!parsed || typeof parsed !== 'object') return defaultDockLayout();
+function parseDockLayout(parsed: null | Partial<DockLayout>, opts?: DockOpts): DockLayout {
+	const r = resolveOpts(opts);
+	if (!parsed || typeof parsed !== 'object') return defaultDockLayout(opts);
 
+	const allow = (id: string) => !r.knownPanelIds || r.knownPanelIds.has(id);
 	const seen = new Set<PanelId>();
 	const dedup = (cols: DockColumn[]) =>
-		cols.map((c) => c.filter((id) => (seen.has(id) ? false : (seen.add(id), true)))).filter((c) => c.length > 0);
+		cols.map((c) => c.filter((id) => (seen.has(id) || !allow(id) ? false : (seen.add(id), true)))).filter((c) => c.length > 0);
 	const left = dedup(parseColumns(parsed.left));
 	const right = dedup(parseColumns(parsed.right));
 
 	const float: DockLayout['float'] = {};
 	if (parsed.float && typeof parsed.float === 'object') {
 		for (const [id, rect] of Object.entries(parsed.float as Record<string, unknown>)) {
-			if (isPanelId(id) && !seen.has(id) && isValidRect(rect)) {
+			if (typeof id === 'string' && !seen.has(id) && allow(id) && isValidRect(rect)) {
 				float[id] = rect;
 				seen.add(id);
 			}
@@ -317,37 +367,48 @@ function parseDockLayout(parsed: null | Partial<DockLayout>): DockLayout {
 	const width: DockLayout['width'] = {};
 	if (parsed.width && typeof parsed.width === 'object') {
 		for (const [id, w] of Object.entries(parsed.width as Record<string, unknown>)) {
-			if (isPanelId(id) && typeof w === 'number') width[id] = w;
+			if (typeof id === 'string' && typeof w === 'number') width[id] = w;
 		}
 	}
 
 	const height: DockLayout['height'] = {};
 	if (parsed.height && typeof parsed.height === 'object') {
 		for (const [id, h] of Object.entries(parsed.height as Record<string, unknown>)) {
-			if (isPanelId(id) && typeof h === 'number') height[id] = h;
+			if (typeof id === 'string' && typeof h === 'number') height[id] = h;
 		}
 	}
 
-	for (const id of PANEL_KINDS) {
+	for (const zone of ['left', 'right'] as DockZone[]) {
+		for (const col of r.defaultLayout[zone]) {
+			const missing = col.filter((id) => !seen.has(id) && allow(id));
+			if (missing.length === 0) continue;
+			(zone === 'left' ? left : right).push(missing);
+			for (const id of missing) seen.add(id);
+		}
+	}
+
+	for (const id of r.autoFillKinds) {
 		if (seen.has(id)) continue;
-		(DEFAULT_DOCK_LAYOUT.left.some((c) => c.includes(id)) ? left : right).push([id]);
+		(r.defaultLayout.left.some((c) => c.includes(id)) ? left : right).push([id]);
 		seen.add(id);
 	}
 
 	return { left, right, float, width, height };
 }
 
-export function loadDockLayout(): DockLayout {
+export function loadDockLayout(opts?: DockOpts): DockLayout {
+	const r = resolveOpts(opts);
 	try {
-		return parseDockLayout(JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null'));
+		return parseDockLayout(JSON.parse(localStorage.getItem(r.storageKey) || 'null'), opts);
 	} catch {
-		return defaultDockLayout();
+		return defaultDockLayout(opts);
 	}
 }
 
-export function saveDockLayout(layout: DockLayout): void {
+export function saveDockLayout(layout: DockLayout, opts?: DockOpts): void {
+	const r = resolveOpts(opts);
 	try {
-		localStorage.setItem(STORAGE_KEY, JSON.stringify(layout));
+		localStorage.setItem(r.storageKey, JSON.stringify(layout));
 	} catch {
 		void 0;
 	}

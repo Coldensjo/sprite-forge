@@ -30,6 +30,7 @@ export const ItemList = ({ dragHandle }: { dragHandle?: DragHandleProps }) => {
 		currentPage,
 		setViewMode,
 		findSimilar,
+		formatConfig,
 		exportSheets,
 		goToLastItem,
 		importGeneral,
@@ -110,10 +111,11 @@ export const ItemList = ({ dragHandle }: { dragHandle?: DragHandleProps }) => {
 						<SelectValue />
 					</SelectTrigger>
 					<SelectContent>
-						<SelectItem value={ThingCategory.ITEM}>Item</SelectItem>
-						<SelectItem value={ThingCategory.OUTFIT}>Outfit</SelectItem>
-						<SelectItem value={ThingCategory.EFFECT}>Effect</SelectItem>
-						<SelectItem value={ThingCategory.MISSILE}>Missile</SelectItem>
+						{(data ? formatConfig.categories : TIBIA_FORMAT_CONFIG.categories).map((cat) => (
+							<SelectItem key={cat.id} value={cat.id}>
+								{cat.label}
+							</SelectItem>
+						))}
 					</SelectContent>
 				</Select>
 

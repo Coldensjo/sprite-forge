@@ -480,10 +480,10 @@ export const FindWindow = () => {
 	}, []);
 
 	useEffect(() => {
-		const loadSprites = async () => {
+		const run = async () => {
 			if (!data || !data.sprPath || searchResults.length === 0) return;
 
-			const { loadSpriteIds } = await import('~/lib/formats/tibia');
+			const { loadSprites } = await import('~/lib/formats/sprites');
 			const idsToLoad: number[] = [];
 
 			for (const result of searchResults) {
@@ -499,12 +499,12 @@ export const FindWindow = () => {
 			}
 
 			if (idsToLoad.length > 0) {
-				await loadSpriteIds(data.sprPath, idsToLoad, data.transparency, data.sprites);
+				await loadSprites(data, idsToLoad);
 				notifySpritesLoaded();
 			}
 		};
 
-		loadSprites();
+		run();
 	}, [searchResults, data, notifySpritesLoaded]);
 
 	useEffect(() => {

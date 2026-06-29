@@ -37,8 +37,9 @@ export const useSpriteList = () => {
 
 	const allSpriteIds = React.useMemo(() => {
 		if (!data) return [];
+		const count = Number.isSafeInteger(data.spritesCount) && data.spritesCount > 0 ? data.spritesCount : 0;
 		const ids: number[] = [];
-		for (let id = 1; id <= data.spritesCount; id++) {
+		for (let id = 1; id <= count; id++) {
 			ids.push(id);
 		}
 		return ids;
@@ -91,7 +92,7 @@ export const useSpriteList = () => {
 		let cancelled = false;
 
 		const loadSpritesForCurrentPage = async () => {
-			const { loadSpriteIds, loadSpriteIdsLz4 } = await import('~/lib/formats/tibia');
+			const { loadSprites, loadSpritesLz4 } = await import('~/lib/formats/sprites');
 
 			if (cancelled) return;
 
@@ -113,9 +114,9 @@ export const useSpriteList = () => {
 			if (uncached.length === 0) return;
 
 			if (uncached.length > 100) {
-				await loadSpriteIdsLz4(data.sprPath, spritesToLoad, data.transparency, data.sprites);
+				await loadSpritesLz4(data, spritesToLoad);
 			} else {
-				await loadSpriteIds(data.sprPath, spritesToLoad, data.transparency, data.sprites);
+				await loadSprites(data, spritesToLoad);
 			}
 
 			if (cancelled) return;
@@ -292,15 +293,12 @@ export const useSpriteList = () => {
 						img.onload = async () => {
 							URL.revokeObjectURL(url);
 
-							if (img.width % spriteSize !== 0 || img.height % spriteSize !== 0) {
-								alert(`Image dimensions must be multiples of ${spriteSize} pixels.\nCurrent size: ${img.width}x${img.height}`);
-								return;
-							}
+							const nonMultiple = img.width % spriteSize !== 0 || img.height % spriteSize !== 0;
+							const replaceMismatch = targetSpriteId !== undefined && (img.width !== spriteSize || img.height !== spriteSize);
 
-							if (targetSpriteId !== undefined && (img.width !== spriteSize || img.height !== spriteSize)) {
-								alert(
-									`When pasting into an existing sprite, image must be exactly ${spriteSize}x${spriteSize} pixels.\nCurrent size: ${img.width}x${img.height}`
-								);
+							if (nonMultiple || replaceMismatch) {
+								const bytes = new Uint8Array(await blob.arrayBuffer());
+								window.dispatchEvent(new CustomEvent('open-sprite-slicer', { detail: { bytes } }));
 								return;
 							}
 
@@ -406,8 +404,8 @@ export const useSpriteList = () => {
 			if (!data || !data.sprPath) return null;
 			const cached = data.sprites.get(id);
 			if (cached) return cached;
-			const { loadSpriteIds } = await import('~/lib/formats/tibia');
-			await loadSpriteIds(data.sprPath, [id], data.transparency, data.sprites);
+			const { loadSprites } = await import('~/lib/formats/sprites');
+			await loadSprites(data, [id]);
 			notifySpritesLoaded();
 			return data.sprites.get(id) ?? null;
 		},

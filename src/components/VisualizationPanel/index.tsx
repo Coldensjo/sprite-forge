@@ -3,11 +3,12 @@ import { useRef, useMemo, useState, useEffect } from 'react';
 
 import { cn } from '~/lib/utils';
 import { Button } from '~/components/ui/button';
+import { loadSprites } from '~/lib/formats/sprites';
 import { DragHandleProps } from '~/usecase/util/dock';
 import { CheckerBoard } from '~/components/CheckerBoard';
+import { getCategoryRenderConfig } from '~/lib/formats/tibia';
 import { SpriteCanvas } from '~/components/commons/SpriteCanvas';
 import { useAssetData } from '~/usecase/context/AssetDataContext';
-import { loadSpriteIds, getCategoryRenderConfig } from '~/lib/formats/tibia';
 import { getPingPongFrame, AnimationDirection } from '~/lib/formats/tibia/animation';
 
 export const VisualizationPanel = ({ dragHandle }: { dragHandle?: DragHandleProps }) => {
@@ -72,7 +73,7 @@ export const VisualizationPanel = ({ dragHandle }: { dragHandle?: DragHandleProp
 
 		if (spriteIds.size === 0) return;
 
-		loadSpriteIds(data.sprPath, Array.from(spriteIds), data.transparency, data.sprites).then(() => {
+		loadSprites(data, Array.from(spriteIds)).then(() => {
 			notifySpritesLoaded();
 		});
 	}, [highlightedItemId, item, data, notifySpritesLoaded]);

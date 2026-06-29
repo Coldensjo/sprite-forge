@@ -22,7 +22,8 @@ export async function exportObjectSheets(things: ThingType[], data: AssetData): 
 					thing,
 					path: filePath,
 					sprPath: data.sprPath,
-					transparent: data.transparency
+					transparent: data.transparency,
+					scripted: (data.formatId ?? 'tibia') !== 'tibia'
 				});
 				exported++;
 			} catch (err) {
@@ -58,7 +59,8 @@ export async function exportObjectSheet(thing: ThingType, data: AssetData) {
 			thing,
 			path: filePath,
 			sprPath: data.sprPath,
-			transparent: data.transparency
+			transparent: data.transparency,
+			scripted: (data.formatId ?? 'tibia') !== 'tibia'
 		});
 	} catch (err) {
 		log.error('Export failed', err);

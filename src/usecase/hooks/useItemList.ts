@@ -3,6 +3,7 @@ import { open } from '@tauri-apps/plugin-dialog';
 
 import { useToast } from './useToast';
 import { importObjectSheet } from '~/lib/formats/tibia';
+import { useConfirm } from '~/usecase/context/ConfirmContext';
 import { useTransfer } from '~/usecase/context/TransferContext';
 import { useListViewMode } from '~/usecase/hooks/useListViewMode';
 import { useAssetData } from '~/usecase/context/AssetDataContext';
@@ -45,6 +46,7 @@ export const useItemList = () => {
 		deleteServerItemsForClients
 	} = useAssetData();
 	const { toast } = useToast();
+	const confirmDialog = useConfirm();
 	const { openExport, openImport } = useTransfer();
 	const { viewMode, setViewMode } = useListViewMode('get_item_list_view_mode', 'set_item_list_view_mode');
 	const [currentPage, setCurrentPage] = React.useState<number>(1);
@@ -170,7 +172,7 @@ export const useItemList = () => {
 		let cancelled = false;
 
 		const loadSpritesProgressively = async () => {
-			const { loadSpriteIds, loadSpriteIdsLz4 } = await import('~/lib/formats/tibia');
+			const { loadSprites, loadSpritesLz4 } = await import('~/lib/formats/sprites');
 			if (cancelled) return;
 
 			const thumbIds: number[] = [];
@@ -188,9 +190,9 @@ export const useItemList = () => {
 
 			if (thumbIds.length > 0 && !cancelled) {
 				if (thumbIds.length > 100) {
-					await loadSpriteIdsLz4(data.sprPath, thumbIds, data.transparency, data.sprites);
+					await loadSpritesLz4(data, thumbIds);
 				} else {
-					await loadSpriteIds(data.sprPath, thumbIds, data.transparency, data.sprites);
+					await loadSprites(data, thumbIds);
 				}
 				if (!cancelled) notifySpritesLoaded();
 			}
@@ -221,9 +223,9 @@ export const useItemList = () => {
 			if (prefetchIds.length > 0 && !cancelled) {
 				try {
 					if (prefetchIds.length > 100) {
-						await loadSpriteIdsLz4(data.sprPath, prefetchIds, data.transparency, data.sprites);
+						await loadSpritesLz4(data, prefetchIds);
 					} else {
-						await loadSpriteIds(data.sprPath, prefetchIds, data.transparency, data.sprites);
+						await loadSprites(data, prefetchIds);
 					}
 				} catch {
 					/* noop */
@@ -565,18 +567,26 @@ export const useItemList = () => {
 
 		const sfp = paths.find((p) => /\.sfp$/i.test(p));
 		if (sfp) {
-			openImport({ paths: [sfp], source: 'sfp' });
+			openImport({ paths: [sfp], source: 'sfp', replaceId: item.id, replaceCategory: selectedCategory });
 			return;
 		}
 
 		const obds = paths.filter((p) => /\.obd$/i.test(p));
 		if (obds.length > 0) {
-			openImport({ paths: obds, source: 'obd' });
+			openImport({ paths: obds, source: 'obd', replaceId: item.id, replaceCategory: selectedCategory });
 			return;
 		}
 
 		const image = paths.find((p) => /\.(png|bmp|jpe?g)$/i.test(p));
 		if (!image) return;
+
+		const ok = await confirmDialog({
+			variant: 'warning',
+			confirmLabel: 'Replace',
+			title: `Replace item #${item.id}?`,
+			description: 'The selected image will overwrite this item.'
+		});
+		if (!ok) return;
 
 		const result = await importObjectSheet(item, data, image, {
 			isNew: isNewItem(item.id, selectedCategory)
@@ -765,6 +775,7 @@ export const useItemList = () => {
 		currentPage,
 		setViewMode,
 		exportSheet,
+		formatConfig,
 		exportSheets,
 		goToLastItem,
 		importGeneral,

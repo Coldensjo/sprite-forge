@@ -1,11 +1,12 @@
-export enum ThingCategory {
-	ITEM = 'item',
-	OUTFIT = 'outfit',
-	EFFECT = 'effect',
-	MISSILE = 'missile'
-}
+export type ThingCategory = string;
+export const ThingCategory = {
+	ITEM: 'item' as ThingCategory,
+	OUTFIT: 'outfit' as ThingCategory,
+	EFFECT: 'effect' as ThingCategory,
+	MISSILE: 'missile' as ThingCategory
+} as const;
 
-export const THING_CATEGORY_VALUES: Record<ThingCategory, number> = {
+export const THING_CATEGORY_VALUES: Record<string, number> = {
 	[ThingCategory.ITEM]: 1,
 	[ThingCategory.OUTFIT]: 2,
 	[ThingCategory.EFFECT]: 3,
@@ -230,7 +231,7 @@ export interface ThingType {
 	animateAlways: boolean;
 	marketCategory: number;
 	frameGroups?: number[];
-	category: ThingCategory;
+	category: ThingCategory | string;
 	isGroundBorder: boolean;
 	noMoveAnimation: boolean;
 	isFluidContainer: boolean;
@@ -305,6 +306,7 @@ export interface AssetData {
 	sprPath?: string;
 	otbPath?: string;
 	xmlPath?: string;
+	formatId?: string;
 	extended: boolean;
 	itemsCount: number;
 	spritesCount: number;
@@ -322,6 +324,7 @@ export interface AssetData {
 	outfits: Map<number, ThingType>;
 	effects: Map<number, ThingType>;
 	missiles: Map<number, ThingType>;
+	things?: Map<string, Map<number, ThingType>>;
 	serverItems?: import('./otb').ServerItemData;
 }
 
@@ -367,7 +370,7 @@ export function getSpriteIndex(
 	);
 }
 
-export function getCategoryMap(data: AssetData, category: ThingCategory): Map<number, ThingType> {
+export function getCategoryMap(data: AssetData, category: ThingCategory | string): Map<number, ThingType> {
 	switch (category) {
 		case ThingCategory.ITEM:
 			return data.items;
@@ -378,9 +381,16 @@ export function getCategoryMap(data: AssetData, category: ThingCategory): Map<nu
 		case ThingCategory.MISSILE:
 			return data.missiles;
 	}
+	if (!data.things) data.things = new Map();
+	let m = data.things.get(category);
+	if (!m) {
+		m = new Map();
+		data.things.set(category, m);
+	}
+	return m;
 }
 
-export function getCategoryCount(data: AssetData, category: ThingCategory): number {
+export function getCategoryCount(data: AssetData, category: ThingCategory | string): number {
 	switch (category) {
 		case ThingCategory.ITEM:
 			return data.itemsCount;
@@ -391,34 +401,35 @@ export function getCategoryCount(data: AssetData, category: ThingCategory): numb
 		case ThingCategory.MISSILE:
 			return data.missilesCount;
 	}
+	return data.things?.get(category)?.size ?? 0;
 }
 
-export function setCategoryCount(data: AssetData, category: ThingCategory, count: number): void {
+export function setCategoryCount(data: AssetData, category: ThingCategory | string, count: number): void {
 	switch (category) {
 		case ThingCategory.ITEM:
 			data.itemsCount = count;
-			break;
+			return;
 		case ThingCategory.OUTFIT:
 			data.outfitsCount = count;
-			break;
+			return;
 		case ThingCategory.EFFECT:
 			data.effectsCount = count;
-			break;
+			return;
 		case ThingCategory.MISSILE:
 			data.missilesCount = count;
-			break;
+			return;
 	}
 }
 
-export function getCategoryStartId(config: FormatConfig, category: ThingCategory): number {
+export function getCategoryStartId(config: FormatConfig, category: ThingCategory | string): number {
 	return config.categories.find((c) => c.id === category)?.startId ?? 1;
 }
 
-export function getCategoryRenderConfig(config: FormatConfig, category: ThingCategory): undefined | CategoryRenderConfig {
+export function getCategoryRenderConfig(config: FormatConfig, category: ThingCategory | string): undefined | CategoryRenderConfig {
 	return config.categories.find((c) => c.id === category)?.rendering;
 }
 
-export function createThingType(id: number, category: ThingCategory, config?: FormatConfig): ThingType {
+export function createThingType(id: number, category: ThingCategory | string, config?: FormatConfig): ThingType {
 	const thing: ThingType = {
 		id,
 		category,
@@ -682,7 +693,43 @@ export const CLIENT_VERSIONS: ClientVersion[] = [
 	},
 	{
 		value: 850,
-		label: '8.50',
+		label: '8.50 v1',
+		supportsExtended: false,
+		datSignature: 0x4a49c5eb,
+		sprSignature: 0x4a44fd4e,
+		supportsAlphaChannel: false,
+		supportsFrameDurations: false
+	},
+	{
+		value: 850,
+		label: '8.50 v2',
+		supportsExtended: false,
+		datSignature: 0x4a4cc0dc,
+		sprSignature: 0x4a44fd4e,
+		supportsAlphaChannel: false,
+		supportsFrameDurations: false
+	},
+	{
+		value: 850,
+		label: '8.50 v3',
+		supportsExtended: false,
+		datSignature: 0x4ae97492,
+		sprSignature: 0x4acb5230,
+		supportsAlphaChannel: false,
+		supportsFrameDurations: false
+	},
+	{
+		value: 852,
+		label: '8.52',
+		supportsExtended: false,
+		datSignature: 0x4a4cc0dc,
+		sprSignature: 0x4a44fd4e,
+		supportsAlphaChannel: false,
+		supportsFrameDurations: false
+	},
+	{
+		value: 853,
+		label: '8.53',
 		supportsExtended: false,
 		datSignature: 0x4ae97492,
 		sprSignature: 0x4acb5230,
@@ -691,7 +738,25 @@ export const CLIENT_VERSIONS: ClientVersion[] = [
 	},
 	{
 		value: 854,
-		label: '8.54',
+		label: '8.54 v1',
+		supportsExtended: false,
+		datSignature: 0x4b1e2caa,
+		sprSignature: 0x4b1e2c87,
+		supportsAlphaChannel: false,
+		supportsFrameDurations: false
+	},
+	{
+		value: 854,
+		label: '8.54 v2',
+		supportsExtended: false,
+		datSignature: 0x4b0d46a9,
+		sprSignature: 0x4b0d3aff,
+		supportsAlphaChannel: false,
+		supportsFrameDurations: false
+	},
+	{
+		value: 854,
+		label: '8.54 v3',
 		supportsExtended: false,
 		datSignature: 0x4b28b89e,
 		sprSignature: 0x4b1e2c87,
@@ -709,7 +774,7 @@ export const CLIENT_VERSIONS: ClientVersion[] = [
 	},
 	{
 		value: 860,
-		label: '8.60',
+		label: '8.60 v1',
 		supportsExtended: false,
 		datSignature: 0x4c28b721,
 		sprSignature: 0x4c220594,
@@ -753,6 +818,141 @@ export const CLIENT_VERSIONS: ClientVersion[] = [
 		supportsFrameDurations: false
 	},
 	{
+		value: 871,
+		label: '8.71',
+		supportsExtended: false,
+		datSignature: 0x4d41979e,
+		sprSignature: 0x4d3d65d0,
+		supportsAlphaChannel: false,
+		supportsFrameDurations: false
+	},
+	{
+		value: 872,
+		label: '8.72',
+		supportsExtended: false,
+		datSignature: 0x4dad1a1a,
+		sprSignature: 0x4dad1a32,
+		supportsAlphaChannel: false,
+		supportsFrameDurations: false
+	},
+	{
+		value: 900,
+		label: '9.00',
+		supportsExtended: false,
+		datSignature: 0x4dbaa20b,
+		sprSignature: 0x4dad1a32,
+		supportsAlphaChannel: false,
+		supportsFrameDurations: false
+	},
+	{
+		value: 910,
+		label: '9.10',
+		supportsExtended: false,
+		datSignature: 0x4e12daff,
+		sprSignature: 0x4e12db27,
+		supportsAlphaChannel: false,
+		supportsFrameDurations: false
+	},
+	{
+		value: 920,
+		label: '9.20',
+		supportsExtended: false,
+		datSignature: 0x4e807c08,
+		sprSignature: 0x4e807c23,
+		supportsAlphaChannel: false,
+		supportsFrameDurations: false
+	},
+	{
+		value: 940,
+		label: '9.40',
+		supportsExtended: false,
+		datSignature: 0x4ee71de5,
+		sprSignature: 0x4ee71e06,
+		supportsAlphaChannel: false,
+		supportsFrameDurations: false
+	},
+	{
+		value: 944,
+		label: '9.44 v0',
+		supportsExtended: false,
+		datSignature: 0x4f0eefbb,
+		sprSignature: 0x4f0eefef,
+		supportsAlphaChannel: false,
+		supportsFrameDurations: false
+	},
+	{
+		value: 944,
+		label: '9.44 v1',
+		supportsExtended: false,
+		datSignature: 0x4f105168,
+		sprSignature: 0x4f1051d7,
+		supportsAlphaChannel: false,
+		supportsFrameDurations: false
+	},
+	{
+		value: 944,
+		label: '9.44 v2',
+		supportsExtended: false,
+		datSignature: 0x4f16c0d7,
+		sprSignature: 0x4f1051d7,
+		supportsAlphaChannel: false,
+		supportsFrameDurations: false
+	},
+	{
+		value: 944,
+		label: '9.44 v3',
+		supportsExtended: false,
+		datSignature: 0x4f3131cf,
+		sprSignature: 0x4f3131f6,
+		supportsAlphaChannel: false,
+		supportsFrameDurations: false
+	},
+	{
+		value: 946,
+		label: '9.46',
+		supportsExtended: false,
+		datSignature: 0x4f75b7ab,
+		sprSignature: 0x4f5dcef7,
+		supportsAlphaChannel: false,
+		supportsFrameDurations: false
+	},
+	{
+		value: 950,
+		label: '9.50',
+		supportsExtended: false,
+		datSignature: 0x4f75b7ab,
+		sprSignature: 0x4f75b7cd,
+		supportsAlphaChannel: false,
+		supportsFrameDurations: false
+	},
+	{
+		value: 952,
+		label: '9.52',
+		supportsExtended: false,
+		datSignature: 0x4f857f6c,
+		sprSignature: 0x4f857f8e,
+		supportsAlphaChannel: false,
+		supportsFrameDurations: false
+	},
+	{
+		value: 953,
+		label: '9.53',
+		supportsExtended: false,
+		datSignature: 0x4fa11252,
+		sprSignature: 0x4fa11282,
+		supportsAlphaChannel: false,
+		supportsFrameDurations: false
+	},
+	{
+		value: 954,
+		label: '9.54',
+		supportsExtended: false,
+		datSignature: 0x4fd5956b,
+		sprSignature: 0x4fd595b7,
+		supportsAlphaChannel: false,
+		supportsFrameDurations: false
+	},
+	{
 		value: 960,
 		label: '9.60',
 		supportsExtended: true,
@@ -762,11 +962,74 @@ export const CLIENT_VERSIONS: ClientVersion[] = [
 		supportsFrameDurations: false
 	},
 	{
+		value: 961,
+		label: '9.61',
+		supportsExtended: true,
+		datSignature: 0x50226f9d,
+		sprSignature: 0x50226fbd,
+		supportsAlphaChannel: false,
+		supportsFrameDurations: false
+	},
+	{
+		value: 963,
+		label: '9.63',
+		supportsExtended: true,
+		datSignature: 0x503cb933,
+		sprSignature: 0x503cb954,
+		supportsAlphaChannel: false,
+		supportsFrameDurations: false
+	},
+	{
+		value: 970,
+		label: '9.70',
+		supportsExtended: true,
+		datSignature: 0x5072a490,
+		sprSignature: 0x5072a567,
+		supportsAlphaChannel: false,
+		supportsFrameDurations: false
+	},
+	{
 		value: 980,
 		label: '9.80',
 		supportsExtended: true,
 		datSignature: 0x50c70674,
 		sprSignature: 0x50c70753,
+		supportsAlphaChannel: false,
+		supportsFrameDurations: false
+	},
+	{
+		value: 981,
+		label: '9.81',
+		supportsExtended: true,
+		datSignature: 0x50d1c5b6,
+		sprSignature: 0x50d1c685,
+		supportsAlphaChannel: false,
+		supportsFrameDurations: false
+	},
+	{
+		value: 982,
+		label: '9.82',
+		supportsExtended: true,
+		datSignature: 0x512cad09,
+		sprSignature: 0x512cad68,
+		supportsAlphaChannel: false,
+		supportsFrameDurations: false
+	},
+	{
+		value: 983,
+		label: '9.83',
+		supportsExtended: true,
+		datSignature: 0x51407b67,
+		sprSignature: 0x51407bc7,
+		supportsAlphaChannel: false,
+		supportsFrameDurations: false
+	},
+	{
+		value: 985,
+		label: '9.85',
+		supportsExtended: true,
+		datSignature: 0x51641a1b,
+		sprSignature: 0x51641a84,
 		supportsAlphaChannel: false,
 		supportsFrameDurations: false
 	},
@@ -798,11 +1061,74 @@ export const CLIENT_VERSIONS: ClientVersion[] = [
 		supportsFrameDurations: false
 	},
 	{
+		value: 1021,
+		label: '10.21',
+		supportsExtended: true,
+		datSignature: 0x526a5068,
+		sprSignature: 0x526a5090,
+		supportsAlphaChannel: false,
+		supportsFrameDurations: false
+	},
+	{
 		value: 1030,
 		label: '10.30',
 		supportsExtended: true,
 		datSignature: 0x52a59036,
 		sprSignature: 0x52a5905f,
+		supportsAlphaChannel: false,
+		supportsFrameDurations: false
+	},
+	{
+		value: 1031,
+		label: '10.31',
+		supportsExtended: true,
+		datSignature: 0x52aed581,
+		sprSignature: 0x52aed5a7,
+		supportsAlphaChannel: false,
+		supportsFrameDurations: false
+	},
+	{
+		value: 1032,
+		label: '10.32',
+		supportsExtended: true,
+		datSignature: 0x52d8d0a9,
+		sprSignature: 0x52d8d0ce,
+		supportsAlphaChannel: false,
+		supportsFrameDurations: false
+	},
+	{
+		value: 1034,
+		label: '10.34',
+		supportsExtended: true,
+		datSignature: 0x52e74ab5,
+		sprSignature: 0x52e74ada,
+		supportsAlphaChannel: false,
+		supportsFrameDurations: false
+	},
+	{
+		value: 1035,
+		label: '10.35',
+		supportsExtended: true,
+		datSignature: 0x52fdfc2c,
+		sprSignature: 0x52fdfc54,
+		supportsAlphaChannel: false,
+		supportsFrameDurations: false
+	},
+	{
+		value: 1036,
+		label: '10.36',
+		supportsExtended: true,
+		datSignature: 0x53159c7e,
+		sprSignature: 0x53159ca9,
+		supportsAlphaChannel: false,
+		supportsFrameDurations: false
+	},
+	{
+		value: 1037,
+		label: '10.37',
+		supportsExtended: true,
+		datSignature: 0x531ea82e,
+		sprSignature: 0x531ea856,
 		supportsAlphaChannel: false,
 		supportsFrameDurations: false
 	},
@@ -816,11 +1142,83 @@ export const CLIENT_VERSIONS: ClientVersion[] = [
 		supportsFrameDurations: false
 	},
 	{
+		value: 1039,
+		label: '10.39',
+		supportsExtended: true,
+		datSignature: 0x535a50ad,
+		sprSignature: 0x535a50d5,
+		supportsAlphaChannel: false,
+		supportsFrameDurations: false
+	},
+	{
+		value: 1040,
+		label: '10.40',
+		supportsExtended: true,
+		datSignature: 0x5379984d,
+		sprSignature: 0x53799876,
+		supportsAlphaChannel: false,
+		supportsFrameDurations: false
+	},
+	{
+		value: 1041,
+		label: '10.41',
+		supportsExtended: true,
+		datSignature: 0x5383504e,
+		sprSignature: 0x53835077,
+		supportsAlphaChannel: false,
+		supportsFrameDurations: false
+	},
+	{
 		value: 1050,
 		label: '10.50',
 		supportsExtended: true,
 		datSignature: 0x53b6460e,
 		sprSignature: 0x53b64639,
+		supportsAlphaChannel: false,
+		supportsFrameDurations: true
+	},
+	{
+		value: 1051,
+		label: '10.51',
+		supportsExtended: true,
+		datSignature: 0x53c8cc17,
+		sprSignature: 0x53c8cc3f,
+		supportsAlphaChannel: false,
+		supportsFrameDurations: true
+	},
+	{
+		value: 1052,
+		label: '10.52',
+		supportsExtended: true,
+		datSignature: 0x53e898bd,
+		sprSignature: 0x53e898e5,
+		supportsAlphaChannel: false,
+		supportsFrameDurations: true
+	},
+	{
+		value: 1053,
+		label: '10.53',
+		supportsExtended: true,
+		datSignature: 0x53fad76e,
+		sprSignature: 0x53fad799,
+		supportsAlphaChannel: false,
+		supportsFrameDurations: true
+	},
+	{
+		value: 1054,
+		label: '10.54',
+		supportsExtended: true,
+		datSignature: 0x540d3a47,
+		sprSignature: 0x53e898e5,
+		supportsAlphaChannel: false,
+		supportsFrameDurations: true
+	},
+	{
+		value: 1055,
+		label: '10.55',
+		supportsExtended: true,
+		datSignature: 0x54128727,
+		sprSignature: 0x54128755,
 		supportsAlphaChannel: false,
 		supportsFrameDurations: true
 	},
@@ -834,11 +1232,236 @@ export const CLIENT_VERSIONS: ClientVersion[] = [
 		supportsFrameDurations: true
 	},
 	{
+		value: 1057,
+		label: '10.57',
+		supportsExtended: true,
+		datSignature: 0x542535f9,
+		sprSignature: 0x54253627,
+		supportsAlphaChannel: false,
+		supportsFrameDurations: true
+	},
+	{
+		value: 1058,
+		label: '10.58',
+		supportsExtended: true,
+		datSignature: 0x542d12e7,
+		sprSignature: 0x542d1315,
+		supportsAlphaChannel: false,
+		supportsFrameDurations: true
+	},
+	{
+		value: 1059,
+		label: '10.59',
+		supportsExtended: true,
+		datSignature: 0x5434084b,
+		sprSignature: 0x54340879,
+		supportsAlphaChannel: false,
+		supportsFrameDurations: true
+	},
+	{
+		value: 1060,
+		label: '10.60',
+		supportsExtended: true,
+		datSignature: 0x5448d9c7,
+		sprSignature: 0x5448da10,
+		supportsAlphaChannel: false,
+		supportsFrameDurations: true
+	},
+	{
+		value: 1061,
+		label: '10.61',
+		supportsExtended: true,
+		datSignature: 0x5448d9c7,
+		sprSignature: 0x5448da10,
+		supportsAlphaChannel: false,
+		supportsFrameDurations: true
+	},
+	{
+		value: 1062,
+		label: '10.62',
+		supportsExtended: true,
+		datSignature: 0x54622638,
+		sprSignature: 0x54622667,
+		supportsAlphaChannel: false,
+		supportsFrameDurations: true
+	},
+	{
+		value: 1063,
+		label: '10.63',
+		supportsExtended: true,
+		datSignature: 0x546b502a,
+		sprSignature: 0x546b505e,
+		supportsAlphaChannel: false,
+		supportsFrameDurations: true
+	},
+	{
+		value: 1064,
+		label: '10.64',
+		supportsExtended: true,
+		datSignature: 0x547f05be,
+		sprSignature: 0x547f0632,
+		supportsAlphaChannel: false,
+		supportsFrameDurations: true
+	},
+	{
+		value: 1070,
+		label: '10.70',
+		supportsExtended: true,
+		datSignature: 0x5481bb97,
+		sprSignature: 0x5481bc06,
+		supportsAlphaChannel: false,
+		supportsFrameDurations: true
+	},
+	{
+		value: 1071,
+		label: '10.71',
+		datSignature: 0x334f,
+		supportsExtended: true,
+		sprSignature: 0x548e9efe,
+		supportsAlphaChannel: false,
+		supportsFrameDurations: true
+	},
+	{
+		value: 1072,
+		label: '10.72',
+		datSignature: 0x3729,
+		supportsExtended: true,
+		sprSignature: 0x54b37b99,
+		supportsAlphaChannel: false,
+		supportsFrameDurations: true
+	},
+	{
+		value: 1073,
+		label: '10.73',
+		datSignature: 0x374d,
+		supportsExtended: true,
+		sprSignature: 0x54bc95ae,
+		supportsAlphaChannel: false,
+		supportsFrameDurations: true
+	},
+	{
+		value: 1074,
+		label: '10.74',
+		datSignature: 0x375e,
+		supportsExtended: true,
+		sprSignature: 0x54c5fab2,
+		supportsAlphaChannel: false,
+		supportsFrameDurations: true
+	},
+	{
+		value: 1075,
+		label: '10.75',
+		datSignature: 0x3775,
+		supportsExtended: true,
+		sprSignature: 0x54d85085,
+		supportsAlphaChannel: false,
+		supportsFrameDurations: true
+	},
+	{
+		value: 1076,
+		label: '10.76',
+		datSignature: 0x37df,
+		supportsExtended: true,
+		sprSignature: 0x54f03ce9,
+		supportsAlphaChannel: false,
+		supportsFrameDurations: true
+	},
+	{
+		value: 1077,
+		label: '10.77',
+		datSignature: 0x38de,
+		supportsExtended: true,
+		sprSignature: 0x5525213d,
+		supportsAlphaChannel: false,
+		supportsFrameDurations: true
+	},
+	{
+		value: 1090,
+		label: '10.90',
+		datSignature: 0x3f26,
+		supportsExtended: true,
+		sprSignature: 0x565ee171,
+		supportsAlphaChannel: false,
+		supportsFrameDurations: true
+	},
+	{
+		value: 1091,
+		label: '10.91',
+		datSignature: 0x3f81,
+		supportsExtended: true,
+		sprSignature: 0x56bc8198,
+		supportsAlphaChannel: false,
+		supportsFrameDurations: true
+	},
+	{
+		value: 1092,
+		label: '10.92',
+		datSignature: 0x4086,
+		supportsExtended: true,
+		sprSignature: 0x570742b8,
+		supportsAlphaChannel: false,
+		supportsFrameDurations: true
+	},
+	{
+		value: 1093,
+		label: '10.93 test',
+		datSignature: 0x40ff,
+		supportsExtended: true,
+		sprSignature: 0x57161dea,
+		supportsAlphaChannel: false,
+		supportsFrameDurations: true
+	},
+	{
+		value: 1093,
+		label: '10.93',
+		datSignature: 0x413f,
+		supportsExtended: true,
+		sprSignature: 0x5726e657,
+		supportsAlphaChannel: false,
+		supportsFrameDurations: true
+	},
+	{
+		value: 1094,
+		label: '10.94',
+		datSignature: 0x41e5,
+		supportsExtended: true,
+		sprSignature: 0x57459d43,
+		supportsAlphaChannel: false,
+		supportsFrameDurations: true
+	},
+	{
+		value: 1095,
+		label: '10.95',
+		datSignature: 0x41f3,
+		supportsExtended: true,
+		sprSignature: 0x575a84bd,
+		supportsAlphaChannel: false,
+		supportsFrameDurations: true
+	},
+	{
 		value: 1098,
 		label: '10.98',
 		datSignature: 0x42a3,
 		supportsExtended: true,
 		sprSignature: 0x57bbd603,
+		supportsAlphaChannel: false,
+		supportsFrameDurations: true
+	},
+	{
+		value: 1099,
+		label: '10.99',
+		datSignature: 0x4347,
+		supportsExtended: true,
+		sprSignature: 0x57ff106b,
+		supportsAlphaChannel: false,
+		supportsFrameDurations: true
+	},
+	{
+		value: 1286,
+		label: '12.86',
+		datSignature: 0x4a10,
+		supportsExtended: true,
+		sprSignature: 0x59e48e02,
 		supportsAlphaChannel: false,
 		supportsFrameDurations: true
 	}

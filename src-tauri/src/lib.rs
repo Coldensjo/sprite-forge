@@ -41,6 +41,13 @@ use import_store::{thing_pixel_hash, ImportRecord, ImportSrc, ImportStore, Impor
 mod otb;
 use otb::{read_otb_file, write_otb_file};
 
+mod lua_host;
+use lua_host::{LuaHost, LuaState};
+mod lua_bridge;
+mod lua_ui;
+mod lua_format;
+use lua_format::{ForgeAssetsState, ForgeItemsState, ForgeThingsState};
+
 #[derive(Serialize, Deserialize)]
 struct FileBytes(#[serde(with = "serde_bytes")] Vec<u8>);
 
@@ -1230,10 +1237,10 @@ fn export_object_sheet_rust(
     spr_path: String,
     path: String,
     transparent: bool,
+    scripted: bool,
     spr_state: tauri::State<SprManagerState>,
+    forge_assets: tauri::State<ForgeAssetsState>,
 ) -> Result<(), String> {
-    let mut manager = spr_state.lock().map_err(|e| format!("Lock error: {}", e))?;
-
     let mut groups: Vec<FrameGroup> = Vec::new();
     if let Some(ref fgs) = thing.frame_groups_data {
         if !fgs.is_empty() {
@@ -1305,14 +1312,26 @@ fn export_object_sheet_rust(
         }
     }
     
-    let sprite_data_list = manager.read_sprites_list(&spr_path, sprite_ids)?;
-
     use std::collections::HashMap;
-    let mut sprite_map = HashMap::new();
-    for sprite in sprite_data_list {
-        sprite_map.insert(sprite.id, sprite);
+    let mut rgba_map: HashMap<u32, Vec<u8>> = HashMap::new();
+    if scripted {
+        let guard = forge_assets.lock().map_err(|e| format!("Lock error: {}", e))?;
+        let assets = guard.as_ref().ok_or("no scripted assets loaded")?;
+        for id in &sprite_ids {
+            if let Some(px) = assets.rgba(*id) {
+                rgba_map.entry(*id).or_insert(px);
+            }
+        }
+    } else {
+        let mut manager = spr_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+        let sprite_data_list = manager.read_sprites_list(&spr_path, sprite_ids)?;
+        for sprite in sprite_data_list {
+            if !sprite.is_empty {
+                rgba_map.insert(sprite.id, decompress_to_rgba(&sprite.compressed_pixels, transparent));
+            }
+        }
     }
-    
+
     let mut sheet = RgbaImage::new(canvas_width, canvas_height);
     
     for (i, group) in groups.iter().enumerate() {
@@ -1340,15 +1359,12 @@ fn export_object_sheet_rust(
                                      let index = get_sprite_index(group, w as u32, h as u32, l as u32, x as u32, y as u32, z as u32, f as u32);
                                      if index < group.sprite_index.len() {
                                          let sprite_id = group.sprite_index[index];
-                                         if let Some(sprite) = sprite_map.get(&sprite_id) {
-                                             if !sprite.is_empty {
-                                                 let rgba = decompress_to_rgba(&sprite.compressed_pixels, transparent);
-                                                 if let Some(img_buffer) = RgbaImage::from_raw(SPRITE_SIZE, SPRITE_SIZE, rgba) {
-                                                     let px = ((group.width as u32 - w as u32 - 1) * SPRITE_SIZE);
-                                                     let py = ((group.height as u32 - h as u32 - 1) * SPRITE_SIZE);
-                                                     
-                                                     imageops::overlay(&mut sheet, &img_buffer, (fx + px) as i64, (fy + py) as i64);
-                                                 }
+                                         if let Some(rgba) = rgba_map.get(&sprite_id) {
+                                             if let Some(img_buffer) = RgbaImage::from_raw(SPRITE_SIZE, SPRITE_SIZE, rgba.clone()) {
+                                                 let px = ((group.width as u32 - w as u32 - 1) * SPRITE_SIZE);
+                                                 let py = ((group.height as u32 - h as u32 - 1) * SPRITE_SIZE);
+
+                                                 imageops::overlay(&mut sheet, &img_buffer, (fx + px) as i64, (fy + py) as i64);
                                              }
                                          }
                                      }
@@ -2559,6 +2575,21 @@ pub fn run() {
         }
     };
 
+    let lua_host: LuaState = {
+        let mut h = LuaHost::new(lua_host::scripts_dir());
+        if let Err(e) = h.load_all() {
+            logger::log("WARN", &format!("Lua scripts not loaded: {}", e));
+            h.last_error = Some(e);
+        } else {
+            logger::log("INFO", &format!("Loaded {} Lua script(s)", h.loaded));
+        }
+        Arc::new(Mutex::new(h))
+    };
+
+    let forge_assets: ForgeAssetsState = Arc::new(Mutex::new(None));
+    let forge_things: ForgeThingsState = Arc::new(Mutex::new(Vec::new()));
+    let forge_items: ForgeItemsState = Arc::new(Mutex::new(lua_format::ItemDb::default()));
+
     logger::session_start();
 
     tauri::Builder::default()
@@ -2574,6 +2605,10 @@ pub fn run() {
         .manage(dat_manager)
         .manage(format_manager)
         .manage(import_store)
+        .manage(lua_host)
+        .manage(forge_assets)
+        .manage(forge_things)
+        .manage(forge_items)
         .invoke_handler(tauri::generate_handler![
             read_file,
             read_file_text,
@@ -2648,7 +2683,31 @@ pub fn run() {
             import_dup_indices,
             import_stats,
             import_clear,
-            set_window_acrylic
+            set_window_acrylic,
+            lua_host::list_scripts,
+            lua_host::read_script,
+            lua_host::write_script,
+            lua_host::reload_scripts,
+            lua_bridge::forge_ui_config,
+            lua_bridge::forge_app_config,
+            lua_bridge::registered_formats,
+            lua_bridge::forge_list_formats,
+            lua_ui::forge_panels,
+            lua_ui::forge_panel_list,
+            lua_ui::forge_dispatch,
+            lua_ui::forge_command,
+            lua_format::forge_load_assets,
+            lua_format::forge_load_itemdb,
+            lua_format::forge_read_sprites,
+            lua_format::forge_things,
+            lua_format::forge_item_name,
+            lua_format::forge_item_names,
+            lua_format::forge_client_id,
+            lua_format::forge_server_id,
+            lua_format::forge_item_sprite,
+            lua_format::forge_save_assets,
+            lua_format::forge_set_sprites,
+            lua_format::forge_save_itemdb
         ])
         .setup(move |app| {
             #[cfg(target_os = "macos")]

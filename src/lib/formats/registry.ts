@@ -2,6 +2,19 @@ import type { Sprite, AssetData, ThingType, FormatConfig, ThingCategory } from '
 
 type ModifiedItemMap = Map<string, { id: number; data: ThingType; category: ThingCategory }>;
 
+export interface OptimizeResult {
+	oldTotal: number;
+	newTotal: number;
+	tempPath: string;
+	removedCount: number;
+}
+
+export type SpriteLoader = (data: AssetData, ids: number[]) => Promise<void>;
+export type SpriteOptimizer = (
+	data: AssetData,
+	onProgress?: (m: string, c: number, t: number) => void
+) => Promise<OptimizeResult>;
+
 export interface LoadRequest {
 	datPath?: string;
 	sprPath?: string;
@@ -10,6 +23,7 @@ export interface LoadRequest {
 	filePath?: string;
 	folderPath: string;
 	extended?: boolean;
+	itemdbPath?: string;
 	transparency: boolean;
 	frameGroups?: boolean;
 	improvedAnimations?: boolean;
@@ -38,6 +52,11 @@ export interface FormatHandler {
 	exts: string[];
 	config: FormatConfig;
 	kind: 'file' | 'folder';
+	loadDialogTitle?: string;
+	loadSprites?: SpriteLoader;
+	optimize?: SpriteOptimizer;
+	loadSpritesLz4?: SpriteLoader;
+	companion?: { ext: string; label: string };
 	load(req: LoadRequest): Promise<LoadResult>;
 	compile(req: CompileRequest): Promise<CompileResult>;
 }

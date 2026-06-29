@@ -9,6 +9,8 @@ import { ExportDialog } from '~/components/ExportDialog';
 import { ImportDialog } from '~/components/ImportDialog';
 import { TooltipProvider } from '~/components/ui/tooltip';
 import { ThemeProvider } from '~/usecase/context/ThemeContext';
+import { LuaPanelsProvider } from '~/usecase/lua/LuaPanelsContext';
+import { ConfirmProvider } from '~/usecase/context/ConfirmContext';
 import { DragDropProvider } from '~/usecase/context/DragDropContext';
 import { TransferProvider } from '~/usecase/context/TransferContext';
 import { AssetDataProvider } from '~/usecase/context/AssetDataContext';
@@ -24,25 +26,29 @@ const App = () => (
 			<TooltipProvider>
 				<ErrorDialogProvider>
 					<ErrorDialog />
-					<AssetDataProvider>
-						<PanelSettingsProvider>
-							<GeneralSettingsProvider>
-								<DragDropProvider>
-									<TransferProvider>
-										<ExportDialog />
-										<ImportDialog />
-										<Toaster />
-										<BrowserRouter>
-											<Routes>
-												<Route path="/" element={<Index />} />
-												<Route path="*" element={<NotFound />} />
-											</Routes>
-										</BrowserRouter>
-									</TransferProvider>
-								</DragDropProvider>
-							</GeneralSettingsProvider>
-						</PanelSettingsProvider>
-					</AssetDataProvider>
+					<ConfirmProvider>
+						<AssetDataProvider>
+							<PanelSettingsProvider>
+								<GeneralSettingsProvider>
+									<DragDropProvider>
+										<TransferProvider>
+											<LuaPanelsProvider>
+												<ExportDialog />
+												<ImportDialog />
+												<Toaster />
+												<BrowserRouter>
+													<Routes>
+														<Route path="/" element={<Index />} />
+														<Route path="*" element={<NotFound />} />
+													</Routes>
+												</BrowserRouter>
+											</LuaPanelsProvider>
+										</TransferProvider>
+									</DragDropProvider>
+								</GeneralSettingsProvider>
+							</PanelSettingsProvider>
+						</AssetDataProvider>
+					</ConfirmProvider>
 				</ErrorDialogProvider>
 			</TooltipProvider>
 		</ThemeProvider>

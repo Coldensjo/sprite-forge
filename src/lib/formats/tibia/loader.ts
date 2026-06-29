@@ -332,7 +332,36 @@ export async function loadTibiaData(
 		detectedVersion =
 			getVersionBySignatures(datSig, sprSig) ?? detectVersionFromSignature(datSig) ?? detectVersionFromSignature(sprSig);
 		if (!detectedVersion) {
-			throw new Error(`Unknown signatures - DAT: 0x${datSig.toString(16)}, SPR: 0x${sprSig.toString(16)}`);
+			const slash = Math.max(datPath.lastIndexOf('\\'), datPath.lastIndexOf('/'));
+			const folder = slash >= 0 ? datPath.slice(0, slash) : '.';
+			const baseName = (slash >= 0 ? datPath.slice(slash + 1) : datPath).replace(/\.dat$/i, '') || 'Tibia';
+			const otfi = await readOtfiFile(folder, baseName);
+			console.warn(
+				`[loadTibiaData] Unknown signatures DAT 0x${datSig.toString(16)} / SPR 0x${sprSig.toString(16)} - ` +
+					`falling back to 10.99 with ${otfi ? 'OTFI flags' : 'permissive defaults'}`
+			);
+			detectedVersion = {
+				value: 1099,
+				datSignature: datSig,
+				sprSignature: sprSig,
+				supportsAlphaChannel: false,
+				supportsExtended: otfi?.extended ?? true,
+				label: `Unknown (0x${datSig.toString(16)})`,
+				supportsFrameDurations: otfi?.frameDurations ?? true
+			};
+			if (overrides) {
+				overrides = {
+					extended: overrides.extended ?? otfi?.extended,
+					frameGroups: overrides.frameGroups ?? otfi?.frameGroups,
+					frameDurations: overrides.frameDurations ?? otfi?.frameDurations
+				};
+			} else if (otfi) {
+				overrides = {
+					extended: otfi.extended,
+					frameGroups: otfi.frameGroups,
+					frameDurations: otfi.frameDurations
+				};
+			}
 		}
 	}
 

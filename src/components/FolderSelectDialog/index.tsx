@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, Loader2, ChevronDown } from 'lucide-react';
+import { X, Loader2, Package, FolderOpen, ChevronDown } from 'lucide-react';
 
 import { Toolbar } from './Toolbar';
 import { Sidebar } from './Sidebar';
@@ -10,9 +10,11 @@ import { useFolderSelectDialog, type FolderSelectDialogProps } from '~/usecase/h
 export type { LoadOptions } from '~/usecase/hooks/useFolderSelectDialog';
 
 export const FolderSelectDialog = (props: FolderSelectDialogProps) => {
-	const { pickExt, title = 'Select Folder' } = props;
+	const { pickExt, title: fallbackTitle = 'Select Folder' } = props;
 	const c = useFolderSelectDialog(props);
+	const title = c.dialogTitle ?? fallbackTitle;
 	const [otbPickerOpen, setOtbPickerOpen] = useState(false);
+	const [companionPickerOpen, setCompanionPickerOpen] = useState(false);
 
 	if (!c.mounted) return null;
 
@@ -76,7 +78,6 @@ export const FolderSelectDialog = (props: FolderSelectDialogProps) => {
 							onRowClick={c.onRowClick}
 							onRowDoubleClick={c.onRowDoubleClick}
 							onToggleFavorite={(p) => c.toggleFavorite(p)}
-							activeNames={pickExt ? undefined : c.activeNames}
 						/>
 						{c.assetMode && c.hasTibiaFiles && (
 							<TibiaAssetPanel
@@ -95,6 +96,38 @@ export const FolderSelectDialog = (props: FolderSelectDialogProps) => {
 								onIncludeServerChange={c.setIncludeServer}
 								onImprovedAnimationsChange={c.setImprovedAnimations}
 							/>
+						)}
+						{c.assetMode && c.activeCompanion && (
+							<div className="fb-asset-panel">
+								<div className="fb-asset-field">
+									<span className="fb-asset-label">
+										<Package size={13} className="fb-asset-label-icon" />
+										Item Database
+										<span className="fb-asset-otfi-badge">optional</span>
+									</span>
+									<div className="fb-server-box">
+										{c.companionPath ? (
+											<>
+												<div className="fb-asset-toggle">
+													<span>{c.companionPath.split(/[\\/]/).pop()}</span>
+												</div>
+												<button type="button" className="fb-asset-otb-browse" onClick={() => setCompanionPickerOpen(true)}>
+													<FolderOpen size={13} />
+													Choose a different file…
+												</button>
+											</>
+										) : (
+											<>
+												<span className="fb-server-empty">No {c.activeCompanion.label} linked.</span>
+												<button type="button" className="fb-asset-otb-browse" onClick={() => setCompanionPickerOpen(true)}>
+													<FolderOpen size={13} />
+													Browse for {c.activeCompanion.label}…
+												</button>
+											</>
+										)}
+									</div>
+								</div>
+							</div>
 						)}
 					</div>
 
@@ -176,6 +209,19 @@ export const FolderSelectDialog = (props: FolderSelectDialogProps) => {
 					onPickFile={(p) => {
 						void c.applyPickedOtb(p);
 						setOtbPickerOpen(false);
+					}}
+				/>
+			)}
+
+			{c.assetMode && companionPickerOpen && c.activeCompanion && (
+				<FolderSelectDialog
+					open
+					pickExt={c.activeCompanion.ext}
+					onOpenChange={setCompanionPickerOpen}
+					title={`Select ${c.activeCompanion.label}`}
+					onPickFile={(p) => {
+						c.setCompanionPath(p);
+						setCompanionPickerOpen(false);
 					}}
 				/>
 			)}

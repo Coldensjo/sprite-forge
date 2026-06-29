@@ -2,7 +2,7 @@ import React from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { join, dirname } from '@tauri-apps/api/path';
 
-import { allFormats } from '~/lib/formats/registry';
+import { getFormat, allFormats } from '~/lib/formats/registry';
 import {
 	readOtfiFile,
 	readDatHeader,
@@ -32,6 +32,7 @@ export interface LoadOptions {
 	filePath?: string;
 	extended: boolean;
 	folderPath: string;
+	itemdbPath?: string;
 	frameGroups: boolean;
 	transparency: boolean;
 	improvedAnimations: boolean;
@@ -177,6 +178,7 @@ export const useFolderSelectDialog = ({
 	const [includeServer, setIncludeServer] = React.useState(true);
 	const [pickedFile, setPickedFile] = React.useState<null | string>(null);
 	const [pickedSingle, setPickedSingle] = React.useState<null | { name: string; formatId: string }>(null);
+	const [companionPath, setCompanionPath] = React.useState<null | string>(null);
 	const [customOtb, setCustomOtb] = React.useState<null | {
 		label: string;
 		otbPath: string;
@@ -496,6 +498,22 @@ export const useFolderSelectDialog = ({
 		if (path.length > 0) navigateTo(path.slice(0, -1));
 	};
 
+	const activeHandler = pickedSingle ? (getFormat(pickedSingle.formatId) ?? null) : null;
+	const activeCompanion = activeHandler?.companion ?? null;
+	const companionExt = activeCompanion?.ext ?? null;
+	const dialogTitle = activeHandler?.loadDialogTitle ?? null;
+
+	React.useEffect(() => {
+		if (!companionExt) {
+			setCompanionPath(null);
+			return;
+		}
+		const ext = '.' + companionExt.toLowerCase();
+		const hit = entries.find((e) => !e.is_dir && e.name.toLowerCase().endsWith(ext));
+		if (hit) void join(currentPathString, hit.name).then(setCompanionPath);
+		else setCompanionPath(null);
+	}, [companionExt, entries, currentPathString]);
+
 	const matchesPick = (name: string): boolean => !!pickExt && name.toLowerCase().endsWith('.' + pickExt.toLowerCase());
 
 	const onRowClick = (entry: DirEntry) => {
@@ -557,6 +575,7 @@ export const useFolderSelectDialog = ({
 					transparency,
 					folderPath: target,
 					improvedAnimations,
+					itemdbPath: companionPath ?? undefined,
 					filePath: await join(target, singleName)
 				});
 				onOpenChange(false);
@@ -648,6 +667,7 @@ export const useFolderSelectDialog = ({
 		frameGroups,
 		setExtended,
 		serverFiles,
+		dialogTitle,
 		pickedSingle,
 		navigatePath,
 		assetLoading,
@@ -657,6 +677,7 @@ export const useFolderSelectDialog = ({
 		setNameInput,
 		onOpenChange,
 		historyIndex,
+		companionPath,
 		includeServer,
 		hasTibiaFiles,
 		applyPickedOtb,
@@ -664,7 +685,9 @@ export const useFolderSelectDialog = ({
 		toggleFavorite,
 		setFrameGroups,
 		confirmCurrent,
+		activeCompanion,
 		setTransparency,
+		setCompanionPath,
 		setIncludeServer,
 		computerExpanded,
 		onRowDoubleClick,

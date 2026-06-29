@@ -16,7 +16,6 @@ export const FileList = ({
 	favorites,
 	onRowClick,
 	currentPath,
-	activeNames,
 	onRowDoubleClick,
 	onToggleFavorite
 }: FileListProps) => {
@@ -46,7 +45,7 @@ export const FileList = ({
 							!entry.is_dir && singleFileExts().some((ext) => entry.name.toLowerCase().endsWith('.' + ext.toLowerCase()));
 						const disabled = !entry.is_dir && (pickExt ? !matchesPick : !singleLoadable);
 						const inert = !!pickExt && disabled;
-						const activeAsset = !pickExt && !entry.is_dir && !!activeNames?.has(entry.name);
+						const activeAsset = !pickExt && singleLoadable;
 						return (
 							<div
 								key={entry.path}

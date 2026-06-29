@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { emit, listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import {
@@ -16,6 +17,7 @@ import {
 	Sparkles,
 	Settings,
 	RotateCw,
+	Scissors,
 	RefreshCw,
 	HardDrive,
 	FolderOpen,
@@ -26,26 +28,29 @@ import {
 import { cn } from '~/lib/utils';
 import { Button } from '~/components/ui/button';
 import { errorToString } from '~/lib/errorMessage';
-import { getFormat } from '~/lib/formats/registry';
 import { useToast } from '~/usecase/hooks/useToast';
 import { AboutDialog } from '~/components/AboutDialog';
 import { useUpdater } from '~/usecase/hooks/useUpdater';
+import { optimizeSprites } from '~/lib/formats/sprites';
 import { LoadingDialog } from '~/components/LoadingDialog';
 import { SettingsDialog } from '~/components/SettingsDialog';
 import { SceneEditorDialog } from '~/components/SceneEditor';
 import { LoadOptions } from '~/components/FolderSelectDialog';
+import { useLuaPanels } from '~/usecase/lua/LuaPanelsContext';
 import { UpdateIndicator } from '~/components/UpdateIndicator';
 import { useTransfer } from '~/usecase/context/TransferContext';
 import { useAssetData } from '~/usecase/context/AssetDataContext';
 import { FolderSelectDialog } from '~/components/FolderSelectDialog';
 import { useWindowControls } from '~/usecase/hooks/useWindowControls';
 import { useErrorDialog } from '~/usecase/context/ErrorDialogContext';
+import { getFormat, formatByConfigName } from '~/lib/formats/registry';
 import { ThemeSettingsDialog } from '~/components/ThemeSettingsDialog';
 import { VersionHistoryDialog } from '~/components/VersionHistoryDialog';
 import { usePanelSettings } from '~/usecase/context/PanelSettingsContext';
 import { SpriteOptimizerDialog } from '~/components/SpriteOptimizerDialog';
 import { Popover, PopoverContent, PopoverTrigger } from '~/components/ui/popover';
-import { type ThingType, getCategoryMap, optimizeSprites } from '~/lib/formats/tibia';
+import { NewAssetDialog, type NewAssetOptions } from '~/components/NewAssetDialog';
+import { type AssetData, type ThingType, getCategoryMap, addSpritesBatch } from '~/lib/formats/tibia';
 import { addRecentLoad, getRecentLoads, type RecentLoad, clearRecentLoads } from '~/usecase/util/recentLoads';
 import {
 	Menubar,
@@ -78,11 +83,13 @@ export const Toolbar = () => {
 		createMissingServerItems
 	} = useAssetData();
 	const { settings, togglePanel } = usePanelSettings();
+	const { panels: luaPanels, toggle: toggleLua, isVisible: luaVisible } = useLuaPanels();
 	const { showError } = useErrorDialog();
 	const { openImport } = useTransfer();
 	const { toast } = useToast();
 	const updater = useUpdater();
 	const [folderDialogOpen, setFolderDialogOpen] = useState(false);
+	const [newAssetDialogOpen, setNewAssetDialogOpen] = useState(false);
 	const [themeDialogOpen, setThemeDialogOpen] = useState(false);
 	const [versionHistoryOpen, setVersionHistoryOpen] = useState(false);
 	const [optimizerOpen, setOptimizerOpen] = useState(false);
@@ -109,11 +116,51 @@ export const Toolbar = () => {
 			setSceneEditorOpen(true);
 		};
 
+		const handleOpenSlicerLocal = () => {
+			void handleOpenSlicer();
+		};
+
 		window.addEventListener('open-scene-editor', handleOpenScene as EventListener);
+		window.addEventListener('open-sprite-slicer', handleOpenSlicerLocal as EventListener);
 		return () => {
 			window.removeEventListener('open-scene-editor', handleOpenScene as EventListener);
+			window.removeEventListener('open-sprite-slicer', handleOpenSlicerLocal as EventListener);
 		};
 	}, []);
+
+	useEffect(() => {
+		const unlistenQuery = listen('slicer:query-project', () => {
+			void emit('slicer:project-state', !!data);
+		});
+		const unlistenImport = listen<{ pixels: number[][] }>('slicer:import', async (event) => {
+			if (!data) {
+				toast({ variant: 'destructive', title: 'No project loaded', description: 'Open a project before importing sprites.' });
+				return;
+			}
+			const pixelsArrays = event.payload.pixels.map((arr) => new Uint8Array(arr));
+			try {
+				const results = await addSpritesBatch(data, pixelsArrays);
+				const added = results
+					.filter((r) => r.success)
+					.map((r) => r.spriteId!)
+					.filter((id) => id !== undefined);
+				const failed = results.filter((r) => !r.success);
+				notifyDataChanged(added);
+				toast({
+					title: `Imported ${added.length} sprite${added.length === 1 ? '' : 's'} from slicer`,
+					description:
+						failed.length > 0 ? `${failed.length} failed - ${failed[0].message ?? 'unknown'}` : 'Compile to save changes.'
+				});
+			} catch (e) {
+				toast({ variant: 'destructive', description: String(e), title: 'Slicer import failed' });
+			}
+		});
+		void emit('slicer:project-state', !!data);
+		return () => {
+			void unlistenQuery.then((u) => u());
+			void unlistenImport.then((u) => u());
+		};
+	}, [data, notifyDataChanged, toast]);
 
 	const handleOptimize = () => {
 		setOptimizerOpen(true);
@@ -165,7 +212,7 @@ export const Toolbar = () => {
 	const handleFolderSelect = async (
 		selectedPath: string,
 		transparency: boolean,
-		assetPaths?: { datPath?: string; sprPath?: string; filePath?: string },
+		assetPaths?: { datPath?: string; sprPath?: string; filePath?: string; itemdbPath?: string },
 		overrides?: { extended?: boolean; frameGroups?: boolean; frameDurations?: boolean },
 		serverPaths?: { otbPath?: string; xmlPath?: string },
 		formatId = 'tibia'
@@ -187,6 +234,7 @@ export const Toolbar = () => {
 				xmlPath: serverPaths?.xmlPath,
 				extended: overrides?.extended,
 				filePath: assetPaths?.filePath,
+				itemdbPath: assetPaths?.itemdbPath,
 				frameGroups: overrides?.frameGroups,
 				improvedAnimations: overrides?.frameDurations,
 				onProgress: (stage, current, total) => {
@@ -233,7 +281,8 @@ export const Toolbar = () => {
 
 			setLoading(false);
 		} catch (err) {
-			const errorMessage = err instanceof Error ? err.message : 'Failed to load files';
+			const errorMessage =
+				err instanceof Error ? err.message : typeof err === 'string' ? err : JSON.stringify(err) || 'Failed to load files';
 			setError(errorMessage);
 			setLoading(false);
 
@@ -247,6 +296,39 @@ export const Toolbar = () => {
 
 	const handleOpenFiles = () => {
 		setFolderDialogOpen(true);
+	};
+
+	const handleNewAsset = (opts: NewAssetOptions) => {
+		const handler = getFormat(opts.formatId);
+		if (!handler) {
+			toast({ variant: 'destructive', description: `Unknown format: ${opts.formatId}` });
+			return;
+		}
+		const isTibia = opts.formatId === 'tibia';
+		const emptyData: AssetData = {
+			itemsCount: 0,
+			outfitsCount: 0,
+			effectsCount: 0,
+			spritesCount: 0,
+			items: new Map(),
+			missilesCount: 0,
+			outfits: new Map(),
+			effects: new Map(),
+			sprites: new Map(),
+			missiles: new Map(),
+			extended: opts.extended,
+			frameGroups: opts.frameGroups,
+			transparency: opts.transparency,
+			frameDurations: opts.improvedAnimations,
+			version: isTibia ? opts.version : { ...opts.version, value: 0, label: handler.config.name }
+		};
+		setData(emptyData, null as any);
+		setFormatConfig(handler.config);
+		setNewAssetDialogOpen(false);
+		toast({
+			title: 'New project created',
+			description: `${handler.config.name}${isTibia ? ` ${opts.version.label}` : ''}. Compile (Ctrl+S) to choose where to save.`
+		});
 	};
 
 	const handleOpenRecent = async (entry: RecentLoad) => {
@@ -265,7 +347,7 @@ export const Toolbar = () => {
 		await handleFolderSelect(
 			options.folderPath,
 			options.transparency,
-			{ datPath: options.datPath, sprPath: options.sprPath, filePath: options.filePath },
+			{ datPath: options.datPath, sprPath: options.sprPath, filePath: options.filePath, itemdbPath: options.itemdbPath },
 			{
 				extended: options.extended,
 				frameGroups: options.frameGroups,
@@ -293,7 +375,28 @@ export const Toolbar = () => {
 	};
 
 	const handleCompile = async () => {
-		if (!hasModifiedItems() && !originalSprPath) {
+		const isFreshProject = !!data && (!data.datPath || !data.sprPath);
+
+		if (isFreshProject) {
+			const handler = formatByConfigName(formatConfig.name) ?? getFormat('tibia');
+			const primaryExt = handler?.exts[0] ?? 'dat';
+			const secondaryExt = handler?.id === 'tibia' ? 'spr' : null;
+			const { save } = await import('@tauri-apps/plugin-dialog');
+			const chosen = await save({
+				title: 'Save assets as…',
+				defaultPath: `${handler?.config.name ?? 'Asset'}.${primaryExt}`,
+				filters: [{ extensions: [primaryExt], name: handler?.config.name ?? 'Asset' }]
+			});
+			if (!chosen) return;
+			const base = chosen.replace(new RegExp(`\\.${primaryExt}$`, 'i'), '');
+			if (secondaryExt) {
+				data!.datPath = `${base}.${primaryExt}`;
+				data!.sprPath = `${base}.${secondaryExt}`;
+			} else {
+				data!.sprPath = `${base}.${primaryExt}`;
+				data!.datPath = data!.sprPath;
+			}
+		} else if (!hasModifiedItems() && !originalSprPath) {
 			toast({
 				title: 'No changes to compile',
 				description: 'Make some changes to items before compiling.'
@@ -302,7 +405,7 @@ export const Toolbar = () => {
 		}
 
 		try {
-			if (originalSprPath && data) {
+			if (originalSprPath && data && data.sprPath && data.sprPath !== originalSprPath) {
 				const { invoke } = await import('@tauri-apps/api/core');
 
 				await invoke('close_spr_file', { path: data.sprPath });
@@ -319,6 +422,8 @@ export const Toolbar = () => {
 					path: data.sprPath,
 					extended: data.extended
 				});
+			} else if (originalSprPath) {
+				setOriginalSprPath(null);
 			}
 
 			const otbResult = await compileFiles();
@@ -364,6 +469,40 @@ export const Toolbar = () => {
 			} else {
 				showError('Compile failed', err);
 			}
+		}
+	};
+
+	const handleOpenSlicer = async () => {
+		try {
+			const existingWindow = await WebviewWindow.getByLabel('slicer');
+			if (existingWindow) {
+				await existingWindow.show();
+				await existingWindow.setFocus();
+			} else {
+				const newWindow = new WebviewWindow('slicer', {
+					width: 1100,
+					height: 720,
+					center: true,
+					shadow: true,
+					minWidth: 800,
+					minHeight: 500,
+					resizable: true,
+					transparent: true,
+					url: 'slicer.html',
+					decorations: false,
+					backgroundColor: [0, 0, 0, 0],
+					title: 'Slice Editor - Sprite Forge'
+				});
+				newWindow.once('tauri://error', () => {
+					toast({ title: 'Error', variant: 'destructive', description: 'Failed to create slicer window' });
+				});
+			}
+		} catch (error: any) {
+			toast({
+				title: 'Error',
+				variant: 'destructive',
+				description: error instanceof Error ? error.message : String(error) || 'Failed to open slicer window'
+			});
 		}
 	};
 
@@ -513,6 +652,10 @@ export const Toolbar = () => {
 					<MenubarMenu>
 						<MenubarTrigger onMouseDown={stop}>File</MenubarTrigger>
 						<MenubarContent onMouseDown={stop}>
+							<MenubarItem disabled={isLoading} onSelect={() => setNewAssetDialogOpen(true)}>
+								<Sparkles className="mr-2 h-3.5 w-3.5" />
+								New…
+							</MenubarItem>
 							<MenubarItem disabled={isLoading} onSelect={handleOpenFiles}>
 								<FolderOpen className="mr-2 h-3.5 w-3.5" />
 								Open Files
@@ -543,8 +686,8 @@ export const Toolbar = () => {
 							<MenubarSeparator />
 							<MenubarItem
 								onSelect={() => void handleCompile()}
-								disabled={!data || !hasModifiedItems()}
 								className={cn(hasModifiedItems() && 'text-primary')}
+								disabled={!data || (!hasModifiedItems() && !!data.datPath && !!data.sprPath && !originalSprPath)}
 							>
 								<HardDrive className="mr-2 h-3.5 w-3.5" />
 								Compile
@@ -570,6 +713,10 @@ export const Toolbar = () => {
 							<MenubarItem onSelect={handleOptimize} disabled={!data || isLoading}>
 								<Sparkles className="mr-2 h-3.5 w-3.5" />
 								Optimize
+							</MenubarItem>
+							<MenubarItem onSelect={() => void handleOpenSlicer()}>
+								<Scissors className="mr-2 h-3.5 w-3.5" />
+								Slice Editor
 							</MenubarItem>
 							<MenubarItem disabled={!data} onSelect={() => setSceneEditorOpen(true)}>
 								<Grid3x3 className="mr-2 h-3.5 w-3.5" />
@@ -619,6 +766,19 @@ export const Toolbar = () => {
 							>
 								Exported Objects
 							</MenubarCheckboxItem>
+							{luaPanels.filter((p) => p.menu).length > 0 && <MenubarSeparator />}
+							{luaPanels
+								.filter((p) => p.menu)
+								.map((p) => (
+									<MenubarCheckboxItem
+										key={p.id}
+										checked={luaVisible(p.id)}
+										onSelect={(e) => e.preventDefault()}
+										onCheckedChange={() => toggleLua(p.id)}
+									>
+										{p.title}
+									</MenubarCheckboxItem>
+								))}
 							<MenubarSeparator />
 							<MenubarItem onSelect={() => setThemeDialogOpen(true)}>
 								<Palette className="mr-2 h-3.5 w-3.5" />
@@ -721,11 +881,12 @@ export const Toolbar = () => {
 			</div>
 
 			<FolderSelectDialog
+				title="Open project"
 				open={folderDialogOpen}
 				onLoad={handleLoadWithOptions}
 				onOpenChange={setFolderDialogOpen}
-				title="Select folder containing Tibia.dat and Tibia.spr"
 			/>
+			<NewAssetDialog open={newAssetDialogOpen} onConfirm={handleNewAsset} onOpenChange={setNewAssetDialogOpen} />
 			<ThemeSettingsDialog open={themeDialogOpen} onOpenChange={setThemeDialogOpen} />
 			<VersionHistoryDialog open={versionHistoryOpen} onOpenChange={setVersionHistoryOpen} />
 			<AboutDialog open={aboutDialogOpen} onOpenChange={setAboutDialogOpen} />

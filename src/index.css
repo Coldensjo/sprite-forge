@@ -150,6 +150,32 @@ All colors MUST be HSL.
 		background: transparent;
 	}
 
+	.canvas-scroll {
+		overflow: overlay;
+		scrollbar-width: thin;
+		scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+	}
+	.canvas-scroll::-webkit-scrollbar {
+		width: 8px;
+		height: 8px;
+		background: transparent;
+	}
+	.canvas-scroll::-webkit-scrollbar-track,
+	.canvas-scroll::-webkit-scrollbar-track-piece {
+		background: transparent;
+	}
+	.canvas-scroll::-webkit-scrollbar-thumb {
+		background: rgba(255, 255, 255, 0.2);
+		border-radius: 4px;
+		border: none;
+	}
+	.canvas-scroll::-webkit-scrollbar-thumb:hover {
+		background: rgba(255, 255, 255, 0.4);
+	}
+	.canvas-scroll::-webkit-scrollbar-corner {
+		background: transparent;
+	}
+
 	input[type='number']::-webkit-inner-spin-button,
 	input[type='number']::-webkit-outer-spin-button {
 		-webkit-appearance: none;

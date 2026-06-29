@@ -93,8 +93,8 @@ export const ItemPickerDialog = ({ open, onOpenChange, onItemSelect }: ItemPicke
 
 		let cancelled = false;
 
-		const loadSprites = async () => {
-			const { loadSpriteIds, loadSpriteIdsLz4 } = await import('~/lib/formats/tibia');
+		const run = async () => {
+			const { loadSprites, loadSpritesLz4 } = await import('~/lib/formats/sprites');
 
 			const collectSpriteIds = (items: ThingType[]) => {
 				const ids: number[] = [];
@@ -125,9 +125,9 @@ export const ItemPickerDialog = ({ open, onOpenChange, onItemSelect }: ItemPicke
 
 			if (spriteIds.length > 0 && !cancelled) {
 				if (spriteIds.length > 100) {
-					await loadSpriteIdsLz4(data.sprPath!, spriteIds, data.transparency, data.sprites);
+					await loadSpritesLz4(data, spriteIds);
 				} else {
-					await loadSpriteIds(data.sprPath!, spriteIds, data.transparency, data.sprites);
+					await loadSprites(data, spriteIds);
 				}
 
 				if (!cancelled) {
@@ -136,7 +136,7 @@ export const ItemPickerDialog = ({ open, onOpenChange, onItemSelect }: ItemPicke
 			}
 		};
 
-		loadSprites();
+		run();
 
 		return () => {
 			cancelled = true;

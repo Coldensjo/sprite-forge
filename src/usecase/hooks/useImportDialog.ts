@@ -6,6 +6,7 @@ import { listen } from '@tauri-apps/api/event';
 import { open } from '@tauri-apps/plugin-dialog';
 
 import { useToast } from './useToast';
+import { useConfirm } from '~/usecase/context/ConfirmContext';
 import { useTransfer } from '~/usecase/context/TransferContext';
 import { useAssetData } from '~/usecase/context/AssetDataContext';
 import {
@@ -37,6 +38,7 @@ const nextSpriteBase = (sprites: Map<number, unknown>, spritesCount: number): nu
 
 export const useImportDialog = () => {
 	const { toast } = useToast();
+	const confirmDialog = useConfirm();
 	const { importOpen, closeImport, importPreset } = useTransfer();
 	const { data, updateThing, markAsNewItem, ensureServerItem, notifyDataChanged, notifySpritesLoaded } = useAssetData();
 
@@ -278,6 +280,18 @@ export const useImportDialog = () => {
 
 	const confirm = React.useCallback(async () => {
 		if (!data || selected.size === 0) return;
+		if (importPreset?.replaceId != null) {
+			const ok = await confirmDialog({
+				variant: 'warning',
+				confirmLabel: 'Replace',
+				title: `Replace item #${importPreset.replaceId}?`,
+				description:
+					selected.size > 1
+						? `The first selected object replaces this item. The remaining ${selected.size - 1} will be added as new.`
+						: 'The selected object will overwrite this item.'
+			});
+			if (!ok) return;
+		}
 		setBusy(true);
 		try {
 			const indices = Array.from(selected).sort((a, b) => a - b);
@@ -291,9 +305,23 @@ export const useImportDialog = () => {
 			}
 			data.spritesCount = maxId;
 
+			const replaceId = importPreset?.replaceId;
+			const replaceCategory = importPreset?.replaceCategory;
+			let replaceUsed = false;
+
 			for (const thing of result.things) {
 				const cat = thing.category as ThingCategory;
 				const map = getCategoryMapUtil(data, cat);
+
+				if (!replaceUsed && replaceId != null && cat === replaceCategory && map.has(replaceId)) {
+					thing.id = replaceId;
+					map.set(replaceId, thing as ThingType);
+					updateThing(replaceId, cat, thing as ThingType);
+					if (cat === ('item' as ThingCategory)) ensureServerItem(replaceId);
+					replaceUsed = true;
+					continue;
+				}
+
 				let nextId = getCategoryStartId(TIBIA_FORMAT_CONFIG, cat);
 				while (map.has(nextId)) nextId++;
 				thing.id = nextId;
@@ -314,7 +342,19 @@ export const useImportDialog = () => {
 		} finally {
 			setBusy(false);
 		}
-	}, [data, selected, updateThing, markAsNewItem, notifyDataChanged, notifySpritesLoaded, toast, closeImport]);
+	}, [
+		data,
+		selected,
+		importPreset,
+		confirmDialog,
+		updateThing,
+		markAsNewItem,
+		ensureServerItem,
+		notifyDataChanged,
+		notifySpritesLoaded,
+		toast,
+		closeImport
+	]);
 
 	const getRow = React.useCallback((position: number) => metaRef.current.get(position), []);
 	const getThumb = React.useCallback((recordIndex: number) => thumbRef.current.get(recordIndex) ?? null, []);

@@ -6,10 +6,11 @@ import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
 
 import { useToast } from './useToast';
+import { loadSpritesLz4 } from '~/lib/formats/sprites';
 import { addRecentExport } from '~/usecase/util/recentExports';
 import { useTransfer } from '~/usecase/context/TransferContext';
 import { useAssetData } from '~/usecase/context/AssetDataContext';
-import { exportObd, exportPack, loadSpriteIdsLz4, collectReferencedSpriteIds } from '~/lib/formats/tibia';
+import { exportObd, exportPack, collectReferencedSpriteIds } from '~/lib/formats/tibia';
 
 const SHEET_FORMATS: ExportFormat[] = ['png', 'bmp', 'jpg'];
 
@@ -88,7 +89,13 @@ export const useExportDialog = () => {
 			let count = 0;
 			for (const thing of list) {
 				const path = await join(outputFolder, fileName(thing, ext));
-				await invoke('export_object_sheet_rust', { path, thing, sprPath: data.sprPath, transparent: data.transparency });
+				await invoke('export_object_sheet_rust', {
+					path,
+					thing,
+					sprPath: data.sprPath,
+					transparent: data.transparency,
+					scripted: (data.formatId ?? 'tibia') !== 'tibia'
+				});
 				count++;
 			}
 			return count;
@@ -99,7 +106,7 @@ export const useExportDialog = () => {
 	const exportObds = React.useCallback(
 		async (list: ThingType[]) => {
 			if (!data || !outputFolder) return 0;
-			await loadSpriteIdsLz4(data.sprPath!, collectReferencedSpriteIds(list), data.transparency, data.sprites);
+			await loadSpritesLz4(data, collectReferencedSpriteIds(list));
 			let count = 0;
 			for (const thing of list) {
 				const path = await join(outputFolder, fileName(thing, 'obd'));
@@ -115,7 +122,7 @@ export const useExportDialog = () => {
 	const exportSfp = React.useCallback(
 		async (list: ThingType[]) => {
 			if (!data) return 0;
-			await loadSpriteIdsLz4(data.sprPath!, collectReferencedSpriteIds(list), data.transparency, data.sprites);
+			await loadSpritesLz4(data, collectReferencedSpriteIds(list));
 			const outPath = appendPath ?? (outputFolder ? await join(outputFolder, `${name}.sfp`) : null);
 			if (!outPath) return 0;
 			await exportPack(list, data, outPath, appendPath);
