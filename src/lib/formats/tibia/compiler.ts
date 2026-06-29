@@ -498,17 +498,25 @@ export async function compileFiles(args: CompileFilesArgs): Promise<void> {
 		const modifiedSpritesFromItems = collectModifiedSprites(data, modifiedItems);
 		const modifiedSprites = new Map([...modifiedSpritesFromItems, ...directlyModifiedSprites]);
 
+		const datChanged = modifiedItems.size > 0;
+		const sprChanged = modifiedSprites.size > 0;
+
+		const datBackup = datChanged ? invoke('backup_file', { path: datPath }) : Promise.resolve();
+		const sprBackup = sprChanged ? invoke('backup_file', { path: sprPath }) : Promise.resolve();
+
 		if (onProgress) onProgress('Capturing previous sprite state...', 1, 5);
 		const beforeSprites = await captureBeforeSprites(data, sprPath, modifiedSprites);
 
 		if (onProgress) onProgress('Writing DAT file...', 2, 5);
-		await invoke('backup_file', { path: datPath });
-		await compileDatFile(datPath, data);
-		await writeOtfiFile(datPath, data);
+		if (datChanged) {
+			await datBackup;
+			await compileDatFile(datPath, data);
+			await writeOtfiFile(datPath, data);
+		}
 
 		if (onProgress) onProgress('Updating SPR file...', 3, 5);
-		if (modifiedSprites.size > 0) {
-			await invoke('backup_file', { path: sprPath });
+		if (sprChanged) {
+			await sprBackup;
 			await updateSpritesInSpr(sprPath, data, modifiedSprites, data.spritesCount);
 		}
 
