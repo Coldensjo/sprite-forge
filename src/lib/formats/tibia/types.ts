@@ -231,17 +231,17 @@ export interface ThingType {
 	animateAlways: boolean;
 	marketCategory: number;
 	frameGroups?: number[];
-	category: ThingCategory | string;
 	isGroundBorder: boolean;
 	noMoveAnimation: boolean;
 	isFluidContainer: boolean;
-
 	hasDefaultAction: boolean;
+
 	texturePatterns?: number[];
 	marketRestrictLevel: number;
 	upgradeClassification?: number;
 	frameGroupsData?: FrameGroup[];
 	frameDurations: FrameDuration[];
+	category: string | ThingCategory;
 	marketRestrictProfession: number;
 	unknownFlags?: Array<{ orig: number; remapped: number }>;
 }
@@ -370,7 +370,7 @@ export function getSpriteIndex(
 	);
 }
 
-export function getCategoryMap(data: AssetData, category: ThingCategory | string): Map<number, ThingType> {
+export function getCategoryMap(data: AssetData, category: string | ThingCategory): Map<number, ThingType> {
 	switch (category) {
 		case ThingCategory.ITEM:
 			return data.items;
@@ -390,7 +390,7 @@ export function getCategoryMap(data: AssetData, category: ThingCategory | string
 	return m;
 }
 
-export function getCategoryCount(data: AssetData, category: ThingCategory | string): number {
+export function getCategoryCount(data: AssetData, category: string | ThingCategory): number {
 	switch (category) {
 		case ThingCategory.ITEM:
 			return data.itemsCount;
@@ -404,7 +404,7 @@ export function getCategoryCount(data: AssetData, category: ThingCategory | stri
 	return data.things?.get(category)?.size ?? 0;
 }
 
-export function setCategoryCount(data: AssetData, category: ThingCategory | string, count: number): void {
+export function setCategoryCount(data: AssetData, category: string | ThingCategory, count: number): void {
 	switch (category) {
 		case ThingCategory.ITEM:
 			data.itemsCount = count;
@@ -421,15 +421,18 @@ export function setCategoryCount(data: AssetData, category: ThingCategory | stri
 	}
 }
 
-export function getCategoryStartId(config: FormatConfig, category: ThingCategory | string): number {
+export function getCategoryStartId(config: FormatConfig, category: string | ThingCategory): number {
 	return config.categories.find((c) => c.id === category)?.startId ?? 1;
 }
 
-export function getCategoryRenderConfig(config: FormatConfig, category: ThingCategory | string): undefined | CategoryRenderConfig {
+export function getCategoryRenderConfig(
+	config: FormatConfig,
+	category: string | ThingCategory
+): undefined | CategoryRenderConfig {
 	return config.categories.find((c) => c.id === category)?.rendering;
 }
 
-export function createThingType(id: number, category: ThingCategory | string, config?: FormatConfig): ThingType {
+export function createThingType(id: number, category: string | ThingCategory, config?: FormatConfig): ThingType {
 	const thing: ThingType = {
 		id,
 		category,

@@ -16,6 +16,7 @@ import {
 	Grid3x3,
 	Sparkles,
 	Settings,
+	FileCode,
 	RotateCw,
 	Scissors,
 	RefreshCw,
@@ -39,6 +40,7 @@ import { LoadOptions } from '~/components/FolderSelectDialog';
 import { useLuaPanels } from '~/usecase/lua/LuaPanelsContext';
 import { UpdateIndicator } from '~/components/UpdateIndicator';
 import { useTransfer } from '~/usecase/context/TransferContext';
+import { LuaScriptsDialog } from '~/components/LuaScriptsDialog';
 import { useAssetData } from '~/usecase/context/AssetDataContext';
 import { FolderSelectDialog } from '~/components/FolderSelectDialog';
 import { useWindowControls } from '~/usecase/hooks/useWindowControls';
@@ -100,6 +102,7 @@ export const Toolbar = () => {
 	);
 	const [sceneEditorOpen, setSceneEditorOpen] = useState(false);
 	const [aboutDialogOpen, setAboutDialogOpen] = useState(false);
+	const [luaDialogOpen, setLuaDialogOpen] = useState(false);
 	const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
 	const { minimize, isMaximized, toggleMaximize } = useWindowControls();
 	const [recentLoads, setRecentLoads] = useState<RecentLoad[]>(() => getRecentLoads());
@@ -667,20 +670,26 @@ export const Toolbar = () => {
 									Open Recent
 								</MenubarSubTrigger>
 								<MenubarSubContent>
-									{recentLoads.length === 0 ? (
-										<MenubarItem disabled>No recent files</MenubarItem>
-									) : (
-										<>
-											{recentLoads.map((entry) => (
-												<MenubarItem key={entry.datPath} title={entry.folderPath} onSelect={() => void handleOpenRecent(entry)}>
-													{entry.otbPath && <Server className="mr-2 h-3.5 w-3.5 text-primary" />}
-													{entry.label}
-												</MenubarItem>
-											))}
-											<MenubarSeparator />
-											<MenubarItem onSelect={() => setRecentLoads(clearRecentLoads())}>Clear Recent</MenubarItem>
-										</>
-									)}
+									{(() => {
+										const visible = recentLoads.filter((e) => getFormat(e.formatId));
+										if (visible.length === 0) return <MenubarItem disabled>No recent files</MenubarItem>;
+										return (
+											<>
+												{visible.map((entry) => (
+													<MenubarItem
+														key={entry.datPath}
+														title={entry.folderPath}
+														onSelect={() => void handleOpenRecent(entry)}
+													>
+														{entry.otbPath && <Server className="mr-2 h-3.5 w-3.5 text-primary" />}
+														{entry.label}
+													</MenubarItem>
+												))}
+												<MenubarSeparator />
+												<MenubarItem onSelect={() => setRecentLoads(clearRecentLoads())}>Clear Recent</MenubarItem>
+											</>
+										);
+									})()}
 								</MenubarSubContent>
 							</MenubarSub>
 							<MenubarSeparator />
@@ -729,6 +738,11 @@ export const Toolbar = () => {
 							<MenubarItem onSelect={() => openImport()}>
 								<Boxes className="mr-2 h-3.5 w-3.5" />
 								OBD Viewer
+							</MenubarItem>
+							<MenubarSeparator />
+							<MenubarItem onSelect={() => setLuaDialogOpen(true)}>
+								<FileCode className="mr-2 h-3.5 w-3.5" />
+								Lua Scripts...
 							</MenubarItem>
 							<MenubarSeparator />
 							<MenubarItem disabled={!data?.otbPath} onSelect={handleCreateMissing}>
@@ -890,6 +904,7 @@ export const Toolbar = () => {
 			<ThemeSettingsDialog open={themeDialogOpen} onOpenChange={setThemeDialogOpen} />
 			<VersionHistoryDialog open={versionHistoryOpen} onOpenChange={setVersionHistoryOpen} />
 			<AboutDialog open={aboutDialogOpen} onOpenChange={setAboutDialogOpen} />
+			<LuaScriptsDialog open={luaDialogOpen} onOpenChange={setLuaDialogOpen} />
 			<SettingsDialog open={settingsDialogOpen} onOpenChange={setSettingsDialogOpen} />
 			<SpriteOptimizerDialog
 				open={optimizerOpen}

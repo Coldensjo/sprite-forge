@@ -5,6 +5,7 @@ import App from './App.tsx';
 import './index.css';
 import { registerLuaFormats } from './lib/formats/lua';
 import { registerFormat } from './lib/formats/registry';
+import { isLuaEnabled } from './usecase/util/luaSettings';
 import { tibiaHandler } from './lib/formats/tibia/handler';
 
 if (typeof window !== 'undefined') {
@@ -39,27 +40,34 @@ function namespaceLocalStorage(ns: string) {
 }
 
 async function boot() {
+	(window as unknown as { __forgeRawStorage?: Storage }).__forgeRawStorage = window.localStorage;
+
+	const luaEnabled = isLuaEnabled();
+
 	let clientVersions = true;
 	let appName: string | undefined;
 	let dataDir: string | undefined;
-	try {
-		const ui = await invoke<{ clientVersions: boolean }>('forge_ui_config');
-		clientVersions = ui.clientVersions;
-	} catch {
-		void 0;
-	}
-	try {
-		const app = await invoke<{ name?: string; dataDir?: string }>('forge_app_config');
-		appName = app.name ?? undefined;
-		dataDir = app.dataDir ?? undefined;
-	} catch {
-		void 0;
+
+	if (luaEnabled) {
+		try {
+			const ui = await invoke<{ clientVersions: boolean }>('forge_ui_config');
+			clientVersions = ui.clientVersions;
+		} catch {
+			void 0;
+		}
+		try {
+			const app = await invoke<{ name?: string; dataDir?: string }>('forge_app_config');
+			appName = app.name ?? undefined;
+			dataDir = app.dataDir ?? undefined;
+		} catch {
+			void 0;
+		}
 	}
 
 	if (dataDir) namespaceLocalStorage(dataDir);
 
 	if (clientVersions) registerFormat(tibiaHandler);
-	await registerLuaFormats();
+	if (luaEnabled) await registerLuaFormats();
 
 	if (appName) {
 		document.title = appName;

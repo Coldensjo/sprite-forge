@@ -29,13 +29,13 @@ export const isCbRef = (v: unknown): v is CbRef => typeof v === 'object' && v !=
 
 export interface ForgeThing {
 	id: number;
-	category: string;
 	width: number;
 	height: number;
 	layers: number;
 	frames: number;
 	offsetX: number;
 	offsetY: number;
+	category: string;
 	patternX: number;
 	patternY: number;
 	patternZ: number;
