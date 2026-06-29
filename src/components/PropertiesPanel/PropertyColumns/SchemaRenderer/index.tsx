@@ -211,7 +211,8 @@ export function SchemaSection({
 
 	if (!visible) return null;
 
-	const responsiveHide = section.responsiveHideUnless && !visibility[section.responsiveHideUnless] ? '@[1400px]:hidden' : '';
+	const responsiveHide =
+		section.responsiveHideUnless && !visibility[section.responsiveHideUnless] ? '@[1100px]:hidden' : '';
 
 	return (
 		<div className={responsiveHide}>

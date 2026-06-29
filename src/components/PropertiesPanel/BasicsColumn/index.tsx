@@ -253,7 +253,7 @@ export const BasicsColumn = ({ preview, frameGroups }: BasicsColumnProps) => {
 			</div>
 
 			{!isOutfit && (
-				<div className="@[820px]:col-span-2 @[1100px]:col-span-1">
+				<div className="hidden @[1100px]:block @[1100px]:col-span-1">
 					<div className="bg-secondary/20 rounded-md border border-border/40 overflow-hidden flex flex-col">
 						<div className="flex items-center gap-1.5 px-3 py-2 bg-secondary/40 border-b border-border/30 flex-shrink-0">
 							<div className="w-0.5 h-3 bg-primary rounded-full" />
