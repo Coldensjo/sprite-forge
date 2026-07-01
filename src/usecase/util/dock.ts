@@ -1,6 +1,14 @@
 import { useDraggable } from '@dnd-kit/core';
 
-export type DockZone = 'left' | 'right';
+export type DockZone = 'top' | 'left' | 'right' | 'bottom';
+
+export const ALL_ZONES: DockZone[] = ['left', 'right', 'bottom', 'top'];
+
+export const HORIZONTAL_ZONES: DockZone[] = ['top', 'bottom'];
+
+export const isHorizontalZone = (zone: DockZone): boolean => zone === 'top' || zone === 'bottom';
+
+export const DEFAULT_ALLOWED_ZONES: DockZone[] = ['left', 'right'];
 
 export type PanelKind = 'itemList' | 'spriteList' | 'openedItems' | 'recentExports' | 'visualization';
 
@@ -26,6 +34,7 @@ export interface PanelMeta {
 	minHeight: number;
 	resizable: boolean;
 	stackable: boolean;
+	allowedZones?: DockZone[];
 }
 
 export interface FloatRect {
@@ -36,8 +45,12 @@ export interface FloatRect {
 }
 
 export interface DockLayout {
+	top: DockColumn[];
 	left: DockColumn[];
+	topHeight?: number;
 	right: DockColumn[];
+	bottom: DockColumn[];
+	bottomHeight?: number;
 	width: Partial<Record<PanelId, number>>;
 	height: Partial<Record<PanelId, number>>;
 	float: Partial<Record<PanelId, FloatRect>>;
@@ -65,6 +78,14 @@ export const DEFAULT_FLOAT_WIDTH = 280;
 export const DEFAULT_FLOAT_HEIGHT = 420;
 
 export const DEFAULT_MAX_STACK = 4;
+
+export const DEFAULT_BOTTOM_HEIGHT = 220;
+export const MIN_BOTTOM_HEIGHT = 120;
+export const MAX_BOTTOM_HEIGHT = 600;
+
+export const DEFAULT_TOP_HEIGHT = 180;
+export const MIN_TOP_HEIGHT = 100;
+export const MAX_TOP_HEIGHT = 500;
 
 export const PANELS: Record<PanelKind, PanelMeta> = {
 	itemList: { minWidth: 200, id: 'itemList', minHeight: 160, resizable: true, stackable: true, title: 'Objects' },
@@ -124,9 +145,17 @@ export const isPanelId = (id: unknown): id is PanelId => typeof id === 'string' 
 export const panelMeta = (id: PanelId): PanelMeta =>
 	(PANELS as Record<string, PanelMeta>)[id] ?? EXTRA_PANELS[id] ?? DEFAULT_META(id);
 
+export const allowedZones = (id: PanelId): DockZone[] => panelMeta(id).allowedZones ?? DEFAULT_ALLOWED_ZONES;
+
+export const isZoneAllowed = (id: PanelId, zone: DockZone): boolean => allowedZones(id).includes(zone);
+
 export const DEFAULT_DOCK_LAYOUT: DockLayout = {
+	top: [],
 	float: {},
+	bottom: [],
 	right: [['spriteList']],
+	topHeight: DEFAULT_TOP_HEIGHT,
+	bottomHeight: DEFAULT_BOTTOM_HEIGHT,
 	height: { openedItems: 140, visualization: 170, recentExports: 150 },
 	left: [['visualization', 'openedItems', 'recentExports', 'itemList']],
 	width: { spriteList: DEFAULT_PANEL_WIDTH, visualization: DEFAULT_PANEL_WIDTH }
@@ -159,7 +188,7 @@ const resolveOpts = (o?: DockOpts): ResolvedOpts => ({
 
 export function placedIds(layout: DockLayout): PanelId[] {
 	const ids = new Set<PanelId>();
-	for (const zone of ['left', 'right'] as DockZone[]) for (const col of layout[zone]) for (const id of col) ids.add(id);
+	for (const zone of ALL_ZONES) for (const col of layout[zone]) for (const id of col) ids.add(id);
 	for (const id of Object.keys(layout.float)) ids.add(id as PanelId);
 	return [...ids];
 }
@@ -169,14 +198,18 @@ export function defaultDockLayout(opts?: DockOpts): DockLayout {
 	return {
 		float: { ...d.float },
 		width: { ...d.width },
+		topHeight: d.topHeight,
 		height: { ...d.height },
+		bottomHeight: d.bottomHeight,
+		top: d.top.map((c) => [...c]),
 		left: d.left.map((c) => [...c]),
-		right: d.right.map((c) => [...c])
+		right: d.right.map((c) => [...c]),
+		bottom: d.bottom.map((c) => [...c])
 	};
 }
 
 export function locate(layout: DockLayout, id: PanelId): null | { col: number; row: number; zone: DockZone } {
-	for (const zone of ['left', 'right'] as DockZone[]) {
+	for (const zone of ALL_ZONES) {
 		const cols = layout[zone];
 		for (let c = 0; c < cols.length; c++) {
 			const r = cols[c].indexOf(id);
@@ -211,7 +244,27 @@ export function removePanel(layout: DockLayout, id: PanelId): DockLayout {
 	const strip = (cols: DockColumn[]) => cols.map((c) => c.filter((p) => p !== id)).filter((c) => c.length > 0);
 	const float = { ...layout.float };
 	delete float[id];
-	return { float, width: layout.width, height: layout.height, left: strip(layout.left), right: strip(layout.right) };
+	return {
+		float,
+		width: layout.width,
+		height: layout.height,
+		top: strip(layout.top),
+		left: strip(layout.left),
+		right: strip(layout.right),
+		topHeight: layout.topHeight,
+		bottom: strip(layout.bottom),
+		bottomHeight: layout.bottomHeight
+	};
+}
+
+export function resizeBottom(layout: DockLayout, height: number): DockLayout {
+	const clamped = Math.max(MIN_BOTTOM_HEIGHT, Math.min(height, MAX_BOTTOM_HEIGHT));
+	return { ...layout, bottomHeight: clamped };
+}
+
+export function resizeTop(layout: DockLayout, height: number): DockLayout {
+	const clamped = Math.max(MIN_TOP_HEIGHT, Math.min(height, MAX_TOP_HEIGHT));
+	return { ...layout, topHeight: clamped };
 }
 
 export function canStackInto(column: DockColumn, dragId: PanelId, maxStack: number): boolean {
@@ -221,6 +274,7 @@ export function canStackInto(column: DockColumn, dragId: PanelId, maxStack: numb
 }
 
 export function dockAt(layout: DockLayout, id: PanelId, target: DropTarget, maxStack: number): DockLayout {
+	if (!isZoneAllowed(id, target.zone)) return layout;
 	const base = removePanel(layout, id);
 	const cols = base[target.zone].map((c) => [...c]);
 	let width = base.width;
@@ -349,10 +403,14 @@ function parseDockLayout(parsed: null | Partial<DockLayout>, opts?: DockOpts): D
 
 	const allow = (id: string) => !r.knownPanelIds || r.knownPanelIds.has(id);
 	const seen = new Set<PanelId>();
-	const dedup = (cols: DockColumn[]) =>
-		cols.map((c) => c.filter((id) => (seen.has(id) || !allow(id) ? false : (seen.add(id), true)))).filter((c) => c.length > 0);
-	const left = dedup(parseColumns(parsed.left));
-	const right = dedup(parseColumns(parsed.right));
+	const dedup = (cols: DockColumn[], zone: DockZone) =>
+		cols
+			.map((c) => c.filter((id) => (seen.has(id) || !allow(id) || !isZoneAllowed(id, zone) ? false : (seen.add(id), true))))
+			.filter((c) => c.length > 0);
+	const left = dedup(parseColumns(parsed.left), 'left');
+	const right = dedup(parseColumns(parsed.right), 'right');
+	const bottom = dedup(parseColumns(parsed.bottom), 'bottom');
+	const top = dedup(parseColumns(parsed.top), 'top');
 
 	const float: DockLayout['float'] = {};
 	if (parsed.float && typeof parsed.float === 'object') {
@@ -378,22 +436,27 @@ function parseDockLayout(parsed: null | Partial<DockLayout>, opts?: DockOpts): D
 		}
 	}
 
-	for (const zone of ['left', 'right'] as DockZone[]) {
+	const zoneBucket: Record<DockZone, DockColumn[]> = { top, left, right, bottom };
+	for (const zone of ALL_ZONES) {
 		for (const col of r.defaultLayout[zone]) {
-			const missing = col.filter((id) => !seen.has(id) && allow(id));
+			const missing = col.filter((id) => !seen.has(id) && allow(id) && isZoneAllowed(id, zone));
 			if (missing.length === 0) continue;
-			(zone === 'left' ? left : right).push(missing);
+			zoneBucket[zone].push(missing);
 			for (const id of missing) seen.add(id);
 		}
 	}
 
 	for (const id of r.autoFillKinds) {
 		if (seen.has(id)) continue;
-		(r.defaultLayout.left.some((c) => c.includes(id)) ? left : right).push([id]);
+		const zones = allowedZones(id);
+		const targetZone: DockZone = ALL_ZONES.find((z) => r.defaultLayout[z].some((c) => c.includes(id))) ?? zones[0] ?? 'right';
+		zoneBucket[targetZone].push([id]);
 		seen.add(id);
 	}
 
-	return { left, right, float, width, height };
+	const bottomHeight = typeof parsed.bottomHeight === 'number' ? parsed.bottomHeight : r.defaultLayout.bottomHeight;
+	const topHeight = typeof parsed.topHeight === 'number' ? parsed.topHeight : r.defaultLayout.topHeight;
+	return { top, left, right, float, width, bottom, height, topHeight, bottomHeight };
 }
 
 export function loadDockLayout(opts?: DockOpts): DockLayout {

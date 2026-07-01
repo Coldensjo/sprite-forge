@@ -9,8 +9,10 @@ import {
 	DockOpts,
 	heightOf,
 	DockZone,
+	ALL_ZONES,
 	placedIds,
 	FloatRect,
+	resizeTop,
 	ResizeSide,
 	DropTarget,
 	DockLayout,
@@ -18,17 +20,21 @@ import {
 	removePanel,
 	resizeFloat,
 	floatRectOf,
+	resizeBottom,
 	resizeColumn,
 	resizeHeight,
 	canStackInto,
+	isZoneAllowed,
 	columnWidthOf,
 	loadDockLayout,
 	saveDockLayout,
 	DEFAULT_MAX_STACK,
 	defaultDockLayout,
+	DEFAULT_TOP_HEIGHT,
 	DEFAULT_FLOAT_WIDTH,
 	clampFloatsToBounds,
-	DEFAULT_FLOAT_HEIGHT
+	DEFAULT_FLOAT_HEIGHT,
+	DEFAULT_BOTTOM_HEIGHT
 } from '~/usecase/util/dock';
 
 interface ColGeom {
@@ -50,9 +56,11 @@ export interface DockApi {
 	dragging: null | PanelId;
 	dropTarget: null | DropTarget;
 	setResizing: (value: boolean) => void;
+	resizeTopHeight: (dy: number) => void;
 	ensurePanels: (ids: PanelId[]) => void;
 	sensors: ReturnType<typeof useSensors>;
 	isRenderable: (id: PanelId) => boolean;
+	resizeBottomHeight: (dy: number) => void;
 	handleDragEnd: (event: DragEndEvent) => void;
 	workspaceRef: React.RefObject<HTMLDivElement>;
 	handleDragMove: (event: DragMoveEvent) => void;
@@ -90,7 +98,7 @@ export const useDock = (isContentReady: (id: PanelId) => boolean, opts?: DockOpt
 	const buildDragGeom = (lay: DockLayout): DragGeom => {
 		const ws = workspaceRef.current!.getBoundingClientRect();
 		const zones = {} as DragGeom['zones'];
-		for (const zone of ['left', 'right'] as DockZone[]) {
+		for (const zone of ALL_ZONES) {
 			const zr = document.querySelector(`[data-dock-zone="${zone}"]`)?.getBoundingClientRect() ?? null;
 			const cols = lay[zone].map((col, ci) => {
 				const cr = document.querySelector(`[data-dock-col="${zone}:${ci}"]`)?.getBoundingClientRect();
@@ -101,7 +109,7 @@ export const useDock = (isContentReady: (id: PanelId) => boolean, opts?: DockOpt
 				const panelY = pr.length ? [pr[0].top, ...pr.map((r) => r.bottom)] : [cr.top, cr.bottom];
 				return { panelY, left: cr.left, right: cr.right };
 			});
-			zones[zone] = { cols, top: zr ? zr.top : ws.top + 6, h: (zr ? zr.height : ws.height - 12) || ws.height - 12 };
+			zones[zone] = { cols, top: zr ? zr.top : ws.top + 6, h: zr ? zr.height : ws.height - 12 };
 		}
 		return { zones };
 	};
@@ -123,13 +131,18 @@ export const useDock = (isContentReady: (id: PanelId) => boolean, opts?: DockOpt
 			if (d < SNAP && (!best || d < best.d)) best = { t, d };
 		};
 
-		for (const zone of ['left', 'right'] as DockZone[]) {
+		for (const zone of ALL_ZONES) {
+			if (!isZoneAllowed(dragId, zone)) continue;
 			const z = geom.zones[zone];
+			if (!z) continue;
 			const cols = lay[zone];
-			const midY = z.top + z.h / 2;
+			const hidden = (zone === 'bottom' || zone === 'top') && z.h < 20;
+			const midY = hidden ? (zone === 'bottom' ? ws.bottom - 60 : ws.top + 60) : z.top + z.h / 2;
 
 			if (cols.length === 0) {
-				add({ zone, col: 0, row: null }, zone === 'left' ? ws.left + size.width / 2 : ws.right - size.width / 2, midY);
+				const cx0 =
+					zone === 'left' ? ws.left + size.width / 2 : zone === 'right' ? ws.right - size.width / 2 : ws.left + ws.width / 2;
+				add({ zone, col: 0, row: null }, cx0, midY);
 				continue;
 			}
 
@@ -206,6 +219,14 @@ export const useDock = (isContentReady: (id: PanelId) => boolean, opts?: DockOpt
 		setLayout((prev) => resizeHeight(prev, id, heightOf(prev, id) + dy));
 	};
 
+	const resizeBottomHeight = (dy: number) => {
+		setLayout((prev) => resizeBottom(prev, (prev.bottomHeight ?? DEFAULT_BOTTOM_HEIGHT) - dy));
+	};
+
+	const resizeTopHeight = (dy: number) => {
+		setLayout((prev) => resizeTop(prev, (prev.topHeight ?? DEFAULT_TOP_HEIGHT) + dy));
+	};
+
 	const resizeFloatPanel = (id: PanelId, side: ResizeSide, dx: number, dy: number) => {
 		const ws = workspaceRef.current?.getBoundingClientRect();
 		const bounds = ws ? { width: ws.width, height: ws.height } : undefined;
@@ -225,7 +246,8 @@ export const useDock = (isContentReady: (id: PanelId) => boolean, opts?: DockOpt
 				let next = prev;
 				for (const id of ids) {
 					if (placed.has(id)) continue;
-					next = dockAt(next, id, { row: null, zone: 'right', col: next.right.length }, maxStack);
+					const zone: DockZone = isZoneAllowed(id, 'right') ? 'right' : isZoneAllowed(id, 'left') ? 'left' : 'bottom';
+					next = dockAt(next, id, { zone, row: null, col: next[zone].length }, maxStack);
 					placed.add(id);
 				}
 				if (next !== prev) saveDockLayout(next, optsRef.current);
@@ -273,8 +295,10 @@ export const useDock = (isContentReady: (id: PanelId) => boolean, opts?: DockOpt
 		handleDragEnd,
 		handleDragMove,
 		handleDragStart,
+		resizeTopHeight,
 		resizeFloatPanel,
 		resizeColumnWidth,
-		resizePanelHeight
+		resizePanelHeight,
+		resizeBottomHeight
 	};
 };

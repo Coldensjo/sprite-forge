@@ -12,6 +12,7 @@ import {
 	DropTarget,
 	columnWidthOf,
 	DragHandleProps,
+	isHorizontalZone,
 	DEFAULT_FLOAT_WIDTH,
 	DEFAULT_FLOAT_HEIGHT
 } from '~/usecase/util/dock';
@@ -63,22 +64,25 @@ const DockSide = ({ zone, dock, renderPanel }: DockSideProps) => {
 			}
 			if (ri < panels.length) items.push(renderStackItem(panels[ri], ri, panels.length));
 		}
+		const flex = isHorizontalZone(zone);
 		return (
 			<div
 				key={`col-${zone}-${ci}`}
 				data-dock-col={`${zone}:${ci}`}
-				style={{ width: columnWidthOf(dragLayout, zone, ci) }}
-				className="relative flex h-full min-h-0 flex-shrink-0 flex-col gap-1.5"
+				style={flex ? undefined : { width: columnWidthOf(dragLayout, zone, ci) }}
+				className={cn('relative flex h-full min-h-0 flex-col gap-1.5', flex ? 'min-w-0 flex-1' : 'flex-shrink-0')}
 			>
 				{items}
-				<Resizer
-					gap
-					dir="x"
-					onResizeEnd={() => setResizing(false)}
-					onResizeStart={() => setResizing(true)}
-					side={zone === 'left' ? 'right' : 'left'}
-					onResize={({ dx }) => dock.resizeColumnWidth(zone, ci, dx)}
-				/>
+				{!flex && (
+					<Resizer
+						gap
+						dir="x"
+						onResizeEnd={() => setResizing(false)}
+						onResizeStart={() => setResizing(true)}
+						side={zone === 'left' ? 'right' : 'left'}
+						onResize={({ dx }) => dock.resizeColumnWidth(zone, ci, dx)}
+					/>
+				)}
 			</div>
 		);
 	};
@@ -87,6 +91,7 @@ const DockSide = ({ zone, dock, renderPanel }: DockSideProps) => {
 	const dt = dropTarget;
 	const animate = !sameTarget(dt, origTarget.current);
 	const newCol = dt && dt.zone === zone && dt.row === null ? dt.col : -1;
+	const stretchPh = isHorizontalZone(zone) && cols.length === 0;
 	const children: React.ReactNode[] = [];
 	for (let ci = 0; ci <= cols.length; ci++) {
 		if (ci === newCol) {
@@ -94,6 +99,7 @@ const DockSide = ({ zone, dock, renderPanel }: DockSideProps) => {
 				<DropPlaceholder
 					vertical={false}
 					animate={animate}
+					stretch={stretchPh}
 					key={`phc-${zone}-${ci}`}
 					size={dragSize?.width ?? DEFAULT_FLOAT_WIDTH}
 				/>
@@ -107,9 +113,9 @@ const DockSide = ({ zone, dock, renderPanel }: DockSideProps) => {
 			}
 		}
 	}
-	if (children.length === 0) return null;
+	if (children.length === 0 && !isHorizontalZone(zone)) return null;
 	return (
-		<div data-dock-zone={zone} className="flex h-full flex-shrink-0 gap-1.5">
+		<div data-dock-zone={zone} className={cn('flex h-full gap-1.5', isHorizontalZone(zone) ? 'min-w-0 flex-1' : 'flex-shrink-0')}>
 			{children}
 		</div>
 	);
