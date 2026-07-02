@@ -36,7 +36,16 @@ export const tibiaHandler: FormatHandler = {
 	},
 
 	async compile(req) {
-		const { data, onProgress, modifiedItems, originalItems, autoSyncServer, modifiedSprites, modifiedServerIds } = req;
+		const {
+			data,
+			onProgress,
+			modifiedItems,
+			originalItems,
+			autoSyncServer,
+			modifiedSprites,
+			modifiedServerIds,
+			confirmXmlRewrite
+		} = req;
 		if (!data.datPath || !data.sprPath) {
 			throw new Error('No data or file paths available for compilation');
 		}
@@ -64,7 +73,7 @@ export const tibiaHandler: FormatHandler = {
 		if (hasOtb && (datChanged || serverChanged)) {
 			onProgress('Writing server items (OTB/XML)...', 1, 1);
 			const { compileServerItems } = await import('./otb');
-			otbResult = await compileServerItems(data, autoSyncServer, data.version.value);
+			otbResult = await compileServerItems(data, autoSyncServer, data.version.value, confirmXmlRewrite);
 		}
 
 		return otbResult;

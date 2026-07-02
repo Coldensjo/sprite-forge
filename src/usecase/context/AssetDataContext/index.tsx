@@ -2,6 +2,7 @@ import type { Sprite, AssetData, ThingType, ServerItem, FormatConfig, ServerItem
 
 import React from 'react';
 
+import { useConfirm } from '~/usecase/context/ConfirmContext';
 import { getFormat, formatByConfigName } from '~/lib/formats/registry';
 import {
 	SpriteReader,
@@ -101,6 +102,7 @@ interface AssetDataContextType {
 const AssetDataContext = React.createContext<undefined | AssetDataContextType>(undefined);
 
 export const AssetDataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+	const confirm = useConfirm();
 	const [data, setDataState] = React.useState<null | AssetData>(null);
 	const [spriteReader, setSpriteReader] = React.useState<null | SpriteReader>(null);
 	const [isLoading, setIsLoading] = React.useState(false);
@@ -866,7 +868,16 @@ export const AssetDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 				originalItems: originalItemsSinceCompile,
 				onProgress: (stage, current, total) => {
 					setLoading(true, { stage, total, current });
-				}
+				},
+				confirmXmlRewrite: () =>
+					confirm({
+						variant: 'warning',
+						confirmLabel: 'Rewrite',
+						title: 'Rewrite items.xml?',
+						cancelLabel: 'Keep file untouched',
+						description:
+							'items.xml could not be updated in place. Saving it requires rewriting the whole file, which may change its formatting and drop comments. The OTB file is saved either way.'
+					})
 			});
 			compileSucceeded = true;
 			return result;
@@ -878,6 +889,7 @@ export const AssetDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 		}
 	}, [
 		data,
+		confirm,
 		formatConfig,
 		modifiedSinceCompile,
 		modifiedSprites,

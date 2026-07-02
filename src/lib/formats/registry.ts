@@ -42,6 +42,7 @@ export interface CompileRequest {
 	modifiedServerIds: Set<number>;
 	originalItems: ModifiedItemMap;
 	modifiedSprites: Map<number, Sprite>;
+	confirmXmlRewrite?: () => Promise<boolean>;
 	onProgress: (stage: string, current: number, total: number) => void;
 }
 

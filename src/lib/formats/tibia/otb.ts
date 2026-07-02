@@ -22,7 +22,9 @@ export interface XmlAttr {
 	key: string;
 	value: string;
 	tag?: boolean;
+	hasValue?: boolean;
 	children?: XmlAttr[];
+	extra?: [string, string][];
 }
 
 export interface ServerItem {
@@ -89,12 +91,15 @@ export interface OtbMeta {
 
 export interface ServerItemData {
 	meta: OtbMeta;
+	xmlRaw?: string;
 	otbPath: string;
 	xmlPath?: string;
 	profileId: string;
 	xmlExisted: boolean;
 	items: Map<number, ServerItem>;
 	byClientId: Map<number, number[]>;
+	xmlOrphans?: Map<number, ItemsXmlEntry>;
+	xmlOriginal?: Map<number, ItemsXmlEntry>;
 }
 
 const PROFILE_IDS = ['tfs0.3.6', 'tfs0.4', 'tfs0.5', 'tfs1.0', 'tfs1.1', 'tfs1.2', 'tfs1.4', 'tfs1.6'];
@@ -258,8 +263,15 @@ function parseAttributeElements(parent: Element): XmlAttr[] {
 		if (child.tagName !== 'attribute') continue;
 		const key = child.getAttribute('key') ?? '';
 		const value = child.getAttribute('value') ?? '';
-		const nested = parseAttributeElements(child);
 		const attr: XmlAttr = { key, value };
+		if (!child.hasAttribute('value')) attr.hasValue = false;
+		const extra: [string, string][] = [];
+		for (const a of Array.from(child.attributes)) {
+			if (a.name === 'key' || a.name === 'value') continue;
+			extra.push([a.name, a.value]);
+		}
+		if (extra.length > 0) attr.extra = extra;
+		const nested = parseAttributeElements(child);
 		if (nested.length > 0) attr.children = nested;
 		out.push(attr);
 	}
@@ -315,7 +327,8 @@ export function buildServerItems(
 	otbPath: string,
 	xmlPath: string,
 	xmlExisted: boolean,
-	profileId: string
+	profileId: string,
+	xmlRaw?: string
 ): ServerItemData {
 	const items = new Map<number, ServerItem>();
 	const byClientId = new Map<number, number[]>();
@@ -336,13 +349,25 @@ export function buildServerItems(
 		else byClientId.set(item.clientId, [item.serverId]);
 	}
 
+	let xmlOrphans: undefined | Map<number, ItemsXmlEntry>;
+	if (xml) {
+		for (const [id, entry] of xml) {
+			if (items.has(id)) continue;
+			if (!xmlOrphans) xmlOrphans = new Map();
+			xmlOrphans.set(id, entry);
+		}
+	}
+
 	return {
 		items,
+		xmlRaw,
 		otbPath,
 		xmlPath,
 		profileId,
 		xmlExisted,
 		byClientId,
+		xmlOrphans,
+		xmlOriginal: xml ?? undefined,
 		meta: {
 			buildNumber: otb.buildNumber,
 			majorVersion: otb.majorVersion,
@@ -360,12 +385,14 @@ function deriveXmlPath(otbPath: string): string {
 export async function loadServerItems(otbPath: string, xmlPath?: string): Promise<ServerItemData> {
 	const otb = await readOtbRaw(otbPath);
 	let xml: null | Map<number, ItemsXmlEntry> = null;
+	let xmlRaw: string | undefined;
 	let markerProfile: null | string = null;
 	const xmlExisted = !!xmlPath;
 	if (xmlPath) {
 		try {
 			const text = await invoke<string>('read_file_text', { path: xmlPath });
 			xml = parseItemsXml(text);
+			xmlRaw = text;
 			const m = text.match(PROFILE_MARKER);
 			if (m && PROFILE_IDS.includes(m[1])) markerProfile = m[1];
 		} catch (err) {
@@ -374,7 +401,7 @@ export async function loadServerItems(otbPath: string, xmlPath?: string): Promis
 	}
 	const writeXmlPath = xmlPath ?? deriveXmlPath(otbPath);
 	const profileId = markerProfile ?? loadCachedProfile(otbPath) ?? deduceProfileId(otb.minorVersion);
-	return buildServerItems(otb, xml, otbPath, writeXmlPath, xmlExisted, profileId);
+	return buildServerItems(otb, xml, otbPath, writeXmlPath, xmlExisted, profileId, xmlRaw);
 }
 
 export function createServerItem(serverId: number, clientId: number): ServerItem {
@@ -563,20 +590,34 @@ function hasXmlData(item: ServerItem): boolean {
 function writeAttrs(attrs: XmlAttr[], indent: string): string {
 	let out = '';
 	for (const attr of attrs) {
+		const valuePart = attr.hasValue === false ? '' : ` value="${escapeXml(attr.value)}"`;
+		let extraPart = '';
+		for (const [k, v] of attr.extra ?? []) extraPart += ` ${k}="${escapeXml(v)}"`;
 		if (attr.children && attr.children.length > 0) {
-			const valuePart = attr.value ? ` value="${escapeXml(attr.value)}"` : '';
-			out += `${indent}<attribute key="${escapeXml(attr.key)}"${valuePart}>\n`;
+			out += `${indent}<attribute key="${escapeXml(attr.key)}"${valuePart}${extraPart}>\n`;
 			out += writeAttrs(attr.children, indent + '\t');
 			out += `${indent}</attribute>\n`;
 		} else {
-			out += `${indent}<attribute key="${escapeXml(attr.key)}" value="${escapeXml(attr.value)}" />\n`;
+			out += `${indent}<attribute key="${escapeXml(attr.key)}"${valuePart}${extraPart} />\n`;
 		}
 	}
 	return out;
 }
 
+function attrSig(a: XmlAttr): unknown[] {
+	return [a.tag ? 1 : 0, a.key, a.hasValue === false ? null : a.value, a.extra ?? [], (a.children ?? []).map(attrSig)];
+}
+
+function entrySig(nameXml?: string, article?: string, plural?: string, attrs?: XmlAttr[]): string {
+	return JSON.stringify([nameXml ?? '', article ?? '', plural ?? '', (attrs ?? []).map(attrSig)]);
+}
+
 function xmlSignature(item: ServerItem): string {
-	return JSON.stringify([item.nameXml ?? '', item.article ?? '', item.plural ?? '', item.xmlAttributes ?? []]);
+	return entrySig(item.nameXml, item.article, item.plural, item.xmlAttributes);
+}
+
+function entrySigOf(e: ItemsXmlEntry): string {
+	return entrySig(e.nameXml, e.article, e.plural, e.attributes);
 }
 
 function writeItemTag(start: ServerItem, end: null | ServerItem): string {
@@ -606,7 +647,16 @@ function writeItemTag(start: ServerItem, end: null | ServerItem): string {
 	return tag;
 }
 
-export function serializeItemsXml(items: ServerItem[], profileId?: string): string {
+function orphanToServerItem(id: number, entry: ItemsXmlEntry): ServerItem {
+	const item = createServerItem(id, 0);
+	item.nameXml = entry.nameXml;
+	item.article = entry.article;
+	item.plural = entry.plural;
+	item.xmlAttributes = entry.attributes.length > 0 ? entry.attributes : undefined;
+	return item;
+}
+
+function serializeItemRun(items: ServerItem[]): string {
 	const sorted = [...items].sort((a, b) => a.serverId - b.serverId);
 
 	let body = '';
@@ -637,8 +687,153 @@ export function serializeItemsXml(items: ServerItem[], profileId?: string): stri
 		i = end + 1;
 	}
 
+	return body;
+}
+
+export function serializeItemsXml(items: ServerItem[], profileId?: string): string {
+	const body = serializeItemRun(items);
 	const marker = profileId ? `\t<!-- sprite-forge: profile=${profileId} -->\n` : '';
 	return `<?xml version="1.0" encoding="UTF-8"?>\n<items>\n${marker}${body}</items>\n`;
+}
+
+interface XmlItemSpan {
+	end: number;
+	start: number;
+	ids: number[];
+}
+
+function scanItemSpans(raw: string): XmlItemSpan[] {
+	const spans: XmlItemSpan[] = [];
+	let i = 0;
+	while (i < raw.length) {
+		const lt = raw.indexOf('<', i);
+		if (lt === -1) break;
+		if (raw.startsWith('<!--', lt)) {
+			const end = raw.indexOf('-->', lt);
+			i = end === -1 ? raw.length : end + 3;
+			continue;
+		}
+		if (/^<item[\s/>]/.test(raw.slice(lt, lt + 6))) {
+			const tagEnd = raw.indexOf('>', lt);
+			if (tagEnd === -1) break;
+			const selfClose = raw[tagEnd - 1] === '/';
+			let end = tagEnd + 1;
+			if (!selfClose) {
+				const close = raw.indexOf('</item>', tagEnd);
+				end = close === -1 ? tagEnd + 1 : close + '</item>'.length;
+			}
+			const head = raw.slice(lt, tagEnd + 1);
+			const id = head.match(/\bid\s*=\s*["'](\d+)["']/);
+			const from = head.match(/\bfromid\s*=\s*["'](\d+)["']/);
+			const to = head.match(/\btoid\s*=\s*["'](\d+)["']/);
+			const ids: number[] = [];
+			if (id) {
+				ids.push(parseInt(id[1], 10));
+			} else if (from && to) {
+				const f = parseInt(from[1], 10);
+				const t = parseInt(to[1], 10);
+				if (t >= f && t - f < 100000) for (let x = f; x <= t; x++) ids.push(x);
+			}
+			spans.push({ ids, end, start: lt });
+			i = end;
+			continue;
+		}
+		i = lt + 1;
+	}
+	return spans;
+}
+
+function expandToLine(raw: string, start: number, end: number): [number, number] {
+	let a = start;
+	while (a > 0 && (raw[a - 1] === ' ' || raw[a - 1] === '\t')) a--;
+	if (a > 0 && raw[a - 1] !== '\n') a = start;
+	let b = end;
+	while (b < raw.length && (raw[b] === ' ' || raw[b] === '\t')) b++;
+	if (raw[b] === '\r' && raw[b + 1] === '\n') b += 2;
+	else if (raw[b] === '\n') b += 1;
+	else b = end;
+	return [a, b];
+}
+
+export function patchItemsXml(
+	raw: string,
+	original: Map<number, ItemsXmlEntry>,
+	current: Map<number, ServerItem>,
+	orphans: undefined | Map<number, ItemsXmlEntry>,
+	profileId?: string
+): null | string {
+	const desired = new Map<number, { sig: string; item: ServerItem }>();
+	for (const item of current.values()) {
+		if (hasXmlData(item)) desired.set(item.serverId, { item, sig: xmlSignature(item) });
+	}
+	if (orphans) {
+		for (const [id, entry] of orphans) {
+			if (desired.has(id) || current.has(id)) continue;
+			const item = orphanToServerItem(id, entry);
+			if (hasXmlData(item)) desired.set(id, { item, sig: entrySigOf(entry) });
+		}
+	}
+
+	const spans = scanItemSpans(raw);
+	const covered = new Set<number>();
+	const edits: { end: number; text: string; start: number }[] = [];
+
+	for (const span of spans) {
+		if (span.ids.length === 0) continue;
+		for (const id of span.ids) covered.add(id);
+		const unchanged = span.ids.every((id) => {
+			const o = original.get(id);
+			const d = desired.get(id);
+			return !!o && !!d && d.sig === entrySigOf(o);
+		});
+		if (unchanged) continue;
+		const keep = span.ids.filter((id) => desired.has(id)).map((id) => desired.get(id)!.item);
+		const [a, b] = expandToLine(raw, span.start, span.end);
+		edits.push({ end: b, start: a, text: serializeItemRun(keep) });
+	}
+
+	const fresh = [...desired.keys()].filter((id) => !covered.has(id)).sort((a, b) => a - b);
+	if (fresh.length > 0) {
+		const closeIdx = raw.lastIndexOf('</items>');
+		if (closeIdx === -1) return null;
+		const [a] = expandToLine(raw, closeIdx, closeIdx);
+		edits.push({ end: a, start: a, text: serializeItemRun(fresh.map((id) => desired.get(id)!.item)) });
+	}
+
+	edits.sort((x, y) => x.start - y.start || x.end - y.end);
+	let out = '';
+	let pos = 0;
+	for (const e of edits) {
+		if (e.start < pos) return null;
+		out += raw.slice(pos, e.start) + e.text;
+		pos = e.end;
+	}
+	out += raw.slice(pos);
+
+	if (profileId) {
+		const line = `<!-- sprite-forge: profile=${profileId} -->`;
+		const m = out.match(PROFILE_MARKER);
+		if (m) {
+			if (m[1] !== profileId) out = out.replace(PROFILE_MARKER, line);
+		} else {
+			const open = out.match(/<items[^>]*>/);
+			if (!open) return null;
+			out = out.replace(open[0], `${open[0]}\n\t${line}`);
+		}
+	}
+
+	try {
+		const reparsed = parseItemsXml(out);
+		if (reparsed.size !== desired.size) return null;
+		for (const [id, d] of desired) {
+			const e = reparsed.get(id);
+			if (!e || entrySigOf(e) !== d.sig) return null;
+		}
+	} catch {
+		return null;
+	}
+
+	return out;
 }
 
 export async function writeItemsXml(path: string, items: ServerItem[], profileId?: string): Promise<void> {
@@ -646,7 +841,12 @@ export async function writeItemsXml(path: string, items: ServerItem[], profileId
 	await invoke('write_json_file', { path, content });
 }
 
-export async function compileServerItems(data: AssetData, autoSync: boolean, clientVersion: number): Promise<OtbReconcileResult> {
+export async function compileServerItems(
+	data: AssetData,
+	autoSync: boolean,
+	clientVersion: number,
+	confirmXmlRewrite?: () => Promise<boolean>
+): Promise<OtbReconcileResult> {
 	const sd = data.serverItems;
 	if (!sd) return { synced: 0, created: 0 };
 
@@ -655,7 +855,32 @@ export async function compileServerItems(data: AssetData, autoSync: boolean, cli
 	const items = Array.from(sd.items.values());
 	await writeOtbFile(sd.otbPath, sd.meta, items);
 	if (sd.xmlPath && (sd.xmlExisted || items.some(hasXmlData))) {
-		await writeItemsXml(sd.xmlPath, items, sd.profileId);
+		let content: null | string = null;
+		if (sd.xmlRaw != null && sd.xmlOriginal) {
+			content = patchItemsXml(sd.xmlRaw, sd.xmlOriginal, sd.items, sd.xmlOrphans, sd.profileId);
+		}
+		if (content == null) {
+			if (sd.xmlExisted) {
+				const ok = confirmXmlRewrite ? await confirmXmlRewrite() : false;
+				if (!ok) return result;
+			}
+			const xmlItems = [...items];
+			if (sd.xmlOrphans) {
+				for (const [id, entry] of sd.xmlOrphans) {
+					if (sd.items.has(id)) continue;
+					xmlItems.push(orphanToServerItem(id, entry));
+				}
+			}
+			content = serializeItemsXml(xmlItems, sd.profileId);
+		}
+		await invoke('write_json_file', { content, path: sd.xmlPath });
+		sd.xmlRaw = content;
+		sd.xmlExisted = true;
+		try {
+			sd.xmlOriginal = parseItemsXml(content);
+		} catch {
+			sd.xmlOriginal = undefined;
+		}
 	}
 
 	return result;
