@@ -776,6 +776,13 @@ export const Toolbar = () => {
 							>
 								Exported Objects
 							</MenubarCheckboxItem>
+							<MenubarCheckboxItem
+								checked={settings.showTimeline}
+								onSelect={(e) => e.preventDefault()}
+								onCheckedChange={() => togglePanel('showTimeline')}
+							>
+								Timeline
+							</MenubarCheckboxItem>
 							{luaPanels.filter((p) => p.menu).length > 0 && <MenubarSeparator />}
 							{luaPanels
 								.filter((p) => p.menu)

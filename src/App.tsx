@@ -14,6 +14,7 @@ import { ConfirmProvider } from '~/usecase/context/ConfirmContext';
 import { DragDropProvider } from '~/usecase/context/DragDropContext';
 import { TransferProvider } from '~/usecase/context/TransferContext';
 import { AssetDataProvider } from '~/usecase/context/AssetDataContext';
+import { AnimationProvider } from '~/usecase/context/AnimationContext';
 import { ErrorDialogProvider } from '~/usecase/context/ErrorDialogContext';
 import { PanelSettingsProvider } from '~/usecase/context/PanelSettingsContext';
 import { GeneralSettingsProvider } from '~/usecase/context/GeneralSettingsContext';
@@ -28,25 +29,27 @@ const App = () => (
 					<ErrorDialog />
 					<ConfirmProvider>
 						<AssetDataProvider>
-							<PanelSettingsProvider>
-								<GeneralSettingsProvider>
-									<DragDropProvider>
-										<TransferProvider>
-											<LuaPanelsProvider>
-												<ExportDialog />
-												<ImportDialog />
-												<Toaster />
-												<BrowserRouter>
-													<Routes>
-														<Route path="/" element={<Index />} />
-														<Route path="*" element={<NotFound />} />
-													</Routes>
-												</BrowserRouter>
-											</LuaPanelsProvider>
-										</TransferProvider>
-									</DragDropProvider>
-								</GeneralSettingsProvider>
-							</PanelSettingsProvider>
+							<AnimationProvider>
+								<PanelSettingsProvider>
+									<GeneralSettingsProvider>
+										<DragDropProvider>
+											<TransferProvider>
+												<LuaPanelsProvider>
+													<ExportDialog />
+													<ImportDialog />
+													<Toaster />
+													<BrowserRouter>
+														<Routes>
+															<Route path="/" element={<Index />} />
+															<Route path="*" element={<NotFound />} />
+														</Routes>
+													</BrowserRouter>
+												</LuaPanelsProvider>
+											</TransferProvider>
+										</DragDropProvider>
+									</GeneralSettingsProvider>
+								</PanelSettingsProvider>
+							</AnimationProvider>
 						</AssetDataProvider>
 					</ConfirmProvider>
 				</ErrorDialogProvider>

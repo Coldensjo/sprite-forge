@@ -8,6 +8,7 @@ import { ThingCategory } from '~/lib/formats/tibia';
 import { useToast } from '~/usecase/hooks/useToast';
 import { ZOOM_LEVELS } from '~/usecase/util/constants';
 import { type Sprite, type ThingType } from '~/lib/formats/tibia';
+import { useAnimation } from '~/usecase/context/AnimationContext';
 import { useAssetData } from '~/usecase/context/AssetDataContext';
 import { useGeneralSettings } from '~/usecase/context/GeneralSettingsContext';
 import { loadItemState, saveItemState, getItemStateKey, type ItemPropertiesState } from '~/usecase/util/itemStateUtils';
@@ -321,9 +322,8 @@ export const useObjectProperties = (override?: { item: null | ThingType; getSpri
 	const [patternX, setPatternX] = React.useState(0);
 	const [patternY, setPatternY] = React.useState(0);
 	const [patternZ, setPatternZ] = React.useState(0);
-	const [currentFrame, setCurrentFrame] = React.useState(0);
 	const [currentLayer, setCurrentLayer] = React.useState(0);
-	const [isPlaying, setIsPlaying] = React.useState(false);
+	const { isPlaying, currentFrame, setCurrentFrame, setPlaying: setIsPlaying } = useAnimation();
 
 	const [outfitData, setOutfitData] = React.useState<OutfitData>({
 		head: 0,
@@ -744,15 +744,6 @@ export const useObjectProperties = (override?: { item: null | ThingType; getSpri
 
 			durations = durations.map((d) => Math.max(d, 50));
 
-			console.log('[AnimDebug] Setup', {
-				durations,
-				isGroupWalking,
-				frames: draftItem.frames,
-				category: draftItem.category,
-				groupDurationsLen: groupDurations?.length,
-				itemDurationsLen: draftItem.frameDurations?.length
-			});
-
 			animationState.current.durations = durations;
 
 			const animateAlways = draftItem.animateAlways;
@@ -802,15 +793,13 @@ export const useObjectProperties = (override?: { item: null | ThingType; getSpri
 	};
 
 	const handlePrevFrame = () => {
-		if (currentFrame > 0) {
-			setCurrentFrame(currentFrame - 1);
-		}
+		setCurrentFrame((f) => Math.max(0, f - 1));
 	};
 
 	const handleNextFrame = () => {
-		if (draftItem && currentFrame < draftItem.frames - 1) {
-			setCurrentFrame(currentFrame + 1);
-		}
+		if (!draftItem) return;
+		const max = draftItem.frames - 1;
+		setCurrentFrame((f) => Math.min(max, f + 1));
 	};
 
 	const handleLastFrame = () => {

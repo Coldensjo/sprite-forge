@@ -7,6 +7,7 @@ import { ItemList } from '~/components/Panels/ItemList';
 import { useLuaTrees } from '~/usecase/lua/useLuaTrees';
 import { LuaDockPanel } from '~/components/LuaDockPanel';
 import { useTheme } from '~/usecase/context/ThemeContext';
+import { TimelinePanel } from '~/components/TimelinePanel';
 import { SpriteList } from '~/components/Panels/SpriteList';
 import { useLuaPanels } from '~/usecase/lua/LuaPanelsContext';
 import { PropertiesPanel } from '~/components/PropertiesPanel';
@@ -31,6 +32,7 @@ const Index = () => {
 		if (id === 'visualization') return settings.showVisualization;
 		if (id === 'openedItems') return settings.showOpenedItems;
 		if (id === 'recentExports') return settings.showExports;
+		if (id === 'timeline') return settings.showTimeline;
 		if (id === 'itemList' || id === 'spriteList') return true;
 		if (isLua(id)) return luaVisible(id) && luaTrees.has(id);
 		return false;
@@ -50,6 +52,7 @@ const Index = () => {
 		if (id === 'itemList') return <ItemList dragHandle={handle} />;
 		if (id === 'spriteList') return <SpriteList dragHandle={handle} />;
 		if (id === 'recentExports') return <RecentExportsPanel dragHandle={handle} />;
+		if (id === 'timeline') return <TimelinePanel dragHandle={handle} />;
 		const tree = luaTrees.get(id);
 		if (tree) return <LuaDockPanel tree={tree} dragHandle={handle} dispatch={luaDispatch} title={panelMeta(id).title} />;
 		return null;

@@ -10,7 +10,7 @@ export const isHorizontalZone = (zone: DockZone): boolean => zone === 'top' || z
 
 export const DEFAULT_ALLOWED_ZONES: DockZone[] = ['left', 'right'];
 
-export type PanelKind = 'itemList' | 'spriteList' | 'openedItems' | 'recentExports' | 'visualization';
+export type PanelKind = 'itemList' | 'timeline' | 'spriteList' | 'openedItems' | 'recentExports' | 'visualization';
 
 export type PanelId = string;
 
@@ -34,6 +34,7 @@ export interface PanelMeta {
 	minHeight: number;
 	resizable: boolean;
 	stackable: boolean;
+	fixedHeight?: number;
 	allowedZones?: DockZone[];
 }
 
@@ -113,6 +114,16 @@ export const PANELS: Record<PanelKind, PanelMeta> = {
 		id: 'recentExports',
 		title: 'Exported Objects',
 		minWidth: MIN_PANEL_WIDTH
+	},
+	timeline: {
+		minWidth: 420,
+		id: 'timeline',
+		minHeight: 200,
+		fixedHeight: 200,
+		resizable: false,
+		stackable: false,
+		title: 'Timeline',
+		allowedZones: ['top', 'bottom']
 	}
 };
 
@@ -149,10 +160,20 @@ export const allowedZones = (id: PanelId): DockZone[] => panelMeta(id).allowedZo
 
 export const isZoneAllowed = (id: PanelId, zone: DockZone): boolean => allowedZones(id).includes(zone);
 
+export function zoneFixedHeight(layout: DockLayout, zone: DockZone, isRenderable: (id: PanelId) => boolean): null | number {
+	for (const col of layout[zone]) {
+		for (const id of col) {
+			const h = panelMeta(id).fixedHeight;
+			if (h && isRenderable(id)) return h;
+		}
+	}
+	return null;
+}
+
 export const DEFAULT_DOCK_LAYOUT: DockLayout = {
 	top: [],
 	float: {},
-	bottom: [],
+	bottom: [['timeline']],
 	right: [['spriteList']],
 	topHeight: DEFAULT_TOP_HEIGHT,
 	bottomHeight: DEFAULT_BOTTOM_HEIGHT,

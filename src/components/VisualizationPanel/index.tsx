@@ -1,5 +1,5 @@
+import { useMemo, useEffect } from 'react';
 import { Play, Pause, FileQuestion } from 'lucide-react';
-import { useRef, useMemo, useState, useEffect } from 'react';
 
 import { cn } from '~/lib/utils';
 import { Button } from '~/components/ui/button';
@@ -8,53 +8,15 @@ import { DragHandleProps } from '~/usecase/util/dock';
 import { CheckerBoard } from '~/components/CheckerBoard';
 import { getCategoryRenderConfig } from '~/lib/formats/tibia';
 import { SpriteCanvas } from '~/components/commons/SpriteCanvas';
+import { useAnimation } from '~/usecase/context/AnimationContext';
 import { useAssetData } from '~/usecase/context/AssetDataContext';
-import { getPingPongFrame, AnimationDirection } from '~/lib/formats/tibia/animation';
 
 export const VisualizationPanel = ({ dragHandle }: { dragHandle?: DragHandleProps }) => {
 	const { data, getThing, formatConfig, selectedCategory, highlightedItemId, notifySpritesLoaded } = useAssetData();
 	const handleProps = dragHandle ? { ref: dragHandle.ref, ...dragHandle.attributes, ...dragHandle.listeners } : {};
 	const item = highlightedItemId ? getThing(highlightedItemId, selectedCategory) : null;
 
-	const [currentFrame, setCurrentFrame] = useState(0);
-	const [isPlaying, setIsPlaying] = useState(false);
-
-	const itemRef = useRef(item);
-	itemRef.current = item;
-
-	const animationState = useRef({
-		frame: 0,
-		frames: 0,
-		lastTime: 0,
-		loopCount: 0,
-		currentLoop: 0,
-		timeRemaining: 0,
-		isComplete: false,
-		skipFirstFrame: false,
-		durations: [] as number[],
-		direction: AnimationDirection.FORWARD as number
-	});
-	const requestRef = useRef<number>();
-
-	useEffect(() => {
-		setCurrentFrame(0);
-		setIsPlaying(false);
-		animationState.current = {
-			frame: 0,
-			frames: 0,
-			lastTime: 0,
-			loopCount: 0,
-			durations: [],
-			currentLoop: 0,
-			timeRemaining: 0,
-			isComplete: false,
-			skipFirstFrame: false,
-			direction: AnimationDirection.FORWARD
-		};
-		if (requestRef.current) {
-			cancelAnimationFrame(requestRef.current);
-		}
-	}, [highlightedItemId, selectedCategory]);
+	const { isPlaying, currentFrame, setPlaying: setIsPlaying } = useAnimation();
 
 	useEffect(() => {
 		if (!data?.sprPath || !item) return;
@@ -136,130 +98,8 @@ export const VisualizationPanel = ({ dragHandle }: { dragHandle?: DragHandleProp
 		}
 	}, [item, hasAnimation]);
 
-	const animate = (time: number) => {
-		const state = animationState.current;
-
-		if (state.frames === 0 || state.durations.length === 0 || state.isComplete) {
-			return;
-		}
-
-		if (state.lastTime === 0) {
-			state.lastTime = time;
-			requestRef.current = requestAnimationFrame(animate);
-			return;
-		}
-
-		const elapsed = time - state.lastTime;
-		state.lastTime = time;
-
-		if (elapsed >= state.timeRemaining) {
-			let nextFrame: number;
-
-			if (state.loopCount < 0) {
-				const result = getPingPongFrame(state.frame, state.frames, state.direction);
-				nextFrame = result.frame;
-				state.direction = result.newDirection;
-			} else {
-				nextFrame = state.frame + 1;
-				if (nextFrame >= state.frames) {
-					if (state.loopCount === 0) {
-						nextFrame = 0;
-					} else if (state.currentLoop < state.loopCount - 1) {
-						state.currentLoop++;
-						nextFrame = 0;
-					} else {
-						nextFrame = state.frame;
-					}
-				}
-			}
-
-			if (nextFrame === state.frame) {
-				state.isComplete = true;
-				setIsPlaying(false);
-				return;
-			}
-
-			if (state.skipFirstFrame && nextFrame === 0) {
-				nextFrame = 1 % state.frames;
-			}
-
-			state.timeRemaining = state.durations[nextFrame] - (elapsed - state.timeRemaining);
-			if (state.timeRemaining < 0) state.timeRemaining = 0;
-
-			state.frame = nextFrame;
-			setCurrentFrame(nextFrame);
-		} else {
-			state.timeRemaining -= elapsed;
-		}
-
-		requestRef.current = requestAnimationFrame(animate);
-	};
-
-	useEffect(() => {
-		if (isPlaying && item && hasAnimation && animationInfo) {
-			const currentGroup = animationInfo.group;
-			const frameCount = currentGroup?.frames ?? item.frames;
-			const groupDurations = currentGroup?.frameDurations;
-
-			let durations: number[];
-			if (groupDurations && groupDurations.length > 0) {
-				durations = groupDurations.map((d) => d.minimum);
-			} else if (item.frameDurations && item.frameDurations.length > 0) {
-				durations = item.frameDurations.map((d) => d.minimum);
-			} else {
-				const defaultDuration = itemRenderConfig?.defaultFrameDuration ?? 500;
-				durations = new Array(frameCount).fill(defaultDuration);
-			}
-
-			const isGroupWalking = currentGroup?.type === 1;
-			if (isGroupWalking && frameCount > 2) {
-				const walkingDuration = Math.floor(1000 / frameCount);
-				durations = durations.map(() => walkingDuration);
-			}
-
-			durations = durations.map((d) => Math.max(d, 50));
-
-			const loopCount = currentGroup?.loopCount ?? item.loopCount ?? 0;
-			const rawStartFrame = currentGroup?.startFrame ?? item.startFrame ?? -1;
-
-			const isIdle = currentGroup?.type !== 1;
-			const skipFirstFrame = !!itemRenderConfig?.skipFirstIdleFrame && !item.animateAlways && isIdle;
-
-			const startFrame = rawStartFrame > -1 ? rawStartFrame : Math.floor(Math.random() * frameCount);
-			const initialFrame = skipFirstFrame && startFrame === 0 ? 1 % frameCount : startFrame;
-
-			animationState.current.frame = initialFrame;
-			animationState.current.frames = frameCount;
-			animationState.current.durations = durations;
-			animationState.current.loopCount = loopCount;
-			animationState.current.direction = AnimationDirection.FORWARD;
-			animationState.current.currentLoop = 0;
-			animationState.current.isComplete = false;
-			animationState.current.skipFirstFrame = skipFirstFrame;
-			animationState.current.timeRemaining = durations[initialFrame] || 200;
-			animationState.current.lastTime = 0;
-			setCurrentFrame(initialFrame);
-
-			requestRef.current = requestAnimationFrame(animate);
-		} else {
-			animationState.current.frames = 0;
-			if (requestRef.current) cancelAnimationFrame(requestRef.current);
-		}
-
-		return () => {
-			if (requestRef.current) cancelAnimationFrame(requestRef.current);
-		};
-	}, [isPlaying, item, hasAnimation, animationInfo]);
-
 	const handlePlayPause = () => {
-		if (!isPlaying) {
-			setIsPlaying(true);
-		} else {
-			setIsPlaying(false);
-			if (itemRenderConfig?.resetFrameOnPause) {
-				setCurrentFrame(0);
-			}
-		}
+		setIsPlaying(!isPlaying);
 	};
 
 	if (!data || !item) {

@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 
 interface PanelSettings {
 	showExports: boolean;
+	showTimeline: boolean;
 	showOpenedItems: boolean;
 	showVisualization: boolean;
 }
@@ -14,10 +15,11 @@ interface PanelSettingsContextType {
 }
 
 const EXPORTS_KEY = 'sprite-forge-show-exports';
+const TIMELINE_KEY = 'sprite-forge-show-timeline';
 
-const readShowExports = (): boolean => {
+const readLocal = (key: string): boolean => {
 	try {
-		return localStorage.getItem(EXPORTS_KEY) === '1';
+		return localStorage.getItem(key) === '1';
 	} catch {
 		return false;
 	}
@@ -29,7 +31,8 @@ export const PanelSettingsProvider = ({ children }: { children: React.ReactNode 
 	const [settings, setSettings] = React.useState<PanelSettings>(() => ({
 		showOpenedItems: false,
 		showVisualization: false,
-		showExports: readShowExports()
+		showExports: readLocal(EXPORTS_KEY),
+		showTimeline: readLocal(TIMELINE_KEY)
 	}));
 
 	React.useEffect(() => {
@@ -51,6 +54,7 @@ export const PanelSettingsProvider = ({ children }: { children: React.ReactNode 
 	const saveSettings = async (newSettings: PanelSettings) => {
 		try {
 			localStorage.setItem(EXPORTS_KEY, newSettings.showExports ? '1' : '0');
+			localStorage.setItem(TIMELINE_KEY, newSettings.showTimeline ? '1' : '0');
 		} catch {
 			void 0;
 		}

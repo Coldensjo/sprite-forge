@@ -416,7 +416,7 @@ export const PreviewPanel = ({ preview }: PreviewPanelProps) => {
 									size="icon"
 									variant="ghost"
 									onClick={handleFirstFrame}
-									disabled={currentFrame === 0 || isPlaying}
+									disabled={currentFrame === 0}
 									className="h-6 w-6 hover:bg-secondary/50 p-0"
 								>
 									<SkipBack className="h-3 w-3" />
@@ -425,7 +425,7 @@ export const PreviewPanel = ({ preview }: PreviewPanelProps) => {
 									size="icon"
 									variant="ghost"
 									onClick={handlePrevFrame}
-									disabled={currentFrame === 0 || isPlaying}
+									disabled={currentFrame === 0}
 									className="h-6 w-6 hover:bg-secondary/50 p-0"
 								>
 									<ChevronLeft className="h-3 w-3" />
@@ -443,7 +443,7 @@ export const PreviewPanel = ({ preview }: PreviewPanelProps) => {
 									variant="ghost"
 									onClick={handleNextFrame}
 									className="h-6 w-6 hover:bg-secondary/50 p-0"
-									disabled={currentFrame >= draftItem.frames - 1 || isPlaying}
+									disabled={currentFrame >= draftItem.frames - 1}
 								>
 									<ChevronRight className="h-3 w-3" />
 								</Button>
@@ -452,7 +452,7 @@ export const PreviewPanel = ({ preview }: PreviewPanelProps) => {
 									variant="ghost"
 									onClick={handleLastFrame}
 									className="h-6 w-6 hover:bg-secondary/50 p-0"
-									disabled={currentFrame >= draftItem.frames - 1 || isPlaying}
+									disabled={currentFrame >= draftItem.frames - 1}
 								>
 									<SkipForward className="h-3 w-3" />
 								</Button>

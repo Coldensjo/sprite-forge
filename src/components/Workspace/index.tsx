@@ -6,7 +6,15 @@ import Resizer from '~/components/Dock/Resizer';
 import { DockApi } from '~/usecase/hooks/useDock';
 import DockSide from '~/components/Workspace/DockSide';
 import FloatingPanel from '~/components/Dock/FloatingPanel';
-import { PanelId, panelMeta, floatRectOf, DragHandleProps, DEFAULT_TOP_HEIGHT, DEFAULT_BOTTOM_HEIGHT } from '~/usecase/util/dock';
+import {
+	PanelId,
+	panelMeta,
+	floatRectOf,
+	zoneFixedHeight,
+	DragHandleProps,
+	DEFAULT_TOP_HEIGHT,
+	DEFAULT_BOTTOM_HEIGHT
+} from '~/usecase/util/dock';
 
 interface WorkspaceProps {
 	dock: DockApi;
@@ -46,10 +54,18 @@ export const Workspace = ({ dock, children, renderPanel }: WorkspaceProps) => {
 				<DockSide zone="left" dock={dock} renderPanel={renderPanel} />
 
 				{(() => {
-					const bottomVisible = dock.dragLayout.bottom.length > 0 || dock.dropTarget?.zone === 'bottom';
-					const topVisible = dock.dragLayout.top.length > 0 || dock.dropTarget?.zone === 'top';
-					const bottomH = dock.layout.bottomHeight ?? DEFAULT_BOTTOM_HEIGHT;
-					const topH = dock.layout.topHeight ?? DEFAULT_TOP_HEIGHT;
+					const hasContent = (cols: PanelId[][]) => cols.some((c) => c.some((id) => dock.isRenderable(id)));
+					const bottomVisible = hasContent(dock.dragLayout.bottom) || dock.dropTarget?.zone === 'bottom';
+					const topVisible = hasContent(dock.dragLayout.top) || dock.dropTarget?.zone === 'top';
+					const dragFixed = dock.dragging ? panelMeta(dock.dragging).fixedHeight : undefined;
+					const bottomFixed =
+						zoneFixedHeight(dock.dragLayout, 'bottom', dock.isRenderable) ??
+						(dock.dropTarget?.zone === 'bottom' ? (dragFixed ?? null) : null);
+					const topFixed =
+						zoneFixedHeight(dock.dragLayout, 'top', dock.isRenderable) ??
+						(dock.dropTarget?.zone === 'top' ? (dragFixed ?? null) : null);
+					const bottomH = bottomFixed ?? dock.layout.bottomHeight ?? DEFAULT_BOTTOM_HEIGHT;
+					const topH = topFixed ?? dock.layout.topHeight ?? DEFAULT_TOP_HEIGHT;
 					return (
 						<div className="flex min-h-0 min-w-0 flex-1 flex-col">
 							<div
@@ -63,7 +79,7 @@ export const Workspace = ({ dock, children, renderPanel }: WorkspaceProps) => {
 								<div className="flex h-full w-full overflow-hidden">
 									<DockSide zone="top" dock={dock} renderPanel={renderPanel} />
 								</div>
-								{topVisible && (
+								{topVisible && !topFixed && (
 									<Resizer
 										gap
 										dir="y"
@@ -85,7 +101,7 @@ export const Workspace = ({ dock, children, renderPanel }: WorkspaceProps) => {
 									dock.dragging && 'transition-[height] duration-200 ease-out'
 								)}
 							>
-								{bottomVisible && (
+								{bottomVisible && !bottomFixed && (
 									<Resizer
 										gap
 										dir="y"
