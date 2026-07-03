@@ -5,9 +5,11 @@ import React from 'react';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 
 import { blendOutfit } from '~/lib/formats/tibia/outfit';
+import { useConfirm } from '~/usecase/context/ConfirmContext';
 import { useDragDrop } from '~/usecase/context/DragDropContext';
 import { useAssetData } from '~/usecase/context/AssetDataContext';
 import { computeSpriteLayout } from '~/usecase/util/spriteLayoutUtils';
+import { confirmSpriteReplace } from '~/usecase/util/spriteImportUtils';
 import { getSpriteIndex, isValidSpriteId, importObjectSheet, getCategoryRenderConfig } from '~/lib/formats/tibia';
 
 interface Slot {
@@ -100,7 +102,6 @@ export const useSpriteCanvas = (props: SpriteCanvasProps) => {
 	const {
 		data,
 		getSprite,
-		isNewItem,
 		spriteSize,
 		formatConfig,
 		spriteLoadVersion,
@@ -110,6 +111,7 @@ export const useSpriteCanvas = (props: SpriteCanvasProps) => {
 	} = useAssetData();
 	const resolveSprite = getSpriteOverride ?? getSprite;
 	const { dragType, isDragging, draggedItem } = useDragDrop();
+	const confirmDialog = useConfirm();
 	const [isLoading, setIsLoading] = React.useState(false);
 	const [isPanning, setIsPanning] = React.useState(false);
 	const [panStart, setPanStart] = React.useState({ x: 0, y: 0 });
@@ -740,7 +742,10 @@ export const useSpriteCanvas = (props: SpriteCanvasProps) => {
 					const imagePath = p.paths.find(isImagePath);
 					if (!imagePath) return;
 
-					const result = await importObjectSheet(thing, data, imagePath, { isNew: isNewItem(thing.id, thing.category) });
+					const mode = await confirmSpriteReplace(thing, data, confirmDialog);
+					if (!mode) return;
+
+					const result = await importObjectSheet(thing, data, imagePath, { isNew: mode.allocateNewSprites });
 					if (result.success && result.updatedThing) {
 						notifySpritesLoaded();
 						if (notifyDataChanged && result.spriteIds) {
@@ -761,7 +766,7 @@ export const useSpriteCanvas = (props: SpriteCanvasProps) => {
 			cancelled = true;
 			unlisten?.();
 		};
-	}, [thing, data, allowFileDrop, isNewItem, notifySpritesLoaded, notifyDataChanged, notifySpriteImport]);
+	}, [thing, data, allowFileDrop, confirmDialog, notifySpritesLoaded, notifyDataChanged, notifySpriteImport]);
 
 	const transformStyle = React.useMemo(() => {
 		const baseStyle = {
