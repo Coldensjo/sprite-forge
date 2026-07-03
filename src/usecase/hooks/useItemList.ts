@@ -3,6 +3,7 @@ import { open } from '@tauri-apps/plugin-dialog';
 
 import { useToast } from './useToast';
 import { importObjectSheet } from '~/lib/formats/tibia';
+import { confirmSpriteReplace } from '~/usecase/util/spriteImportUtils';
 import { useConfirm } from '~/usecase/context/ConfirmContext';
 import { useTransfer } from '~/usecase/context/TransferContext';
 import { useListViewMode } from '~/usecase/hooks/useListViewMode';
@@ -24,7 +25,6 @@ export const useItemList = () => {
 	const {
 		data,
 		pushUndo,
-		isNewItem,
 		spriteSize,
 		updateThing,
 		captureUndo,
@@ -580,17 +580,10 @@ export const useItemList = () => {
 		const image = paths.find((p) => /\.(png|bmp|jpe?g)$/i.test(p));
 		if (!image) return;
 
-		const ok = await confirmDialog({
-			variant: 'warning',
-			confirmLabel: 'Replace',
-			title: `Replace item #${item.id}?`,
-			description: 'The selected image will overwrite this item.'
-		});
-		if (!ok) return;
+		const mode = await confirmSpriteReplace(item, data, confirmDialog, { confirmWhenUnshared: true });
+		if (!mode) return;
 
-		const result = await importObjectSheet(item, data, image, {
-			isNew: isNewItem(item.id, selectedCategory)
-		});
+		const result = await importObjectSheet(item, data, image, { isNew: mode.allocateNewSprites });
 		if (result.success) {
 			notifySpritesLoaded();
 			notifyDataChanged([item.id]);

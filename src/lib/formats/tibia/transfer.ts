@@ -37,16 +37,52 @@ interface ExportBundle {
 export function collectReferencedSpriteIds(things: ThingType[]): number[] {
 	const ids = new Set<number>();
 	for (const thing of things) {
-		for (const id of thing.spriteIndex ?? []) {
-			if (id > 0) ids.add(id);
-		}
-		for (const group of thing.frameGroupsData ?? []) {
-			for (const id of group.spriteIndex ?? []) {
-				if (id > 0) ids.add(id);
-			}
+		for (const id of collectThingSpriteIds(thing)) {
+			ids.add(id);
 		}
 	}
 	return Array.from(ids);
+}
+
+export function collectThingSpriteIds(thing: ThingType): number[] {
+	const ids = new Set<number>();
+	for (const id of thing.spriteIndex ?? []) {
+		if (id > 0) ids.add(id);
+	}
+	for (const group of thing.frameGroupsData ?? []) {
+		for (const id of group.spriteIndex ?? []) {
+			if (id > 0) ids.add(id);
+		}
+	}
+	return Array.from(ids);
+}
+
+function thingUsesAnySprite(thing: ThingType, ids: Set<number>): boolean {
+	for (const id of thing.spriteIndex ?? []) {
+		if (id > 0 && ids.has(id)) return true;
+	}
+	for (const group of thing.frameGroupsData ?? []) {
+		for (const id of group.spriteIndex ?? []) {
+			if (id > 0 && ids.has(id)) return true;
+		}
+	}
+	return false;
+}
+
+export function thingSpritesAreShared(thing: ThingType, data: AssetData): boolean {
+	const myIds = new Set(collectThingSpriteIds(thing));
+	if (myIds.size === 0) return false;
+
+	// Sprite ids are global to the .spr file, so a match in any category counts.
+	const maps = [data.items, data.outfits, data.effects, data.missiles, ...(data.things?.values() ?? [])];
+	for (const map of maps) {
+		for (const [id, other] of map) {
+			if (id === thing.id && other.category === thing.category) continue;
+			if (thingUsesAnySprite(other, myIds)) return true;
+		}
+	}
+
+	return false;
 }
 
 function remapIndex(arr: number[] | undefined, map: Map<number, number>): number[] {
