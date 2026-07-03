@@ -1,4 +1,4 @@
-import { Bug, Github } from 'lucide-react';
+import { Bug, Star, Github } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { getVersion } from '@tauri-apps/api/app';
 import { openUrl } from '@tauri-apps/plugin-opener';
@@ -66,6 +66,10 @@ export const AboutDialog = ({ open, onOpenChange }: AboutDialogProps) => {
 					<Button size="sm" variant="ghost" className="h-8 gap-1.5 text-xs" onClick={() => void openUrl(ISSUES_URL)}>
 						<Bug className="h-3.5 w-3.5" />
 						Report Issue
+					</Button>
+					<Button size="sm" variant="ghost" className="h-8 gap-1.5 text-xs" onClick={() => void openUrl(REPO_URL)}>
+						<Star className="h-3.5 w-3.5" />
+						Star
 					</Button>
 					<Button size="sm" variant="outline" className="ml-auto h-8 text-xs" onClick={() => onOpenChange(false)}>
 						Close
