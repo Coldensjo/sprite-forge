@@ -2,7 +2,7 @@ import React from 'react';
 import { AlertTriangle } from 'lucide-react';
 
 import { cn } from '~/lib/utils';
-import { type ConfirmOptions, type ConfirmContextValue } from './types';
+import { type ConfirmOptions, type ConfirmResult, type ConfirmContextValue } from './types';
 import {
 	AlertDialog,
 	AlertDialogTitle,
@@ -16,7 +16,7 @@ import {
 
 interface PendingConfirm {
 	opts: ConfirmOptions;
-	resolve: (value: boolean) => void;
+	resolve: (value: ConfirmResult) => void;
 }
 
 const ConfirmContext = React.createContext<null | ConfirmContextValue>(null);
@@ -25,12 +25,12 @@ export const ConfirmProvider = ({ children }: { children: React.ReactNode }) => 
 	const [pending, setPending] = React.useState<null | PendingConfirm>(null);
 
 	const confirm = React.useCallback(
-		(opts: ConfirmOptions) => new Promise<boolean>((resolve) => setPending({ opts, resolve })),
+		(opts: ConfirmOptions) => new Promise<ConfirmResult>((resolve) => setPending({ opts, resolve })),
 		[]
 	);
 
 	const resolveWith = React.useCallback(
-		(value: boolean) => {
+		(value: ConfirmResult) => {
 			pending?.resolve(value);
 			setPending(null);
 		},
@@ -62,6 +62,14 @@ export const ConfirmProvider = ({ children }: { children: React.ReactNode }) => 
 					</AlertDialogHeader>
 					<AlertDialogFooter>
 						<AlertDialogCancel onClick={() => resolveWith(false)}>{opts?.cancelLabel ?? 'Cancel'}</AlertDialogCancel>
+						{opts?.alternateLabel && (
+							<AlertDialogAction
+								onClick={() => resolveWith('alternate')}
+								className="bg-secondary text-secondary-foreground hover:bg-secondary/80"
+							>
+								{opts.alternateLabel}
+							</AlertDialogAction>
+						)}
 						<AlertDialogAction
 							onClick={() => resolveWith(true)}
 							className={cn(variant === 'destructive' && 'bg-destructive text-destructive-foreground hover:bg-destructive/90')}

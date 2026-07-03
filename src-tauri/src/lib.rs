@@ -1569,6 +1569,7 @@ fn import_preserve_geometry(
     thing: ThingType,
     transparent: bool,
     next_sprite_id: u32,
+    is_new: bool,
     spr_path: &str,
     manager: &mut SprManager,
 ) -> Result<tauri::ipc::Response, String> {
@@ -1584,7 +1585,11 @@ fn import_preserve_geometry(
             .collect()
     };
 
-    let reusable_ids = collect_reusable_ids(&thing);
+    let reusable_ids = if is_new {
+        Vec::new()
+    } else {
+        collect_reusable_ids(&thing)
+    };
     let mut id_alloc_idx: usize = 0;
     let mut current_next_id: u32 = next_sprite_id;
 
@@ -1709,7 +1714,7 @@ fn import_object_sheet_binary(
     let transparent = r.bool()?;
     let _version = r.u32()?;
     let next_sprite_id = r.u32()?;
-    let _is_new = r.bool()?;
+    let is_new = r.bool()?;
     let spr_path = r.string()?;
     let category = r.string()?;
     let thing = read_thing(&mut r, &category)?;
@@ -1741,6 +1746,7 @@ fn import_object_sheet_binary(
         thing,
         transparent,
         next_sprite_id,
+        is_new,
         &spr_path,
         &mut manager,
     )

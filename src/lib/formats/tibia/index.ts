@@ -32,5 +32,7 @@ export {
 	type ExportFormat,
 	type ImportSource,
 	type ExtractResult,
-	collectReferencedSpriteIds
+	collectThingSpriteIds,
+	collectReferencedSpriteIds,
+	thingSpritesAreShared
 } from './transfer';
