@@ -580,7 +580,8 @@ export const useSpriteList = () => {
 	React.useEffect(() => {
 		const handlePaste = async (e: ClipboardEvent) => {
 			if (!data) return;
-			if (e.target && (e.target as HTMLElement).tagName === 'INPUT') return;
+			const target = e.target as HTMLElement | null;
+			if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
 
 			e.preventDefault();
 			await pasteClipboardImage();
