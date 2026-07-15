@@ -173,8 +173,8 @@ fn parse_item(node: &Node) -> Result<OtbItem, String> {
     item.readable = flags & (1 << 14) != 0;
     item.rotatable = flags & (1 << 15) != 0;
     item.hangable = flags & (1 << 16) != 0;
-    item.hook_south = flags & (1 << 17) != 0;
-    item.hook_east = flags & (1 << 18) != 0;
+    item.hook_east = flags & (1 << 17) != 0;
+    item.hook_south = flags & (1 << 18) != 0;
     item.can_not_decay = flags & (1 << 19) != 0;
     item.allow_distance_read = flags & (1 << 20) != 0;
     item.client_charges = flags & (1 << 22) != 0;
@@ -267,8 +267,8 @@ fn pack_flags(it: &OtbItem) -> u32 {
     if it.readable { f |= 1 << 14; }
     if it.rotatable { f |= 1 << 15; }
     if it.hangable { f |= 1 << 16; }
-    if it.hook_south { f |= 1 << 17; }
-    if it.hook_east { f |= 1 << 18; }
+    if it.hook_east { f |= 1 << 17; }
+    if it.hook_south { f |= 1 << 18; }
     if it.can_not_decay { f |= 1 << 19; }
     if it.allow_distance_read { f |= 1 << 20; }
     if it.client_charges { f |= 1 << 22; }
@@ -360,8 +360,8 @@ fn build_flags(item: &OtbItem) -> u32 {
     if item.readable { f |= 1 << 14; }
     if item.rotatable { f |= 1 << 15; }
     if item.hangable { f |= 1 << 16; }
-    if item.hook_south { f |= 1 << 17; }
-    if item.hook_east { f |= 1 << 18; }
+    if item.hook_east { f |= 1 << 17; }
+    if item.hook_south { f |= 1 << 18; }
     if item.can_not_decay { f |= 1 << 19; }
     if item.allow_distance_read { f |= 1 << 20; }
     if item.client_charges { f |= 1 << 22; }
